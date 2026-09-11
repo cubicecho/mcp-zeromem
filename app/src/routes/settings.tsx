@@ -227,7 +227,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
   const sameModel = settings.spec !== null && sameEmbedder(settings.spec, spec);
 
   return (
-    <form onSubmit={runTest} className="flex flex-col gap-4">
+    <form onSubmit={runTest} autoComplete="off" className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="embedder-kind">Kind</Label>
         <Select value={form.kind} onValueChange={(kind) => update({ kind: kind as EmbedderKind })}>
@@ -257,6 +257,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
             <Label htmlFor="embedder-url">Base URL</Label>
             <Input
               id="embedder-url"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="http://localhost:11434/v1"
               value={form.url}
               onChange={(event) => update({ url: event.target.value })}
@@ -266,6 +268,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
             <Label htmlFor="embedder-model">Model</Label>
             <Input
               id="embedder-model"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="nomic-embed-text"
               value={form.model}
               onChange={(event) => update({ model: event.target.value })}
@@ -276,7 +280,16 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
             <Input
               id="embedder-key"
               type="password"
-              autoComplete="off"
+              // A text field followed by a password field looks like a login
+              // form to browsers, which then fill the model as a username and
+              // ignore autocomplete="off". `new-password` is the one value
+              // they honour; the data-* attributes tell password managers to
+              // stay out too.
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore
+              spellCheck={false}
               placeholder={settings.spec?.kind === 'openai' && settings.api_key_source !== 'none' ? '(unchanged)' : ''}
               value={form.apiKey}
               onChange={(event) => update({ apiKey: event.target.value })}
@@ -301,6 +314,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
             <Label htmlFor="embedder-query-prefix">Query prefix</Label>
             <Input
               id="embedder-query-prefix"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="query: "
               value={form.queryPrefix}
               onChange={(event) => update({ queryPrefix: event.target.value })}
@@ -310,6 +325,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
             <Label htmlFor="embedder-document-prefix">Document prefix</Label>
             <Input
               id="embedder-document-prefix"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="passage: "
               value={form.documentPrefix}
               onChange={(event) => update({ documentPrefix: event.target.value })}
