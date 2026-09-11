@@ -64,7 +64,9 @@ export function createGatewayServer(deps: GatewayDeps): McpServer {
       async (args: Record<string, unknown>) => {
         try {
           const result = await tool.run(args ?? {});
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+          // A string is already the text the tool means to send (recall's `text` format).
+          const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+          return { content: [{ type: 'text' as const, text }] };
         } catch (err) {
           // A locked database or a malformed turn is something the model can
           // read and route around; tearing down the transport is not.

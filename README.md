@@ -117,7 +117,7 @@ does not hand the current conversation back to itself.
 
 | Tool | What it does |
 | --- | --- |
-| `zeromem_recall` | `{query, top_k, exclude_session?, session?, since?, until?, detail}` — evidence turns with score, role (`primary`/`supporting`) and, with `detail: full`, the route taken and each turn's sources |
+| `zeromem_recall` | `{query, top_k, exclude_session?, session?, since?, until?, detail, format?}` — evidence turns with score, role (`primary`/`supporting`) and, with `detail: full`, the route taken and each turn's sources; `format: text` returns one line per hit instead, for pasting into a prompt |
 | `zeromem_remember` | `{session_id, turns[{speaker, text, ts?, uuid?}]}` — reports `indexed` / `duplicates` |
 | `zeromem_ingest` | Bulk JSON Lines, inline (`jsonl`) or from a file under the data directory (`path`) |
 | `zeromem_stats` | Counts (turns, sessions, entities, edges, windows, episodes, embeddings), the embedder in use and whether it is the fallback; `include_sessions` adds the session list |

@@ -17,7 +17,10 @@ export interface ToolDefinition<Args extends ZodRawShape = ZodRawShape> {
   kind: 'read' | 'write';
   /** True for a write that cannot be undone (forgetting a session). */
   destructive?: boolean;
-  /** Returns the value to serialize as the tool result. Throwing yields a tool error, not a transport error. */
+  /**
+   * Returns the value to serialize as the tool result; a string is sent as-is.
+   * Throwing yields a tool error, not a transport error.
+   */
   run: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
