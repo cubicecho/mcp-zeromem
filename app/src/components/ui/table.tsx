@@ -4,10 +4,46 @@ import type * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+/**
+ * Pins the header row to the top of the nearest scrolling ancestor and the
+ * footer row to its bottom. Collapsed borders do not travel with a sticky row,
+ * so the rule under the header (and over the footer) is an inset shadow on the
+ * cells instead, and the cells get an opaque background so rows do not show
+ * through.
+ */
+const STICKY_TABLE = [
+  '[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead_tr]:border-0',
+  '[&_thead_th]:bg-muted [&_thead_th]:shadow-[inset_0_-1px_0_var(--color-border)]',
+  '[&_tfoot]:sticky [&_tfoot]:bottom-0 [&_tfoot]:z-10 [&_tfoot]:border-t-0',
+  '[&_tfoot_td]:bg-muted [&_tfoot_td]:shadow-[inset_0_1px_0_var(--color-border)]',
+].join(' ');
+
+function Table({
+  className,
+  sticky = false,
+  ...props
+}: React.ComponentProps<'table'> & {
+  /**
+   * Keep the header row (and footer row) in view while the rows scroll.
+   *
+   * A sticky row sticks within its nearest scrolling ancestor, so the table's
+   * own wrapper stops being one: put the table in the scrolling body of a
+   * `StickyHeaderContentFooter` (`@/components/header-content-footer`), give
+   * that a height to divide, and let the body scroll both ways.
+   */
+  sticky?: boolean;
+}) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
-      <table data-slot="table" className={cn('w-full caption-bottom text-sm', className)} {...props} />
+    <div
+      data-slot="table-container"
+      data-sticky={sticky || undefined}
+      className={cn('relative w-full', !sticky && 'overflow-x-auto')}
+    >
+      <table
+        data-slot="table"
+        className={cn('w-full caption-bottom text-sm', sticky && STICKY_TABLE, className)}
+        {...props}
+      />
     </div>
   );
 }
