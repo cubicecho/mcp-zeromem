@@ -1,0 +1,798 @@
+{
+  "focus": {
+    "edges": [
+      {
+        "a": "$230k",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "01-11",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "06-19",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "11-09",
+        "b": "quill",
+        "turns": 1
+      }
+    ],
+    "generation": 0,
+    "nodes": [
+      {
+        "degree": 4,
+        "entity": "quill",
+        "first_ts": 1736154150000,
+        "kind": "name",
+        "last_ts": 1736256196000,
+        "turns": 7
+      },
+      {
+        "degree": 1,
+        "entity": "$230k",
+        "first_ts": 1736154355000,
+        "kind": "quantity",
+        "last_ts": 1736154355000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "01-11",
+        "first_ts": 1736154551000,
+        "kind": "date",
+        "last_ts": 1736154551000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "06-19",
+        "first_ts": 1736256196000,
+        "kind": "date",
+        "last_ts": 1736256196000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "11-09",
+        "first_ts": 1736154865000,
+        "kind": "date",
+        "last_ts": 1736154865000,
+        "turns": 1
+      }
+    ],
+    "total_edges": 17,
+    "total_entities": 24,
+    "truncated": false
+  },
+  "graph": {
+    "edges": [
+      {
+        "a": "10-20",
+        "b": "ferrous",
+        "turns": 3
+      },
+      {
+        "a": "$670k",
+        "b": "basalt",
+        "turns": 2
+      },
+      {
+        "a": "$230k",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "01-11",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "06-19",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "08-23",
+        "b": "basalt",
+        "turns": 1
+      },
+      {
+        "a": "08-23",
+        "b": "we've",
+        "turns": 1
+      },
+      {
+        "a": "10-20",
+        "b": "we've",
+        "turns": 1
+      },
+      {
+        "a": "11-09",
+        "b": "quill",
+        "turns": 1
+      },
+      {
+        "a": "basalt",
+        "b": "beatriz moura",
+        "turns": 1
+      },
+      {
+        "a": "basalt",
+        "b": "we've",
+        "turns": 1
+      },
+      {
+        "a": "beatriz moura",
+        "b": "melbourne",
+        "turns": 1
+      },
+      {
+        "a": "chidi anyanwu",
+        "b": "project basalt",
+        "turns": 1
+      },
+      {
+        "a": "ferrous",
+        "b": "we've",
+        "turns": 1
+      },
+      {
+        "a": "mateo quiroga",
+        "b": "melbourne",
+        "turns": 1
+      }
+    ],
+    "generation": 0,
+    "nodes": [
+      {
+        "degree": 4,
+        "entity": "quill",
+        "first_ts": 1736154150000,
+        "kind": "name",
+        "last_ts": 1736256196000,
+        "turns": 7
+      },
+      {
+        "degree": 5,
+        "entity": "basalt",
+        "first_ts": 1736288917000,
+        "kind": "name",
+        "last_ts": 1736519232000,
+        "turns": 6
+      },
+      {
+        "degree": 0,
+        "entity": "i'll",
+        "first_ts": 1736154451000,
+        "kind": "name",
+        "last_ts": 1736519375000,
+        "turns": 6
+      },
+      {
+        "degree": 2,
+        "entity": "ferrous",
+        "first_ts": 1736405419000,
+        "kind": "name",
+        "last_ts": 1736518498000,
+        "turns": 4
+      },
+      {
+        "degree": 2,
+        "entity": "10-20",
+        "first_ts": 1736405419000,
+        "kind": "date",
+        "last_ts": 1736518498000,
+        "turns": 3
+      },
+      {
+        "degree": 1,
+        "entity": "$670k",
+        "first_ts": 1736518746000,
+        "kind": "quantity",
+        "last_ts": 1736519232000,
+        "turns": 2
+      },
+      {
+        "degree": 2,
+        "entity": "beatriz moura",
+        "first_ts": 1736518857000,
+        "kind": "name",
+        "last_ts": 1736519069000,
+        "turns": 2
+      },
+      {
+        "degree": 2,
+        "entity": "melbourne",
+        "first_ts": 1736256107000,
+        "kind": "name",
+        "last_ts": 1736519069000,
+        "turns": 2
+      },
+      {
+        "degree": 4,
+        "entity": "we've",
+        "first_ts": 1736289112000,
+        "kind": "name",
+        "last_ts": 1736405419000,
+        "turns": 2
+      },
+      {
+        "degree": 1,
+        "entity": "$230k",
+        "first_ts": 1736154355000,
+        "kind": "quantity",
+        "last_ts": 1736154355000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "01-11",
+        "first_ts": 1736154551000,
+        "kind": "date",
+        "last_ts": 1736154551000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "06-19",
+        "first_ts": 1736256196000,
+        "kind": "date",
+        "last_ts": 1736256196000,
+        "turns": 1
+      },
+      {
+        "degree": 2,
+        "entity": "08-23",
+        "first_ts": 1736289112000,
+        "kind": "date",
+        "last_ts": 1736289112000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "11-09",
+        "first_ts": 1736154865000,
+        "kind": "date",
+        "last_ts": 1736154865000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "bogotá",
+        "first_ts": 1736289292000,
+        "kind": "name",
+        "last_ts": 1736289292000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "chidi anyanwu",
+        "first_ts": 1736289709000,
+        "kind": "name",
+        "last_ts": 1736289709000,
+        "turns": 1
+      },
+      {
+        "degree": 0,
+        "entity": "ingrid halvorsen",
+        "first_ts": 1736518156000,
+        "kind": "name",
+        "last_ts": 1736518156000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "mateo quiroga",
+        "first_ts": 1736256107000,
+        "kind": "name",
+        "last_ts": 1736256107000,
+        "turns": 1
+      },
+      {
+        "degree": 1,
+        "entity": "project basalt",
+        "first_ts": 1736289709000,
+        "kind": "name",
+        "last_ts": 1736289709000,
+        "turns": 1
+      },
+      {
+        "degree": 0,
+        "entity": "project ferrous",
+        "first_ts": 1736405229000,
+        "kind": "name",
+        "last_ts": 1736405229000,
+        "turns": 1
+      }
+    ],
+    "total_edges": 17,
+    "total_entities": 24,
+    "truncated": true
+  },
+  "growth": {
+    "days": [
+      {
+        "cumulative_turns": 11,
+        "day": "2025-01-06",
+        "sessions": 1,
+        "turns": 11
+      },
+      {
+        "cumulative_turns": 29,
+        "day": "2025-01-07",
+        "sessions": 2,
+        "turns": 18
+      },
+      {
+        "cumulative_turns": 38,
+        "day": "2025-01-09",
+        "sessions": 1,
+        "turns": 9
+      },
+      {
+        "cumulative_turns": 53,
+        "day": "2025-01-10",
+        "sessions": 1,
+        "turns": 15
+      }
+    ],
+    "generation": 0
+  },
+  "hierarchy": {
+    "generation": 0,
+    "sessions": [
+      {
+        "episodes": [
+          {
+            "end_ts": 1736519375000,
+            "entities": [
+              "basalt",
+              "$670k",
+              "beatriz moura",
+              "i'll",
+              "10-20",
+              "ferrous",
+              "ingrid halvorsen",
+              "melbourne"
+            ],
+            "first_turn_id": 39,
+            "last_turn_id": 53,
+            "start_ts": 1736517934000,
+            "turns": 15
+          }
+        ],
+        "first_ts": 1736517934000,
+        "last_ts": 1736519375000,
+        "session_id": "small-s0005",
+        "turns": 15,
+        "windows": [
+          {
+            "end_ts": 1736519375000,
+            "entities": [
+              "basalt",
+              "$670k",
+              "beatriz moura",
+              "i'll",
+              "10-20",
+              "ferrous",
+              "ingrid halvorsen",
+              "melbourne"
+            ],
+            "first_turn_id": 39,
+            "last_turn_id": 53,
+            "start_ts": 1736517934000,
+            "turns": 15
+          }
+        ]
+      },
+      {
+        "episodes": [
+          {
+            "end_ts": 1736406159000,
+            "entities": [
+              "ferrous",
+              "10-20",
+              "i'll",
+              "project ferrous",
+              "we've"
+            ],
+            "first_turn_id": 30,
+            "last_turn_id": 38,
+            "start_ts": 1736405229000,
+            "turns": 9
+          }
+        ],
+        "first_ts": 1736405229000,
+        "last_ts": 1736406159000,
+        "session_id": "small-s0004",
+        "turns": 9,
+        "windows": [
+          {
+            "end_ts": 1736406159000,
+            "entities": [
+              "ferrous",
+              "10-20",
+              "i'll",
+              "project ferrous",
+              "we've"
+            ],
+            "first_turn_id": 30,
+            "last_turn_id": 38,
+            "start_ts": 1736405229000,
+            "turns": 9
+          }
+        ]
+      },
+      {
+        "episodes": [
+          {
+            "end_ts": 1736289891000,
+            "entities": [
+              "basalt",
+              "08-23",
+              "bogotá",
+              "chidi anyanwu",
+              "i'll",
+              "project basalt",
+              "redis",
+              "tomasz wierzbicki"
+            ],
+            "first_turn_id": 19,
+            "last_turn_id": 29,
+            "start_ts": 1736288917000,
+            "turns": 11
+          }
+        ],
+        "first_ts": 1736288917000,
+        "last_ts": 1736289891000,
+        "session_id": "small-s0003",
+        "turns": 11,
+        "windows": [
+          {
+            "end_ts": 1736289891000,
+            "entities": [
+              "basalt",
+              "08-23",
+              "bogotá",
+              "chidi anyanwu",
+              "i'll",
+              "project basalt",
+              "redis",
+              "tomasz wierzbicki"
+            ],
+            "first_turn_id": 19,
+            "last_turn_id": 29,
+            "start_ts": 1736288917000,
+            "turns": 11
+          }
+        ]
+      },
+      {
+        "episodes": [
+          {
+            "end_ts": 1736256353000,
+            "entities": [
+              "06-19",
+              "mateo quiroga",
+              "melbourne",
+              "project heron",
+              "quill"
+            ],
+            "first_turn_id": 12,
+            "last_turn_id": 18,
+            "start_ts": 1736255840000,
+            "turns": 7
+          }
+        ],
+        "first_ts": 1736255840000,
+        "last_ts": 1736256353000,
+        "session_id": "small-s0002",
+        "turns": 7,
+        "windows": [
+          {
+            "end_ts": 1736256353000,
+            "entities": [
+              "06-19",
+              "mateo quiroga",
+              "melbourne",
+              "project heron",
+              "quill"
+            ],
+            "first_turn_id": 12,
+            "last_turn_id": 18,
+            "start_ts": 1736255840000,
+            "turns": 7
+          }
+        ]
+      },
+      {
+        "episodes": [
+          {
+            "end_ts": 1736154968000,
+            "entities": [
+              "quill",
+              "i'll",
+              "$230k",
+              "01-11",
+              "11-09"
+            ],
+            "first_turn_id": 1,
+            "last_turn_id": 11,
+            "start_ts": 1736154150000,
+            "turns": 11
+          }
+        ],
+        "first_ts": 1736154150000,
+        "last_ts": 1736154968000,
+        "session_id": "small-s0001",
+        "turns": 11,
+        "windows": [
+          {
+            "end_ts": 1736154968000,
+            "entities": [
+              "quill",
+              "i'll",
+              "$230k",
+              "01-11",
+              "11-09"
+            ],
+            "first_turn_id": 1,
+            "last_turn_id": 11,
+            "start_ts": 1736154150000,
+            "turns": 11
+          }
+        ]
+      }
+    ],
+    "total_sessions": 5
+  },
+  "session_turns": [
+    {
+      "entities": [
+        {
+          "end": 30,
+          "key": "project meridian",
+          "kind": "name",
+          "start": 14,
+          "surface": "Project Meridian"
+        }
+      ],
+      "id": 39,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Quick sync on Project Meridian before standup.",
+      "ts": 1736517934000,
+      "uuid": "046765a3-94c8-4bc5-8bd0-7cdeb20a6f44"
+    },
+    {
+      "entities": [],
+      "id": 40,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Thanks, that's recorded.",
+      "ts": 1736518072000,
+      "uuid": "90f71599-f659-4df9-ac12-d2ed2d38acfb"
+    },
+    {
+      "entities": [
+        {
+          "end": 16,
+          "key": "ingrid halvorsen",
+          "kind": "name",
+          "start": 0,
+          "surface": "Ingrid Halvorsen"
+        }
+      ],
+      "id": 41,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Ingrid Halvorsen pinged me about the ingest pipeline again.",
+      "ts": 1736518156000,
+      "uuid": "022ff26f-b672-4cd3-80f4-b20772e9b50e"
+    },
+    {
+      "entities": [],
+      "id": 42,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Makes sense.",
+      "ts": 1736518334000,
+      "uuid": "e9f006bd-1f11-4c53-b507-3c576ba12cdb"
+    },
+    {
+      "entities": [
+        {
+          "end": 29,
+          "key": "ferrous",
+          "kind": "name",
+          "start": 20,
+          "surface": "Ferrous's"
+        },
+        {
+          "end": 51,
+          "key": "10-20",
+          "kind": "date",
+          "start": 41,
+          "surface": "October 20"
+        }
+      ],
+      "id": 43,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Reminder: we've set Ferrous's launch for October 20.",
+      "ts": 1736518498000,
+      "uuid": "3fafe1aa-abe2-4391-beb0-b698a0af8e29"
+    },
+    {
+      "entities": [
+        {
+          "end": 11,
+          "key": "i'll",
+          "kind": "name",
+          "start": 7,
+          "surface": "I'll"
+        }
+      ],
+      "id": 44,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Noted, I'll remember that.",
+      "ts": 1736518672000,
+      "uuid": "2dfc3727-5b31-41b0-a534-52c3ecbd1299"
+    },
+    {
+      "entities": [
+        {
+          "end": 22,
+          "key": "$670k",
+          "kind": "quantity",
+          "start": 17,
+          "surface": "$670k"
+        },
+        {
+          "end": 33,
+          "key": "basalt",
+          "kind": "name",
+          "start": 27,
+          "surface": "Basalt"
+        }
+      ],
+      "id": 45,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Finance approved $670k for Basalt.",
+      "ts": 1736518746000,
+      "uuid": "96074171-1779-47d1-9d58-5b053f07efaa"
+    },
+    {
+      "entities": [],
+      "id": 46,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Understood.",
+      "ts": 1736518783000,
+      "uuid": "c6f4aaa2-3c1d-4a39-8294-1038f42363f5"
+    },
+    {
+      "entities": [
+        {
+          "end": 42,
+          "key": "beatriz moura",
+          "kind": "name",
+          "start": 29,
+          "surface": "Beatriz Moura"
+        },
+        {
+          "end": 55,
+          "key": "basalt",
+          "kind": "name",
+          "start": 49,
+          "surface": "Basalt"
+        }
+      ],
+      "id": 47,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Had a good conversation with Beatriz Moura about Basalt this morning.",
+      "ts": 1736518857000,
+      "uuid": "b0e0bee6-6b39-49b8-a561-832893b1fdca"
+    },
+    {
+      "entities": [],
+      "id": 48,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Makes sense.",
+      "ts": 1736518963000,
+      "uuid": "1b28eecc-53e7-4f8b-a135-03078699eafc"
+    },
+    {
+      "entities": [
+        {
+          "end": 15,
+          "key": "beatriz moura",
+          "kind": "name",
+          "start": 0,
+          "surface": "Beatriz Moura's"
+        },
+        {
+          "end": 43,
+          "key": "melbourne",
+          "kind": "name",
+          "start": 34,
+          "surface": "Melbourne"
+        }
+      ],
+      "id": 49,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Beatriz Moura's home office is in Melbourne.",
+      "ts": 1736519069000,
+      "uuid": "29cec22e-f855-4585-82bc-e0ae58b5e679"
+    },
+    {
+      "entities": [],
+      "id": 50,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Noted.",
+      "ts": 1736519142000,
+      "uuid": "aee99a89-c50a-4f47-bf03-3e266ea4da82"
+    },
+    {
+      "entities": [
+        {
+          "end": 22,
+          "key": "basalt",
+          "kind": "name",
+          "start": 16,
+          "surface": "Basalt"
+        },
+        {
+          "end": 32,
+          "key": "$670k",
+          "kind": "quantity",
+          "start": 27,
+          "surface": "$670k"
+        }
+      ],
+      "id": 51,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "Still the case: Basalt has $670k to spend this quarter.",
+      "ts": 1736519232000,
+      "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
+    },
+    {
+      "entities": [],
+      "id": 52,
+      "session_id": "small-s0005",
+      "speaker": "assistant",
+      "text": "Noted.",
+      "ts": 1736519302000,
+      "uuid": "64535200-a4f7-45a5-bdf0-bdfea204c140"
+    },
+    {
+      "entities": [
+        {
+          "end": 4,
+          "key": "i'll",
+          "kind": "name",
+          "start": 0,
+          "surface": "I'll"
+        }
+      ],
+      "id": 53,
+      "session_id": "small-s0005",
+      "speaker": "user",
+      "text": "I'll send the rest after lunch.",
+      "ts": 1736519375000,
+      "uuid": "29b58098-a100-4b11-98a4-0ac37f5021a8"
+    }
+  ]
+}

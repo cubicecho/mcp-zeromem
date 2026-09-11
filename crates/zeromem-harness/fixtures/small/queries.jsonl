@@ -1,0 +1,10 @@
+{"id":"small-q0001","kind":"budget","query":"What is the Quill budget?","latest_session_id":"small-s0001","relevant":[{"uuid":"0381564c-6fa4-41aa-96d3-ad3e984266b0","grade":2}]}
+{"id":"small-q0002","kind":"date","query":"What date is Quill's security review?","latest_session_id":"small-s0002","relevant":[{"uuid":"5fc5f2e0-0305-48bc-b3af-f883add980d0","grade":1},{"uuid":"f1612911-4292-4d30-a01e-c6dc1041b7a1","grade":1},{"uuid":"a7881716-62df-4643-9f46-4c5293d0844c","grade":2}]}
+{"id":"small-q0003","kind":"location","query":"Which city does Mateo Quiroga work from?","latest_session_id":"small-s0002","relevant":[{"uuid":"6969df37-f178-47aa-8b58-ee7a3a28855c","grade":2}]}
+{"id":"small-q0004","kind":"date","query":"What date is Basalt's code freeze?","latest_session_id":"small-s0003","relevant":[{"uuid":"264974e2-8c87-43ce-9b95-e64cd0972982","grade":2}]}
+{"id":"small-q0005","kind":"location","query":"Which city does Tomasz Wierzbicki work from?","latest_session_id":"small-s0003","relevant":[{"uuid":"91018f94-9f5c-4608-a63a-86067665f0c8","grade":2}]}
+{"id":"small-q0006","kind":"tool","query":"Which tool handles scheduling on Basalt?","latest_session_id":"small-s0003","relevant":[{"uuid":"b23a7921-a9ad-44bc-94d6-88b4c8583242","grade":2}]}
+{"id":"small-q0007","kind":"owner","query":"Who is responsible for Basalt's data warehouse?","latest_session_id":"small-s0003","relevant":[{"uuid":"ab2f8fb8-2bea-49e0-8f4b-c583eedf047c","grade":2}]}
+{"id":"small-q0008","kind":"date","query":"What date is Ferrous's launch?","latest_session_id":"small-s0005","relevant":[{"uuid":"3ec3c029-8124-4ddb-b82a-7a24bc15c968","grade":2},{"uuid":"e27f8c34-79c5-40b7-b548-15299172ae38","grade":2},{"uuid":"3fafe1aa-abe2-4391-beb0-b698a0af8e29","grade":2}]}
+{"id":"small-q0009","kind":"budget","query":"What is the Basalt budget?","latest_session_id":"small-s0005","relevant":[{"uuid":"96074171-1779-47d1-9d58-5b053f07efaa","grade":2},{"uuid":"e0b6dee2-ab69-4ef7-9656-d230ace35a12","grade":2}]}
+{"id":"small-q0010","kind":"location","query":"Where is Beatriz Moura based?","latest_session_id":"small-s0005","relevant":[{"uuid":"29cec22e-f855-4585-82bc-e0ae58b5e679","grade":2}]}

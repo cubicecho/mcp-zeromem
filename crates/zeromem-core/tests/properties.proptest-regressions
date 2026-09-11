@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 1a106772ba586bb1ef68bcee7b832a877060f8beeabc478847806ee07b668cc8 # shrinks to turns = [TurnInput { session_id: "alpha", speaker: "user", text: ".", ts: Some(0), uuid: None }], victim = "alpha"

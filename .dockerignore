@@ -1,0 +1,27 @@
+# Dependencies (reinstalled inside the image)
+node_modules
+**/node_modules
+
+# Runtime state — never bake into the image
+data
+
+# Build outputs (rebuilt inside the image)
+dist
+**/dist
+target
+crates/zeromem-node/*.node
+crates/zeromem-node/index.js
+crates/zeromem-node/index.d.ts
+
+# VCS, tests, local config
+.git
+coverage
+.env
+.env.local
+*.log
+.claude
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore

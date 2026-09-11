@@ -1,0 +1,55 @@
+{
+  "name": "mcp-zeromem",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zero-token conversational memory for agents: a Rust engine, exposed over MCP (HTTP + stdio) with an admin UI",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "workspaces": [
+    "shared",
+    "crates/zeromem-node",
+    "server",
+    "app"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
+    "dev:app": "npm run dev -w app",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build:native && npm run build:ts",
+    "build:native": "npm run build -w crates/zeromem-node",
+    "build:native:debug": "npm run build:debug -w crates/zeromem-node",
+    "build:ts": "npm run build -w shared && npm run build -w server && npm run build -w app",
+    "build:app": "npm run build -w app",
+    "build:server": "npm run build -w server",
+    "build:docker": "docker build -t mcp-zeromem .",
+    "start": "node --env-file-if-exists=.env server/dist/index.js",
+    "stdio": "node --env-file-if-exists=.env server/dist/stdio.js",
+    "lint": "biome check . && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
+    "format": "biome check --write . && cargo fmt --all",
+    "typecheck": "tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p app/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rust": "cargo test --workspace",
+    "fixtures:gen": "cargo run -q -p zeromem-harness -- gen",
+    "bench": "cargo run --release -p zeromem-core --example bench -- --sizes 1000,10000,50000 --out target/bench",
+    "bench:quick": "cargo run --release -p zeromem-core --example bench -- --sizes 1000 --out target/bench",
+    "clean": "rm -rf node_modules shared/dist server/dist app/dist target crates/zeromem-node/*.node"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/node": "^26.4.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.0"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": {
+      "zod": "^3.25.0"
+    },
+    "zod-to-json-schema": {
+      "zod": "^3.25.0"
+    }
+  }
+}

@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to a branch makes the first run's answer worthless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      # The reference-vector and eval tests load the ONNX model; cache it so a
+      # run does not re-download 130 MB. Keyed on the model name: the files
+      # never change for a given model.
+      - name: Cache the embedding model
+        uses: actions/cache@v5
+        with:
+          path: target/models
+          key: models-bge-small-en-v1.5
+
+      # The engine first: nothing in server/ typechecks until the addon's
+      # generated loader exists, and cargo's own tests are the harness's
+      # oracle/property/snapshot/eval layers. ZEROMEM_MODELS points every
+      # test at the one cached model directory.
+      - name: Rust tests
+        run: cargo test --workspace
+        env:
+          ZEROMEM_MODELS: ${{ github.workspace }}/target/models
+
+      # The eval numbers behind the floors, so a ranking change is visible in
+      # the run even when it clears them.
+      - name: Eval metrics
+        if: always()
+        run: |
+          for f in target/eval/*-*.json; do
+            [ -f "$f" ] || continue
+            jq -r '"\(.profile) / \(.embedder): recall@5 \(.summary.recall_at_k  * 1000 | floor / 1000) mrr \(.summary.mrr  * 1000 | floor / 1000) ndcg@5 \(.summary.ndcg_at_k  * 1000 | floor / 1000) missed \(.missed | length)"' "$f"
+          done
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: eval
+          path: target/eval
+          if-no-files-found: ignore
+
+      - name: Rust lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build the addon
+        run: npm run build:native
+
+      # Formatting, lint, and import order in one pass. `ci` differs from
+      # `npm run lint` only in never writing fixes.
+      - name: Lint
+        run: npx biome ci .
+
+      # `npm run build` typechecks too, but a type error and an emit error
+      # deserve to fail on different lines.
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Vitest against a real engine in a temp directory per test; no mocks of
+      # the addon or of SQLite.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build:ts
+
+  # Cold-open time, RSS and recall latency at 1k/10k/50k turns. Not gated —
+  # shared runners are too noisy for a threshold — but every run prints the
+  # table and keeps the JSON, so a regression is a diff away. The 50k row
+  # takes about a minute.
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Benchmark
+        run: cargo run --release -p zeromem-core --example bench -- --sizes 1000,10000,50000 --out target/bench | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: bench
+          path: target/bench
+
+  # Our ranking against the labeled queries, in the shape `zm-harness
+  # compare` takes. Kept as an artifact so the upstream comparison (README,
+  # "Comparing against upstream") has a left-hand side for any commit.
+  rank:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Rank the labeled queries
+        run: |
+          mkdir -p target/rank
+          for profile in small large; do
+            scripts/rank.sh "$profile" 5 > "target/rank/$profile.jsonl"
+          done
+          # Compared with itself: the numbers are the quality metrics, and
+          # overlap/spearman must be 1. Anything else is a bug in the script.
+          cargo run -q -p zeromem-harness -- compare large target/rank/large.jsonl target/rank/large.jsonl | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rank
+          path: target/rank
+
+  # The image is only pushed from main, so without this a broken Dockerfile
+  # would first be noticed by a release. Builds, does not push.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: mcp-zeromem:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # What this checks: the addon built against rust:1-trixie loads under
+      # node:26-slim's glibc, the store opens on the volume as the unprivileged
+      # `node` user, and a turn written by the in-container CLI is counted by
+      # the server. The three things no unit test covers.
+      - name: The container boots and answers
+        run: |
+          # `hash`: a CI boot should not download the model. The ONNX path is
+          # covered by the Rust tests above.
+          docker run -d --name mcp-zeromem-ci -p 3000:3000 -e SECURE_LOCAL_NET=true -e ZEROMEM_EMBEDDER=hash mcp-zeromem:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS localhost:3000/api/status > /dev/null; then
+              echo 'server answered'
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS localhost:3000/api/status || { echo '::error::the container never answered on :3000'; docker logs mcp-zeromem-ci; exit 1; }
+          echo '{"session_id":"ci","speaker":"user","text":"the container round-trips a turn"}' \
+            | docker exec -i mcp-zeromem-ci zm ingest
+          curl -fsS localhost:3000/api/status | grep -q '"turns":1' \
+            || { echo '::error::a turn written by zm was not counted by the server'; docker logs mcp-zeromem-ci; exit 1; }
+          # …and comes back through recall over REST, which exercises the
+          # addon's query path end to end inside the image.
+          curl -fsS localhost:3000/api/recall -H 'content-type: application/json' \
+            -d '{"query":"does the container round-trip a turn?","top_k":3}' | grep -q 'round-trips a turn' \
+            || { echo '::error::recall did not return the ingested turn'; docker logs mcp-zeromem-ci; exit 1; }

@@ -1,0 +1,4 @@
+{"recorded_at":"2026-09-10T00:00:00Z","commit":"part1","label":"Part 1 complete","profile":"large","embedder":"bge-small-en-v1.5","k":5,"queries":266,"recall_at_k":0.8842731829573934,"mrr":0.9713032581453634,"ndcg_at_k":0.8175359624513936,"missed":1}
+{"recorded_at":"2026-09-10T00:00:00Z","commit":"part1","label":"Part 1 complete","profile":"large","embedder":"hash-384","k":5,"queries":266,"recall_at_k":0.7103383458646614,"mrr":0.8954260651629071,"ndcg_at_k":0.6701089198637733,"missed":15}
+{"recorded_at":"2026-09-10T00:00:00Z","commit":"part1","label":"Part 1 complete","profile":"small","embedder":"bge-small-en-v1.5","k":5,"queries":10,"recall_at_k":0.9,"mrr":0.9,"ndcg_at_k":0.9,"missed":1}
+{"recorded_at":"2026-09-10T00:00:00Z","commit":"part1","label":"Part 1 complete","profile":"small","embedder":"hash-384","k":5,"queries":10,"recall_at_k":0.9,"mrr":0.8333333333333333,"ndcg_at_k":0.8419720789148186,"missed":1}

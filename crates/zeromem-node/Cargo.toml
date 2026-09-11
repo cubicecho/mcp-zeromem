@@ -1,0 +1,21 @@
+[package]
+name = "zeromem-node"
+description = "napi-rs binding exposing zeromem-core to Node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi8", "async", "serde-json"] }
+napi-derive = "3"
+serde.workspace = true
+serde_json.workspace = true
+zeromem-core = { path = "../zeromem-core" }
+
+[build-dependencies]
+napi-build = "2"

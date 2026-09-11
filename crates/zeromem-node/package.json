@@ -1,0 +1,29 @@
+{
+  "name": "@mcp-zeromem/native",
+  "version": "0.0.0",
+  "private": true,
+  "description": "napi-rs binding for zeromem-core (built from ../zeromem-core)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "types.d.ts",
+    "*.node"
+  ],
+  "napi": {
+    "binaryName": "zeromem-node",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu"
+    ],
+    "dtsHeader": "/// <reference path=\"./types.d.ts\" />\nimport type { EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, IngestOutcome, IngestReport, QueryResult, QueryTrace, SessionSummary, Stats, StoredTurn } from './types';\nexport type { ApiKeySource, Dropped, EmbedderKind, EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, Evidence, Fused, IngestOutcome, IngestReport, Profile, QueryResult, QueryTrace, RemoteEmbedderSpec, Role, Route, SessionSummary, Stats, StoredTurn, ViewKind, ViewSummary, ViewTrace } from './types';\n"
+  },
+  "scripts": {
+    "build": "napi build --platform --release --manifest-path Cargo.toml",
+    "build:debug": "napi build --platform --manifest-path Cargo.toml"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.9.0"
+  }
+}

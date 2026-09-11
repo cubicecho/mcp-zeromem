@@ -1,0 +1,53 @@
+{"session_id":"small-s0001","speaker":"user","text":"Some notes from the Quill review.","ts":1736154150000,"uuid":"eb08b95f-117f-448b-ad3f-c759d04ee628"}
+{"session_id":"small-s0001","speaker":"assistant","text":"Noted.","ts":1736154207000,"uuid":"850cb909-f33c-4e1c-9661-50021a629241"}
+{"session_id":"small-s0001","speaker":"user","text":"The notification worker tests were flaky again on Quill.","ts":1736154289000,"uuid":"35aa86e7-e7c3-4d73-bf88-9ab8b45ab699"}
+{"session_id":"small-s0001","speaker":"user","text":"Finance approved $230k for Quill.","ts":1736154355000,"uuid":"0381564c-6fa4-41aa-96d3-ad3e984266b0"}
+{"session_id":"small-s0001","speaker":"assistant","text":"Got it, I'll keep that in mind.","ts":1736154451000,"uuid":"ece678e1-5aa4-4b86-b2e2-2fdeb584ceb3"}
+{"session_id":"small-s0001","speaker":"user","text":"The Quill security review is on January 11.","ts":1736154551000,"uuid":"5fc5f2e0-0305-48bc-b3af-f883add980d0"}
+{"session_id":"small-s0001","speaker":"assistant","text":"Noted, I'll remember that.","ts":1736154608000,"uuid":"bb054444-f9f8-4707-8e28-274a175d9ddc"}
+{"session_id":"small-s0001","speaker":"user","text":"Spent the afternoon reading through Quill tickets.","ts":1736154695000,"uuid":"f4aea578-a183-4a8f-bb09-9b5265e12f10"}
+{"session_id":"small-s0001","speaker":"assistant","text":"Makes sense.","ts":1736154821000,"uuid":"f165d398-0072-44e1-8dd0-ee37946ffefc"}
+{"session_id":"small-s0001","speaker":"user","text":"Heads up, we've set Quill's security review for November 9.","ts":1736154865000,"uuid":"f1612911-4292-4d30-a01e-c6dc1041b7a1"}
+{"session_id":"small-s0001","speaker":"assistant","text":"Makes sense.","ts":1736154968000,"uuid":"d71dcf2a-f9b2-4006-af99-e9ee7dc2567e"}
+{"session_id":"small-s0002","speaker":"user","text":"Catching you up on Project Heron.","ts":1736255840000,"uuid":"20b10675-e20a-423a-a957-402ad9adc708"}
+{"session_id":"small-s0002","speaker":"assistant","text":"Noted.","ts":1736255965000,"uuid":"8b869ae0-42fe-485f-b2e8-e60ceb7ecce0"}
+{"session_id":"small-s0002","speaker":"user","text":"Mateo Quiroga works out of Melbourne these days.","ts":1736256107000,"uuid":"6969df37-f178-47aa-8b58-ee7a3a28855c"}
+{"session_id":"small-s0002","speaker":"assistant","text":"Right, thanks for the update.","ts":1736256148000,"uuid":"fe78fefb-4345-4d43-84c0-c4dbe6e0e6ef"}
+{"session_id":"small-s0002","speaker":"user","text":"Heads up, Quill security review date is June 19.","ts":1736256196000,"uuid":"a7881716-62df-4643-9f46-4c5293d0844c"}
+{"session_id":"small-s0002","speaker":"assistant","text":"Noted.","ts":1736256265000,"uuid":"e2446175-1703-4f19-8754-1a6c1a7487d0"}
+{"session_id":"small-s0002","speaker":"user","text":"Okay, let's pick this up tomorrow.","ts":1736256353000,"uuid":"aed508a2-f9e6-477f-a1d9-2fe6e550ac42"}
+{"session_id":"small-s0003","speaker":"user","text":"Picking up where we left off on Basalt.","ts":1736288917000,"uuid":"d910b2f4-c676-4eaf-b87e-a988112733c8"}
+{"session_id":"small-s0003","speaker":"assistant","text":"Makes sense.","ts":1736288943000,"uuid":"05ce7c42-2d5b-4aec-a194-375d1f4fb6b4"}
+{"session_id":"small-s0003","speaker":"user","text":"We've set Basalt's code freeze for August 23.","ts":1736289112000,"uuid":"264974e2-8c87-43ce-9b95-e64cd0972982"}
+{"session_id":"small-s0003","speaker":"assistant","text":"Thanks, that's recorded.","ts":1736289140000,"uuid":"fd6a9fa9-9c07-4035-8497-2eb135a584e9"}
+{"session_id":"small-s0003","speaker":"user","text":"Tomasz Wierzbicki's home office is in Bogotá.","ts":1736289292000,"uuid":"91018f94-9f5c-4608-a63a-86067665f0c8"}
+{"session_id":"small-s0003","speaker":"assistant","text":"Understood.","ts":1736289407000,"uuid":"e4e28055-5870-4482-9087-b5999918e9bd"}
+{"session_id":"small-s0003","speaker":"user","text":"Basalt does scheduling with Redis.","ts":1736289451000,"uuid":"b23a7921-a9ad-44bc-94d6-88b4c8583242"}
+{"session_id":"small-s0003","speaker":"assistant","text":"Right, thanks for the update.","ts":1736289606000,"uuid":"2a2ed430-e47d-42db-b76b-71a6ef23a58a"}
+{"session_id":"small-s0003","speaker":"user","text":"Chidi Anyanwu owns the data warehouse on Project Basalt.","ts":1736289709000,"uuid":"ab2f8fb8-2bea-49e0-8f4b-c583eedf047c"}
+{"session_id":"small-s0003","speaker":"assistant","text":"Makes sense.","ts":1736289802000,"uuid":"cec8e86a-e36b-4981-8b77-9c579c837439"}
+{"session_id":"small-s0003","speaker":"user","text":"I'll send the rest after lunch.","ts":1736289891000,"uuid":"b394714c-ae84-4186-b3ad-6cd2da7c3368"}
+{"session_id":"small-s0004","speaker":"user","text":"Quick sync on Project Ferrous before standup.","ts":1736405229000,"uuid":"970cdbef-1713-4cf9-aa97-a369de31f42b"}
+{"session_id":"small-s0004","speaker":"assistant","text":"Thanks, that's recorded.","ts":1736405391000,"uuid":"cba7ae13-38f3-4d1e-b0bb-40a2f8c00b94"}
+{"session_id":"small-s0004","speaker":"user","text":"We've set Ferrous's launch for October 20.","ts":1736405419000,"uuid":"3ec3c029-8124-4ddb-b82a-7a24bc15c968"}
+{"session_id":"small-s0004","speaker":"assistant","text":"Understood.","ts":1736405485000,"uuid":"48801eab-d530-41b1-9172-fc418f35caab"}
+{"session_id":"small-s0004","speaker":"user","text":"Need to book a room for the Ferrous security review prep.","ts":1736405658000,"uuid":"98a664d0-1a37-4611-a002-bd812fdee57d"}
+{"session_id":"small-s0004","speaker":"assistant","text":"Noted.","ts":1736405780000,"uuid":"70c24274-bfda-416a-bd04-22f73ba06621"}
+{"session_id":"small-s0004","speaker":"user","text":"Still the case: Ferrous launch date is October 20.","ts":1736405874000,"uuid":"e27f8c34-79c5-40b7-b548-15299172ae38"}
+{"session_id":"small-s0004","speaker":"assistant","text":"Okay. Anything else on that?","ts":1736405993000,"uuid":"2e45ff50-1244-4c7c-9ad5-335465318269"}
+{"session_id":"small-s0004","speaker":"user","text":"I'll send the rest after lunch.","ts":1736406159000,"uuid":"d49d5107-75b1-4197-8866-7bbd381d92e7"}
+{"session_id":"small-s0005","speaker":"user","text":"Quick sync on Project Meridian before standup.","ts":1736517934000,"uuid":"046765a3-94c8-4bc5-8bd0-7cdeb20a6f44"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Thanks, that's recorded.","ts":1736518072000,"uuid":"90f71599-f659-4df9-ac12-d2ed2d38acfb"}
+{"session_id":"small-s0005","speaker":"user","text":"Ingrid Halvorsen pinged me about the ingest pipeline again.","ts":1736518156000,"uuid":"022ff26f-b672-4cd3-80f4-b20772e9b50e"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Makes sense.","ts":1736518334000,"uuid":"e9f006bd-1f11-4c53-b507-3c576ba12cdb"}
+{"session_id":"small-s0005","speaker":"user","text":"Reminder: we've set Ferrous's launch for October 20.","ts":1736518498000,"uuid":"3fafe1aa-abe2-4391-beb0-b698a0af8e29"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Noted, I'll remember that.","ts":1736518672000,"uuid":"2dfc3727-5b31-41b0-a534-52c3ecbd1299"}
+{"session_id":"small-s0005","speaker":"user","text":"Finance approved $670k for Basalt.","ts":1736518746000,"uuid":"96074171-1779-47d1-9d58-5b053f07efaa"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Understood.","ts":1736518783000,"uuid":"c6f4aaa2-3c1d-4a39-8294-1038f42363f5"}
+{"session_id":"small-s0005","speaker":"user","text":"Had a good conversation with Beatriz Moura about Basalt this morning.","ts":1736518857000,"uuid":"b0e0bee6-6b39-49b8-a561-832893b1fdca"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Makes sense.","ts":1736518963000,"uuid":"1b28eecc-53e7-4f8b-a135-03078699eafc"}
+{"session_id":"small-s0005","speaker":"user","text":"Beatriz Moura's home office is in Melbourne.","ts":1736519069000,"uuid":"29cec22e-f855-4585-82bc-e0ae58b5e679"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Noted.","ts":1736519142000,"uuid":"aee99a89-c50a-4f47-bf03-3e266ea4da82"}
+{"session_id":"small-s0005","speaker":"user","text":"Still the case: Basalt has $670k to spend this quarter.","ts":1736519232000,"uuid":"e0b6dee2-ab69-4ef7-9656-d230ace35a12"}
+{"session_id":"small-s0005","speaker":"assistant","text":"Noted.","ts":1736519302000,"uuid":"64535200-a4f7-45a5-bdf0-bdfea204c140"}
+{"session_id":"small-s0005","speaker":"user","text":"I'll send the rest after lunch.","ts":1736519375000,"uuid":"29b58098-a100-4b11-98a4-0ac37f5021a8"}

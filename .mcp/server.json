@@ -1,0 +1,45 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.vantreeseba/mcp-zeromem",
+  "description": "Zero-token conversational memory for agents: turns go into one SQLite store and come back through recall with no LLM in the loop.",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/vantreeseba/mcp-zeromem",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://docker.io",
+      "identifier": "vantreeseba/mcp-zeromem",
+      "version": "0.0.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:3200/mcp"
+      },
+      "environmentVariables": [
+        {
+          "name": "MCP_ZEROMEM_TOKEN",
+          "description": "Bearer token clients must send to /mcp. Required unless SECURE_LOCAL_NET=true.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "ZEROMEM_READ_ONLY",
+          "description": "Set to true to hide the write tools (remember, ingest, forget) from clients.",
+          "isRequired": false
+        },
+        {
+          "name": "ZEROMEM_EMBEDDER",
+          "description": "auto (default), onnx, hash or none. auto downloads bge-small-en-v1.5 on first use and falls back to hashing, loudly, if it cannot.",
+          "isRequired": false
+        },
+        {
+          "name": "ZEROMEM_SESSION_ID",
+          "description": "Session id to leave out of zeromem_recall by default, so recall does not echo the current conversation.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

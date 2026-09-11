@@ -1,0 +1,27 @@
+{
+  "name": "@mcp-zeromem/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mcp-zeromem-stdio": "dist/stdio.js"
+  },
+  "scripts": {
+    "dev": "DATA_DIR=../data PORT=3001 SECURE_LOCAL_NET=true node --env-file-if-exists=../.env --watch src/index.ts",
+    "dev:stdio": "DATA_DIR=../data node --env-file-if-exists=../.env src/stdio.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp-zeromem/native": "*",
+    "@mcp-zeromem/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/supertest": "^6.0.0",
+    "supertest": "^7.2.2"
+  }
+}

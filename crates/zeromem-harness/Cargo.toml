@@ -1,0 +1,22 @@
+[package]
+name = "zeromem-harness"
+description = "Test harness for zeromem-core: the seeded corpus generator, its labeled query set and the retrieval metrics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "zeromem_harness"
+path = "src/lib.rs"
+
+[[bin]]
+name = "zm-harness"
+path = "src/bin/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true

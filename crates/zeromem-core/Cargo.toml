@@ -1,0 +1,39 @@
+[package]
+name = "zeromem-core"
+description = "Zero-token conversational memory engine: turns in SQLite, retrieval over an entity graph, a timeline and lexical + dense search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "zeromem_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "zm"
+path = "src/cli/main.rs"
+
+[features]
+default = ["onnx"]
+# The BGE-small embedder via ONNX Runtime. Without it the engine has only the
+# hash embedder, which is a loud fallback, never a silent one.
+onnx = ["dep:fastembed"]
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+fastembed = { workspace = true, optional = true }
+log.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+ureq = { version = "3", features = ["json"] }
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3"
+zeromem-harness = { path = "../zeromem-harness" }

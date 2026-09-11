@@ -1,0 +1,44 @@
+services:
+  mcp-zeromem:
+    build: .
+    image: mcp-zeromem
+    ports:
+      # 3000 and 3100 are taken by the other MCP servers on this host.
+      - '3200:3000'
+    volumes:
+      # The SQLite store and the embedding model (downloaded on first boot).
+      # Bind-mounted so a host-side `zm hook` can write into the same store
+      # the server reads.
+      - ./data:/data
+    environment:
+      # Set a bearer token, OR set SECURE_LOCAL_NET=true to run without one on
+      # a trusted network. The server refuses to start with neither.
+      MCP_ZEROMEM_TOKEN: ${MCP_ZEROMEM_TOKEN:-}
+      SECURE_LOCAL_NET: ${SECURE_LOCAL_NET:-}
+      ZEROMEM_READ_ONLY: ${ZEROMEM_READ_ONLY:-}
+      # auto | onnx | hash | openai | none — see .env.example. Seeds a new
+      # store; an existing store keeps its own embedder.
+      ZEROMEM_EMBEDDER: ${ZEROMEM_EMBEDDER:-auto}
+      ZEROMEM_ALLOW_EMBEDDER_SWITCH: ${ZEROMEM_ALLOW_EMBEDDER_SWITCH:-}
+      # An OpenAI-compatible embeddings endpoint, for ZEROMEM_EMBEDDER=openai
+      # or to seed the key/URL a Settings-page switch will use.
+      ZEROMEM_EMBEDDING_URL: ${ZEROMEM_EMBEDDING_URL:-}
+      ZEROMEM_EMBEDDING_MODEL: ${ZEROMEM_EMBEDDING_MODEL:-}
+      ZEROMEM_EMBEDDING_API_KEY: ${ZEROMEM_EMBEDDING_API_KEY:-}
+      ZEROMEM_EMBEDDING_QUERY_PREFIX: ${ZEROMEM_EMBEDDING_QUERY_PREFIX:-}
+      ZEROMEM_EMBEDDING_DOCUMENT_PREFIX: ${ZEROMEM_EMBEDDING_DOCUMENT_PREFIX:-}
+      ZEROMEM_EMBEDDING_TIMEOUT_MS: ${ZEROMEM_EMBEDDING_TIMEOUT_MS:-}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://localhost:" + (process.env.PORT || 3000) + "/api/status").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))',
+        ]
+      interval: 30s
+      timeout: 5s
+      # Covers the first-boot model download.
+      start_period: 120s
+      retries: 3
