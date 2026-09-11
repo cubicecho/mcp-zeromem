@@ -1,4 +1,9 @@
-import { embedderProbeSchema, embedderSettingsSchema, embedderSwitchSchema } from '@mcp-zeromem/shared';
+import {
+  clearReportSchema,
+  embedderProbeSchema,
+  embedderSettingsSchema,
+  embedderSwitchSchema,
+} from '@mcp-zeromem/shared';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.ts';
@@ -148,6 +153,106 @@ describe('/api/settings/embedder', () => {
       .put('/api/settings/embedder')
       .set(auth)
       .send({ spec: { kind: 'hash' } });
+    expect(readOnly.status).toBe(403);
+  });
+});
+
+const turns = (session: string, n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    session_id: session,
+    speaker: 'user',
+    text: `${session} turn ${i} about Lisbon`,
+    ts: i + 1,
+  }));
+
+describe('POST /api/settings/embedder/reembed', () => {
+  it('re-makes every vector with the store embedder and lets the worker drain them', async () => {
+    await rig.engine.ingestMany(turns('s1', 5));
+    const generation = (await rig.engine.stats()).generation;
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
+
+    expect((await request(app()).post('/api/settings/embedder/reembed')).status).toBe(401);
+    const res = await request(app({}, worker)).post('/api/settings/embedder/reembed').set(auth);
+    expect(res.status).toBe(200);
+    expect(embedderSwitchSchema.parse(res.body)).toMatchObject({ embedder: 'hash-384', vectors_kept: false });
+    expect((await rig.engine.stats()).generation).toBe(generation + 1);
+
+    worker.start();
+    await worker.drained();
+    await worker.stop();
+    expect(await rig.engine.stats()).toMatchObject({ embeddings: 5, embedding_backlog: 0 });
+  });
+
+  it('keeps the vectors when the embedder fails, and refuses under read-only', async () => {
+    await request(app())
+      .put('/api/settings/embedder')
+      .set(auth)
+      .send({ spec: remote(endpoint.url) });
+    await rig.engine.ingestMany(turns('s1', 3));
+    await rig.engine.embedBacklog(100);
+    expect((await rig.engine.stats()).embeddings).toBe(3);
+
+    await endpoint.close();
+    const failed = await request(app()).post('/api/settings/embedder/reembed').set(auth);
+    expect(failed.status).toBe(502);
+    expect(failed.body.error).toMatch(/vectors are unchanged/);
+    expect(String(failed.body.detail)).not.toMatch(/sk-secret/);
+    expect((await rig.engine.stats()).embeddings).toBe(3);
+
+    const readOnly = await request(app({ readOnly: true }))
+      .post('/api/settings/embedder/reembed')
+      .set(auth);
+    expect(readOnly.status).toBe(403);
+  });
+});
+
+describe('POST /api/settings/clear', () => {
+  it('clears the vectors and keeps the turns for the worker', async () => {
+    await rig.engine.ingestMany(turns('s1', 4));
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
+    const res = await request(app({}, worker)).post('/api/settings/clear').set(auth).send({ scope: 'embeddings' });
+    expect(res.status).toBe(200);
+    expect(clearReportSchema.parse(res.body)).toMatchObject({
+      vectors_removed: 4,
+      turns_removed: 0,
+      sessions_removed: 0,
+    });
+    expect((await rig.engine.stats()).turns).toBe(4);
+
+    worker.start();
+    await worker.drained();
+    await worker.stop();
+    expect(await rig.engine.stats()).toMatchObject({ turns: 4, embeddings: 4, embedding_backlog: 0 });
+  });
+
+  it('clears every turn and session and keeps the embedder', async () => {
+    await rig.engine.ingestMany([...turns('s1', 3), ...turns('s2', 2)]);
+    const res = await request(app()).post('/api/settings/clear').set(auth).send({ scope: 'memory' });
+    expect(res.status).toBe(200);
+    expect(clearReportSchema.parse(res.body)).toEqual({
+      turns_removed: 5,
+      sessions_removed: 2,
+      vectors_removed: 5,
+      turns_to_embed: 0,
+    });
+    expect(await rig.engine.stats()).toMatchObject({
+      turns: 0,
+      sessions: 0,
+      entities: 0,
+      embeddings: 0,
+      embedder: 'hash-384',
+    });
+    const sessions = await request(app()).get('/api/sessions').set(auth);
+    expect(sessions.body.sessions).toEqual([]);
+  });
+
+  it('rejects an unknown scope and refuses under read-only', async () => {
+    expect((await request(app()).post('/api/settings/clear').set(auth).send({ scope: 'everything' })).status).toBe(400);
+    expect((await request(app()).post('/api/settings/clear').set(auth).send({})).status).toBe(400);
+    const readOnly = await request(app({ readOnly: true }))
+      .post('/api/settings/clear')
+      .set(auth)
+      .send({ scope: 'memory' });
     expect(readOnly.status).toBe(403);
   });
 });

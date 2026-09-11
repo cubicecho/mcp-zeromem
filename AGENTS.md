@@ -92,7 +92,11 @@ from the Settings page (`PUT /api/settings/embedder`) or `zm embedder set` — i
 spec written, `embeddings` emptied, `generation` bumped; every other process notices on its next
 `refresh()` and rebuilds its embedder from the spec. Writers guard against staleness: a vector
 write re-reads `meta.embedder` inside its transaction and returns `Error::EmbedderChanged`
-instead of overwriting newer vectors. A process that cannot build the store's embedder runs with
+instead of overwriting newer vectors, and `Error::StoreChanged` when the `generation` moved since
+it read its backlog (after `clear_memory` turn ids are reused, so an old vector could land on a new
+turn). `reembed()` (Settings, `zm embedder reembed`) probes the stored embedder and then empties
+`embeddings` like a switch; `clear_embeddings()` and `clear_memory()` (Settings → Stored data,
+`POST /api/settings/clear`) keep `meta`. A process that cannot build the store's embedder runs with
 `embedder_active: false` and a warning, never a silent hash fallback; `auto` on a **fresh** store
 falls back to `hash-384` loudly (`embedder_is_fallback`, a banner in the UI). `--embedder none`
 (`followRemote: false` in the binding) means "this process has no dense view": host hooks and the

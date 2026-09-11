@@ -79,3 +79,13 @@ export const embedderChangeRequestSchema = z.object({
   keep_stored_key: z.boolean().default(false),
 });
 export type EmbedderChangeRequest = z.infer<typeof embedderChangeRequestSchema>;
+
+/**
+ * `POST /api/settings/clear`. `embeddings` drops every vector and leaves the
+ * turns for the worker to re-embed; `memory` forgets every turn and session.
+ * Both keep the embedder settings.
+ */
+export const clearScopeSchema = z.enum(['embeddings', 'memory']);
+export type ClearScope = z.infer<typeof clearScopeSchema>;
+export const clearRequestSchema = z.object({ scope: clearScopeSchema });
+export type ClearRequest = z.infer<typeof clearRequestSchema>;

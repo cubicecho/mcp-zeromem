@@ -129,6 +129,17 @@ pub struct SwitchReport {
     pub vectors_kept: bool,
 }
 
+/// What `clear_embeddings` or `clear_memory` removed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ClearReport {
+    pub turns_removed: u64,
+    pub sessions_removed: u64,
+    pub vectors_removed: u64,
+    /// Turns now waiting for a vector: every turn after clearing the
+    /// vectors, none after clearing the memory.
+    pub turns_to_embed: u64,
+}
+
 /// What a probe of an embedder found.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProbeReport {

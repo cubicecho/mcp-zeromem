@@ -395,6 +395,26 @@ impl Engine {
         with_engine(&self.inner, move |zm| zm.embed_backlog(limit).map(|n| n as i64)).await
     }
 
+    /// Drop every vector and re-make them with the store's embedder. It is
+    /// probed first and the vectors are kept when it fails; on success every
+    /// turn waits in the backlog.
+    #[napi(ts_return_type = "Promise<EmbedderSwitch>")]
+    pub async fn reembed(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.reembed().map(|r| serde_json::to_value(r).unwrap())).await
+    }
+
+    /// Drop every vector without probing the embedder; every turn joins the backlog.
+    #[napi(ts_return_type = "Promise<ClearReport>")]
+    pub async fn clear_embeddings(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.clear_embeddings().map(|r| serde_json::to_value(r).unwrap())).await
+    }
+
+    /// Delete every turn, session, derived index and vector; the embedder settings stay.
+    #[napi(ts_return_type = "Promise<ClearReport>")]
+    pub async fn clear_memory(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.clear_memory().map(|r| serde_json::to_value(r).unwrap())).await
+    }
+
     // --- reads for the visualisations ---------------------------------------
 
     /// The entity graph: top entities by mentions, or a neighbourhood around `focus`.

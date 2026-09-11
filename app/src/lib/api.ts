@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  ClearReport,
+  ClearScope,
   EmbedderChangeRequest,
   EmbedderProbe,
   EmbedderSettings,
@@ -195,4 +197,12 @@ export function testEmbedder(body: EmbedderChangeRequest): Promise<EmbedderProbe
 
 export function setEmbedder(body: EmbedderChangeRequest): Promise<EmbedderSwitch> {
   return request('/api/settings/embedder', { method: 'PUT', body });
+}
+
+export function reembed(): Promise<EmbedderSwitch> {
+  return request('/api/settings/embedder/reembed', { method: 'POST' });
+}
+
+export function clearStore(scope: ClearScope): Promise<ClearReport> {
+  return request('/api/settings/clear', { method: 'POST', body: { scope } });
 }

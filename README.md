@@ -185,8 +185,21 @@ Headless hosts do the same with the CLI:
 zm embedder show
 zm embedder test --kind openai --url http://npu-box:11434/v1 --model nomic-embed-text
 zm embedder set  --kind openai --url http://npu-box:11434/v1 --model nomic-embed-text --api-key-stdin < key.txt
+zm embedder reembed    # drop every vector and re-make them with the current embedder
 zm embedder drain      # re-embed the backlog now instead of waiting for the server
 ```
+
+When a switch stalled half way, or the model behind an endpoint was replaced
+under the same name, **Re-embed all turns** on the Settings page (or
+`zm embedder reembed`) starts over with the embedder the store already names.
+It is tested first, as a switch is, so an endpoint that still fails is
+reported and no vector is dropped. The **Stored data** card below it clears
+the store: **Clear vectors** drops every vector without testing anything
+(the worker re-embeds them), and **Clear all memory** forgets every turn,
+session, entity and summary, after you type `clear`. Both keep the embedder
+settings, bump the generation so every other process reloads, and are
+refused under `ZEROMEM_READ_ONLY` (`POST /api/settings/embedder/reembed`,
+`POST /api/settings/clear` with `{"scope": "embeddings" | "memory"}`).
 
 An API key entered on the Settings page is saved in the store's `meta` table
 **in plain text**, so the stdio process and a host `zm` can use the same
@@ -218,7 +231,7 @@ text.
 | Compare | The same query with two settings side by side (top-k, session filters); pin side A, change B, and read the diff of the evidence sets | `/api/recall` |
 | Eval | recall@k / MRR / nDCG per commit, one line per corpus × embedder | `/api/viz/eval` |
 | Health | Recall latency percentiles and throughput per minute for the last hour, cold-open time, errors, then the raw status payload | `/api/viz/health` |
-| Settings | The store's embedder: current name, kind and dimension, the re-embed progress, and a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint | `/api/settings/embedder` |
+| Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; and clearing the vectors or the whole memory | `/api/settings/embedder`, `/api/settings/clear` |
 
 Every snapshot endpoint is capped (`limit`) so a 50k-turn store never lands
 whole in a browser tab; the graph page says when it cut at the node cap. The

@@ -28,6 +28,11 @@ pub enum Error {
     /// the store's spec.
     #[error("the store's embedder changed while this process was embedding with `{0}`")]
     EmbedderChanged(String),
+    /// The store's generation moved (a delete, a clear, a switch) while this
+    /// process was embedding a batch. The vectors were dropped: after a
+    /// clear, the turn ids they were computed for can name other turns.
+    #[error("the store changed while this process was embedding a batch")]
+    StoreChanged,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

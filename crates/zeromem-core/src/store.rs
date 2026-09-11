@@ -282,13 +282,16 @@ impl Store {
         Ok(tx.query_row("SELECT value FROM meta WHERE key = 'embedder'", [], |r| r.get(0)).optional()?)
     }
 
-    fn bump_generation(tx: &Transaction<'_>) -> Result<i64> {
-        let next: i64 = tx
+    fn stored_generation(tx: &Transaction<'_>) -> Result<i64> {
+        Ok(tx
             .query_row("SELECT value FROM meta WHERE key = 'generation'", [], |r| r.get::<_, String>(0))
             .optional()?
             .and_then(|v| v.parse().ok())
-            .unwrap_or(0)
-            + 1;
+            .unwrap_or(0))
+    }
+
+    fn bump_generation(tx: &Transaction<'_>) -> Result<i64> {
+        let next = Self::stored_generation(tx)? + 1;
         tx.execute(
             "INSERT INTO meta (key, value) VALUES ('generation', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -385,13 +388,54 @@ impl Store {
         Ok(())
     }
 
+    /// Drop every vector and bump the generation, in one transaction. The
+    /// embedder is left as it is, so every turn joins its backlog. Returns
+    /// how many vectors went.
+    pub fn clear_embeddings(&mut self) -> Result<u64> {
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let removed = tx.execute("DELETE FROM embeddings", [])?;
+        Self::bump_generation(&tx)?;
+        tx.commit()?;
+        Ok(removed as u64)
+    }
+
+    /// Forget everything: every turn and every row derived from one, in one
+    /// transaction with a generation bump. `meta` stays (the embedder, its
+    /// key, the schema version), so the store takes new turns at once.
+    pub fn clear_memory(&mut self) -> Result<crate::types::ClearReport> {
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let sessions: i64 = tx.query_row("SELECT COUNT(DISTINCT session_id) FROM turns", [], |r| r.get(0))?;
+        let vectors = tx.execute("DELETE FROM embeddings", [])?;
+        tx.execute_batch(
+            "DELETE FROM turn_entities;
+             DELETE FROM segments;
+             DELETE FROM entity_stats;
+             DELETE FROM entity_edges;",
+        )?;
+        // The delete trigger keeps turns_fts in step, row by row.
+        let turns = tx.execute("DELETE FROM turns", [])?;
+        Self::bump_generation(&tx)?;
+        tx.commit()?;
+        Ok(crate::types::ClearReport {
+            turns_removed: turns as u64,
+            sessions_removed: sessions as u64,
+            vectors_removed: vectors as u64,
+            turns_to_embed: 0,
+        })
+    }
+
     /// Store vectors for turns that were ingested without one. Refused,
-    /// writing nothing, when `model` is no longer the store's embedder: a
-    /// writer holding a pre-switch backlog must not overwrite new vectors.
-    pub fn write_embeddings(&mut self, rows: &[(i64, Vec<f32>)], model: &str) -> Result<()> {
+    /// writing nothing, when `model` is no longer the store's embedder — a
+    /// writer holding a pre-switch backlog must not overwrite new vectors —
+    /// or when the generation moved since the caller read its backlog at
+    /// `generation`: after a clear, a turn id can name a different turn.
+    pub fn write_embeddings(&mut self, rows: &[(i64, Vec<f32>)], model: &str, generation: i64) -> Result<()> {
         let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if Self::stored_embedder_name(&tx)?.as_deref() != Some(model) {
             return Err(Error::EmbedderChanged(model.to_string()));
+        }
+        if Self::stored_generation(&tx)? != generation {
+            return Err(Error::StoreChanged);
         }
         for (id, vec) in rows {
             tx.execute(
@@ -1175,11 +1219,41 @@ mod tests {
         assert_eq!(store.embeddings_after(0, "hash-384", 384).unwrap(), vec![(1, 1, v)]);
         assert_eq!(store.turns_without_embedding("hash-384", 10).unwrap(), vec![(2, "world".into())]);
         assert_eq!(store.count_backlog("hash-384").unwrap(), 1);
-        store.write_embeddings(&[(2, dense::hash_embed("world"))], "hash-384").unwrap();
+        store.write_embeddings(&[(2, dense::hash_embed("world"))], "hash-384", store.generation().unwrap()).unwrap();
         assert!(store.turns_without_embedding("hash-384", 10).unwrap().is_empty());
         assert_eq!(store.embeddings_after(1, "hash-384", 384).unwrap().len(), 1);
         assert!(store.embeddings_after(0, "other", 384).unwrap().is_empty());
         assert!(store.embeddings_after(0, "hash-384", 8).unwrap().is_empty(), "the wrong length is skipped");
+    }
+
+    #[test]
+    fn clears_keep_meta_and_a_writer_from_before_a_clear_is_refused() {
+        let (_dir, mut store) = open();
+        store.seed_embedder(&EmbedderSpec::Hash).unwrap();
+        store
+            .insert_batch(
+                &[turn("a", "Maya Okafor in Lisbon", 1), turn("b", "Kenji in Osaka", 2)],
+                &[Some(dense::hash_embed("x")), None],
+                Some("hash-384"),
+            )
+            .unwrap();
+        let stale = store.generation().unwrap();
+        assert_eq!(store.clear_embeddings().unwrap(), 1);
+        assert_eq!(store.count_backlog("hash-384").unwrap(), 2);
+        assert!(matches!(
+            store.write_embeddings(&[(2, dense::hash_embed("Kenji in Osaka"))], "hash-384", stale),
+            Err(Error::StoreChanged)
+        ));
+        assert_eq!(store.count_backlog("hash-384").unwrap(), 2, "the refused write left nothing");
+
+        let report = store.clear_memory().unwrap();
+        assert_eq!((report.turns_removed, report.sessions_removed, report.vectors_removed), (2, 2, 0));
+        assert_eq!(store.generation().unwrap(), stale + 2);
+        assert_eq!(store.count_turns().unwrap(), 0);
+        assert!(store.entity_stat("maya okafor").unwrap().is_none());
+        assert!(store.lexical_search(&["lisbon".into()], 10).unwrap().is_empty());
+        assert_eq!(store.count_segments(Level::Window).unwrap(), 0);
+        assert_eq!(store.embedder_spec().unwrap(), Some(EmbedderSpec::Hash), "meta stays");
     }
 
     #[test]
@@ -1197,7 +1271,9 @@ mod tests {
         assert_eq!(store.generation().unwrap(), 1);
         assert_eq!(store.meta("embedder").unwrap().as_deref(), Some("openai:m@8"));
         assert_eq!(store.embedder_spec().unwrap(), Some(other.clone()));
-        let err = store.write_embeddings(&[(1, dense::hash_embed("hello"))], "hash-384").unwrap_err();
+        let err = store
+            .write_embeddings(&[(1, dense::hash_embed("hello"))], "hash-384", store.generation().unwrap())
+            .unwrap_err();
         assert!(matches!(err, Error::EmbedderChanged(_)), "{err}");
         assert_eq!(store.count_embeddings().unwrap(), 0);
         let inserted = store
@@ -1206,7 +1282,9 @@ mod tests {
         assert!(inserted.embedder_changed);
         assert_eq!(store.count_turns().unwrap(), 2);
         assert_eq!(store.count_embeddings().unwrap(), 0, "the turn landed without its stale vector");
-        store.write_embeddings(&[(1, vec![1.0; 8]), (2, vec![0.5; 8])], "openai:m@8").unwrap();
+        store
+            .write_embeddings(&[(1, vec![1.0; 8]), (2, vec![0.5; 8])], "openai:m@8", store.generation().unwrap())
+            .unwrap();
         assert_eq!(store.count_backlog("openai:m@8").unwrap(), 0);
         let err = store.update_embedder_spec(&EmbedderSpec::Hash).unwrap_err();
         assert!(matches!(err, Error::EmbedderChanged(_)));
@@ -1218,11 +1296,11 @@ mod tests {
         store.seed_embedder(&EmbedderSpec::Hash).unwrap();
         insert(&mut store, &turn("s", "one", 1));
         insert(&mut store, &turn("s", "two", 2));
-        store.write_embeddings(&[(2, dense::hash_embed("two"))], "hash-384").unwrap();
+        store.write_embeddings(&[(2, dense::hash_embed("two"))], "hash-384", store.generation().unwrap()).unwrap();
         let rows = store.embeddings_after(0, "hash-384", 384).unwrap();
         assert_eq!(rows.len(), 1);
         let seen = rows[0].0;
-        store.write_embeddings(&[(1, dense::hash_embed("one"))], "hash-384").unwrap();
+        store.write_embeddings(&[(1, dense::hash_embed("one"))], "hash-384", store.generation().unwrap()).unwrap();
         let later = store.embeddings_after(seen, "hash-384", 384).unwrap();
         assert_eq!(later.len(), 1);
         assert_eq!(later[0].1, 1, "the older turn's vector is visible past the cursor");

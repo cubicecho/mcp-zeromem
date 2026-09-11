@@ -367,6 +367,52 @@ impl ZeroMem {
         Ok(spec)
     }
 
+    /// Drop every vector and re-make them with the store's embedder: the way
+    /// out when a switch left the vectors half-made, or when the model behind
+    /// an endpoint changed without its name changing. The embedder is rebuilt
+    /// and probed first, so one that still fails is reported here and the
+    /// vectors are kept. On success they go in one transaction with a
+    /// generation bump, and the backlog re-embeds every turn.
+    pub fn reembed(&mut self) -> Result<SwitchReport> {
+        let spec = self
+            .store
+            .embedder_spec()?
+            .ok_or_else(|| Error::Embedder("this store has no embedder yet; choose one first".into()))?;
+        let (spec, embedder) = self.build_and_probe(spec)?;
+        self.store.clear_embeddings()?;
+        self.install(spec, Some(embedder), None);
+        self.dense_enabled = true;
+        self.refresh()?;
+        Ok(SwitchReport {
+            embedder: self.embedder_spec.as_ref().map(EmbedderSpec::name).unwrap_or_default(),
+            embedder_dim: self.index.dim() as u32,
+            turns_to_embed: self.embedding_backlog()?,
+            vectors_kept: false,
+        })
+    }
+
+    /// Drop every vector and leave the embedder as it is; every turn joins
+    /// the backlog. Nothing is probed, so this works while the embedder is
+    /// down, and recall runs on the other views until the vectors are back.
+    pub fn clear_embeddings(&mut self) -> Result<ClearReport> {
+        let vectors_removed = self.store.clear_embeddings()?;
+        self.refresh()?;
+        Ok(ClearReport {
+            turns_removed: 0,
+            sessions_removed: 0,
+            vectors_removed,
+            turns_to_embed: self.embedding_backlog()?,
+        })
+    }
+
+    /// Forget everything the store remembers: every turn and session, every
+    /// derived index and every vector. The embedder and its settings stay.
+    pub fn clear_memory(&mut self) -> Result<ClearReport> {
+        let report = self.store.clear_memory()?;
+        self.refresh()?;
+        Ok(report)
+    }
+
     /// Turns that have no vector from the store's embedder.
     pub fn embedding_backlog(&self) -> Result<u64> {
         match self.store.meta("embedder")? {
@@ -398,6 +444,9 @@ impl ZeroMem {
     fn embed_one_batch(&mut self, limit: usize) -> Result<usize> {
         let Some(embedder) = self.embedder.as_mut() else { return Ok(0) };
         let model = embedder.name().to_string();
+        // Read before the backlog, so a clear or delete during the model
+        // call is caught at the write.
+        let generation = self.store.generation()?;
         let backlog = self.store.turns_without_embedding(&model, limit)?;
         if backlog.is_empty() {
             return Ok(0);
@@ -405,12 +454,14 @@ impl ZeroMem {
         let texts: Vec<&str> = backlog.iter().map(|(_, t)| t.as_str()).collect();
         let vectors = embedder.embed_documents(&texts)?;
         let rows: Vec<(i64, Vec<f32>)> = backlog.iter().map(|(id, _)| *id).zip(vectors).collect();
-        match self.store.write_embeddings(&rows, &model) {
+        match self.store.write_embeddings(&rows, &model, generation) {
             Ok(()) => Ok(rows.len()),
             Err(Error::EmbedderChanged(_)) => {
                 self.follow_store_if_changed()?;
                 Ok(0)
             }
+            // The next refresh reloads the index; the batch is embedded again.
+            Err(Error::StoreChanged) => Ok(0),
             Err(e) => Err(e),
         }
     }

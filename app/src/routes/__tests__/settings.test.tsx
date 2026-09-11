@@ -1,5 +1,5 @@
 import type { EmbedderSettings } from '@mcp-zeromem/shared';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as api from '@/lib/api';
@@ -39,7 +39,8 @@ describe('SettingsPage', () => {
     renderPage(<SettingsPage />, '/settings');
     const user = userEvent.setup();
 
-    expect(await screen.findByText('hash-384')).toBeInTheDocument();
+    // The name shows in the current line and in the re-embed offer.
+    expect(await screen.findAllByText('hash-384')).toHaveLength(2);
     expect(screen.getByText('no model')).toBeInTheDocument();
 
     await user.click(screen.getByRole('combobox', { name: 'Kind' }));
@@ -114,7 +115,64 @@ describe('SettingsPage', () => {
     vi.spyOn(api, 'getStatus').mockResolvedValue({ ...status, readOnly: true });
     vi.spyOn(api, 'getEmbedderSettings').mockResolvedValue(hashSettings);
     renderPage(<SettingsPage />, '/settings');
-    expect(await screen.findByText(/read-only/)).toBeInTheDocument();
+    expect(await screen.findByText(/embedder cannot be changed from here/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+  });
+
+  it('re-embeds with the store embedder after confirming', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue(status);
+    vi.spyOn(api, 'getEmbedderSettings').mockResolvedValue(hashSettings);
+    const reembed = vi.spyOn(api, 'reembed').mockResolvedValue({
+      embedder: 'hash-384',
+      embedder_dim: 384,
+      turns_to_embed: 3,
+      vectors_kept: false,
+    });
+    renderPage(<SettingsPage />, '/settings');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Re-embed all turns' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Re-embed every turn with hash-384?')).toBeInTheDocument();
+    expect(within(dialog).getByText(/drops 3 vectors and re-embeds 3 turns/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Re-embed' }));
+    expect(reembed).toHaveBeenCalledOnce();
+  });
+
+  it('clears the vectors, and clears the memory only once the word is typed', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue(status);
+    vi.spyOn(api, 'getEmbedderSettings').mockResolvedValue(hashSettings);
+    const clear = vi
+      .spyOn(api, 'clearStore')
+      .mockResolvedValue({ turns_removed: 3, sessions_removed: 2, vectors_removed: 3, turns_to_embed: 0 });
+    renderPage(<SettingsPage />, '/settings');
+    const user = userEvent.setup();
+
+    expect(await screen.findByText(/3 turns in 2 sessions/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear vectors' }));
+    let dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear vectors' }));
+    expect(clear).toHaveBeenLastCalledWith('embeddings');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Clear all memory' }));
+    dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/deletes 3 turns from 2 sessions/)).toBeInTheDocument();
+    const confirm = within(dialog).getByRole('button', { name: 'Clear memory' });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/to confirm/), 'clear');
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    expect(clear).toHaveBeenLastCalledWith('memory');
+    expect(clear).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers no re-embed or clear under read-only', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue({ ...status, readOnly: true });
+    vi.spyOn(api, 'getEmbedderSettings').mockResolvedValue(hashSettings);
+    renderPage(<SettingsPage />, '/settings');
+    expect(await screen.findByText(/nothing can be cleared from here/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-embed all turns' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear all memory' })).not.toBeInTheDocument();
   });
 });
