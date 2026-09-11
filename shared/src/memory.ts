@@ -115,6 +115,16 @@ export const embedderSwitchSchema = z.object({
 });
 export type EmbedderSwitch = z.infer<typeof embedderSwitchSchema>;
 
+/** `POST /api/settings/clear` — what was removed, and what is left to re-embed. */
+export const clearReportSchema = z.object({
+  turns_removed: count,
+  sessions_removed: count,
+  vectors_removed: count,
+  /** Every turn after clearing the vectors; none after clearing the memory. */
+  turns_to_embed: count,
+});
+export type ClearReport = z.infer<typeof clearReportSchema>;
+
 export const sessionSummarySchema = z.object({
   session_id: z.string(),
   turns: z.number().int().nonnegative(),

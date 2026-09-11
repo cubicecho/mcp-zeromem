@@ -185,6 +185,9 @@ enum EmbedderCommand {
     Set(SpecArgs),
     /// Build an embedder and run one text through it; changes nothing.
     Test(SpecArgs),
+    /// Drop every vector and re-make them with the store's embedder, which
+    /// is probed first. Follow with `drain`, or let the server do it.
+    Reembed,
     /// Embed every turn that has no vector yet.
     Drain {
         /// Turns per round; a line of progress is printed per round.
@@ -353,6 +356,14 @@ fn run() -> Result<()> {
                         report.turns_to_embed
                     );
                 }
+                emit(&report)?;
+            }
+            EmbedderCommand::Reembed => {
+                let report = zm.reembed()?;
+                eprintln!(
+                    "zm: {} turns to re-embed; run `zm embedder drain` or let the server do it",
+                    report.turns_to_embed
+                );
                 emit(&report)?;
             }
             EmbedderCommand::Drain { batch } => {

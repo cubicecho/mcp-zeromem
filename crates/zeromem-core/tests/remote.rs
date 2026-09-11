@@ -328,3 +328,117 @@ fn a_dead_endpoint_does_not_block_ingest_or_recall() {
     let err = zm.embed_backlog(10).unwrap_err().to_string();
     assert!(err.contains("/v1/embeddings"), "{err}");
 }
+
+// --- re-embedding and clearing ----------------------------------------------
+
+#[test]
+fn reembed_remakes_every_vector_with_the_stored_embedder() {
+    let server = MockServer::start();
+    let dir = tempfile::tempdir().unwrap();
+    let mut zm = open_remote(&dir, &server);
+    let turns: Vec<TurnInput> = (0..100).map(|i| turn("s", &format!("turn {i} about topic {}", i % 5), i)).collect();
+    zm.ingest_many(&turns).unwrap();
+    assert_eq!(zm.stats().unwrap().embeddings, 100);
+    let generation = zm.stats().unwrap().generation;
+    let settings = zm.embedder_settings().unwrap().spec;
+
+    let report = zm.reembed().unwrap();
+    assert_eq!(report.embedder, "openai:mock-embed@8");
+    assert_eq!(report.embedder_dim, 8);
+    assert!(!report.vectors_kept);
+    assert_eq!(report.turns_to_embed, 100 - 64, "reembed's own refresh embeds one batch");
+    let stats = zm.stats().unwrap();
+    assert_eq!(stats.generation, generation + 1, "every reader reloads");
+    assert_eq!(zm.embedder_settings().unwrap().spec, settings, "the spec is unchanged");
+
+    assert_eq!(zm.embed_backlog(1000).unwrap(), 0);
+    assert_eq!(zm.stats().unwrap().embeddings, 100);
+    let r = zm.query("topic 3", &QueryOptions::default()).unwrap();
+    assert!(!r.evidence.is_empty());
+}
+
+#[test]
+fn a_failing_embedder_is_reported_by_reembed_and_the_vectors_stay() {
+    let server = MockServer::start();
+    let dir = tempfile::tempdir().unwrap();
+    let mut zm = open_remote(&dir, &server);
+    zm.ingest_many(&[turn("s", "one", 1), turn("s", "two", 2)]).unwrap();
+    let generation = zm.stats().unwrap().generation;
+    server.set(|s| s.fail_next = 10);
+    let err = zm.reembed().unwrap_err().to_string();
+    assert!(err.contains("/v1/embeddings"), "{err}");
+    let stats = zm.stats().unwrap();
+    assert_eq!((stats.embeddings, stats.generation), (2, generation), "nothing was dropped");
+
+    server.set(|s| s.fail_next = 0);
+    zm.reembed().unwrap();
+    assert_eq!(zm.embed_backlog(100).unwrap(), 0);
+    assert_eq!(zm.stats().unwrap().embeddings, 2);
+}
+
+#[test]
+fn reembed_needs_an_embedder() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut zm =
+        ZeroMem::open(dir.path(), OpenOptions { embedder: EmbedderChoice::None, ..OpenOptions::default() }).unwrap();
+    zm.ingest_turn(&turn("s", "one", 1)).unwrap();
+    assert!(matches!(zm.reembed(), Err(Error::Embedder(_))));
+}
+
+#[test]
+fn clearing_vectors_works_while_the_endpoint_is_down() {
+    let server = MockServer::start();
+    let dir = tempfile::tempdir().unwrap();
+    let mut zm = open_remote(&dir, &server);
+    zm.ingest_many(&[turn("s", "one", 1), turn("s", "two", 2), turn("t", "three", 3)]).unwrap();
+    server.set(|s| s.fail_next = 100);
+    let report = zm.clear_embeddings().unwrap();
+    assert_eq!(report.vectors_removed, 3);
+    assert_eq!((report.turns_removed, report.sessions_removed), (0, 0));
+    assert_eq!(report.turns_to_embed, 3);
+    let stats = zm.stats().unwrap();
+    assert_eq!((stats.turns, stats.embeddings), (3, 0));
+    assert_eq!(stats.embedder.as_deref(), Some("openai:mock-embed@8"), "the embedder stays");
+    let r = zm.query("three", &QueryOptions::default()).unwrap();
+    assert_eq!(r.evidence[0].turn.id, 3, "lexical recall still answers");
+
+    server.set(|s| s.fail_next = 0);
+    // Wait out the breaker the failed refresh may have tripped.
+    let mut left = u64::MAX;
+    for _ in 0..40 {
+        match zm.embed_backlog(100) {
+            Ok(n) => {
+                left = n;
+                break;
+            }
+            Err(_) => std::thread::sleep(Duration::from_secs(1)),
+        }
+    }
+    assert_eq!(left, 0);
+    assert_eq!(zm.stats().unwrap().embeddings, 3);
+}
+
+#[test]
+fn a_second_engine_follows_a_clear_and_embeds_the_turn_now_under_a_reused_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut a = open_hash(&dir);
+    let mut b =
+        ZeroMem::open(dir.path(), OpenOptions { embedder: EmbedderChoice::None, ..OpenOptions::default() }).unwrap();
+    a.ingest_turn(&turn("s", "old words", 1)).unwrap();
+    let generation = a.stats().unwrap().generation;
+    b.clear_memory().unwrap();
+    b.ingest_turn(&turn("s", "new words", 2)).unwrap();
+    assert_eq!(b.snapshot().unwrap().turns[0].id, 1, "row ids are reused after a clear");
+
+    a.refresh().unwrap();
+    let stats = a.stats().unwrap();
+    assert_eq!(stats.generation, generation + 1);
+    assert_eq!((stats.turns, stats.embeddings, stats.embedding_backlog), (1, 1, 0));
+    let r = a.query("old words", &QueryOptions::default()).unwrap();
+    assert!(r.evidence.iter().all(|e| e.turn.text == "new words"), "nothing of the old turn is left in a's index");
+
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let mut fresh = open_hash(&fresh_dir);
+    fresh.ingest_turn(&turn("s", "new words", 2)).unwrap();
+    assert_eq!(a.snapshot().unwrap().embeddings, fresh.snapshot().unwrap().embeddings);
+}

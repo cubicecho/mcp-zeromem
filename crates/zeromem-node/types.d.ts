@@ -66,6 +66,15 @@ export interface EmbedderSwitch {
   vectors_kept: boolean;
 }
 
+/** What clearing the vectors or the whole memory removed. */
+export interface ClearReport {
+  turns_removed: number;
+  sessions_removed: number;
+  vectors_removed: number;
+  /** Every turn after clearing the vectors; none after clearing the memory. */
+  turns_to_embed: number;
+}
+
 export interface EmbedderProbe {
   embedder: string;
   embedder_kind: EmbedderKind;

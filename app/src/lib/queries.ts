@@ -1,4 +1,5 @@
 import type {
+  ClearScope,
   EmbedderChangeRequest,
   GraphOptions,
   GrowthOptions,
@@ -171,6 +172,29 @@ export function useSetEmbedder() {
       client.invalidateQueries({ queryKey: ['recall'] });
       client.invalidateQueries({ queryKey: ['viz'] });
     },
+  });
+}
+
+/** Re-make every vector with the store's embedder; invalidates what a switch does. */
+export function useReembed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.reembed(),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: queryKeys.embedderSettings });
+      client.invalidateQueries({ queryKey: queryKeys.status });
+      client.invalidateQueries({ queryKey: ['recall'] });
+      client.invalidateQueries({ queryKey: ['viz'] });
+    },
+  });
+}
+
+/** Clear the vectors or the whole memory; every cached read is stale after either. */
+export function useClearStore() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (scope: ClearScope) => api.clearStore(scope),
+    onSuccess: () => client.invalidateQueries(),
   });
 }
 

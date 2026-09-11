@@ -200,3 +200,37 @@ fn small_corpus_golden_counts() {
     assert_eq!(corpus.queries.len(), 10);
     assert_eq!(SMALL.sessions, 5);
 }
+
+#[test]
+fn clear_memory_then_reingest_matches_a_fresh_store() {
+    let corpus = small();
+    let turns = inputs(&corpus);
+    let sessions = corpus.turns.iter().map(|t| t.session_id.as_str()).collect::<std::collections::BTreeSet<_>>().len();
+
+    let (dir_a, mut a) = open_temp();
+    let mut follower = reopen(&dir_a);
+    a.ingest_many(&turns).unwrap();
+    follower.refresh().unwrap();
+    let report = a.clear_memory().unwrap();
+    assert_eq!(report.turns_removed as usize, corpus.turns.len());
+    assert_eq!(report.sessions_removed as usize, sessions);
+    assert_eq!(report.vectors_removed as usize, corpus.turns.len());
+    assert_eq!(report.turns_to_embed, 0);
+
+    let stats = follower.stats().unwrap();
+    assert_eq!(
+        (stats.turns, stats.sessions, stats.entities, stats.edges, stats.windows, stats.episodes, stats.embeddings),
+        (0, 0, 0, 0, 0, 0, 0),
+        "a second engine follows the clear"
+    );
+    assert_eq!(stats.embedder.as_deref(), Some("hash-384"), "the embedder stays");
+    assert!(follower.query("anything", &Default::default()).unwrap().evidence.is_empty());
+
+    a.ingest_many(&turns).unwrap();
+    drop(a);
+    let after = reopen(&dir_a).snapshot().unwrap();
+    let (_dir_b, mut b) = open_temp();
+    b.ingest_many(&turns).unwrap();
+    assert_eq!(contents(&after), contents(&b.snapshot().unwrap()));
+    assert_eq!(after.generation, 1);
+}

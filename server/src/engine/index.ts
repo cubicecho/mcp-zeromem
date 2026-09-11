@@ -1,5 +1,7 @@
 import { Engine } from '@mcp-zeromem/native';
 import {
+  type ClearReport,
+  clearReportSchema,
   type EmbedderChoice,
   type EmbedderProbe,
   type EmbedderSettings,
@@ -205,6 +207,25 @@ export class ZeroMemEngine {
   /** Embed up to `limit` turns from the backlog; resolves to how many remain. Rejects when the embedder fails. */
   embedBacklog(limit = 256): Promise<number> {
     return this.native.embedBacklog(limit);
+  }
+
+  /**
+   * Drop every vector and re-make them with the store's embedder. Probed
+   * first, so an embedder that still fails leaves the vectors in place; on
+   * success every turn waits in the backlog.
+   */
+  reembed(): Promise<EmbedderSwitch> {
+    return check(embedderSwitchSchema, this.native.reembed());
+  }
+
+  /** Drop every vector without probing the embedder; every turn joins the backlog. */
+  clearEmbeddings(): Promise<ClearReport> {
+    return check(clearReportSchema, this.native.clearEmbeddings());
+  }
+
+  /** Forget every turn, session, derived index and vector; the embedder settings stay. */
+  clearMemory(): Promise<ClearReport> {
+    return check(clearReportSchema, this.native.clearMemory());
   }
 
   // --- reads for the visualisations; every one is capped on the Rust side ---

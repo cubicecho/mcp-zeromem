@@ -17,7 +17,7 @@
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu"
     ],
-    "dtsHeader": "/// <reference path=\"./types.d.ts\" />\nimport type { EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, IngestOutcome, IngestReport, QueryResult, QueryTrace, SessionSummary, Stats, StoredTurn } from './types';\nexport type { ApiKeySource, Dropped, EmbedderKind, EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, Evidence, Fused, IngestOutcome, IngestReport, Profile, QueryResult, QueryTrace, RemoteEmbedderSpec, Role, Route, SessionSummary, Stats, StoredTurn, ViewKind, ViewSummary, ViewTrace } from './types';\n"
+    "dtsHeader": "/// <reference path=\"./types.d.ts\" />\nimport type { ClearReport, EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, IngestOutcome, IngestReport, QueryResult, QueryTrace, SessionSummary, Stats, StoredTurn } from './types';\nexport type { ApiKeySource, ClearReport, Dropped, EmbedderKind, EmbedderProbe, EmbedderSettings, EmbedderSpec, EmbedderSwitch, Evidence, Fused, IngestOutcome, IngestReport, Profile, QueryResult, QueryTrace, RemoteEmbedderSpec, Role, Route, SessionSummary, Stats, StoredTurn, ViewKind, ViewSummary, ViewTrace } from './types';\n"
   },
   "scripts": {
     "build": "napi build --platform --release --manifest-path Cargo.toml",

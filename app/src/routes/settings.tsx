@@ -1,6 +1,6 @@
 import type { EmbedderKind, EmbedderProbe, EmbedderSettings, EmbedderSpec, ServerStatus } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import { CheckIcon, PlugZapIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react';
+import { CheckIcon, EraserIcon, PlugZapIcon, RefreshCwIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -22,7 +22,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiRequestError } from '@/lib/api';
 import { formatCount } from '@/lib/format';
-import { useEmbedderSettings, useServerStatus, useSetEmbedder, useTestEmbedder } from '@/lib/queries';
+import {
+  useClearStore,
+  useEmbedderSettings,
+  useReembed,
+  useServerStatus,
+  useSetEmbedder,
+  useTestEmbedder,
+} from '@/lib/queries';
 import { toastApiError } from '@/lib/toast';
 
 export const Route = createFileRoute('/settings')({
@@ -36,10 +43,11 @@ const KIND_LABELS: Record<EmbedderKind, string> = {
 };
 
 /**
- * The store's embedder, and the form that changes it. The choice is written
- * into the store, so the stdio server and the host's `zm` hooks follow it on
- * their next read; a switch drops every vector and the server's worker
- * re-embeds the corpus in the background, which the progress bar tracks.
+ * The store's embedder, the form that changes it, and the ways to start
+ * over: re-embed every turn with the current embedder, clear the vectors, or
+ * clear the whole memory. Every change is written into the store, so the
+ * stdio server and the host's `zm` hooks follow it on their next read; the
+ * server's worker re-embeds in the background, which the progress bar tracks.
  */
 export function SettingsPage() {
   const settings = useEmbedderSettings();
@@ -51,8 +59,8 @@ export function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-muted-foreground">
-          What the store is embedded with. A change here is recorded in the store itself, so every process that opens it
-          follows.
+          What the store is embedded with, and what it holds. A change here is recorded in the store itself, so every
+          process that opens it follows.
         </p>
       </div>
 
@@ -68,6 +76,9 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
             <CurrentEmbedder settings={settings.data} status={status.data} />
+            {!readOnly && settings.data.embedder !== null && (
+              <ReembedAction settings={settings.data} status={status.data} />
+            )}
             {readOnly ? (
               <p className="text-sm text-muted-foreground">
                 This server is read-only (ZEROMEM_READ_ONLY), so the embedder cannot be changed from here.
@@ -78,7 +89,207 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {status.data && <StoredData status={status.data} readOnly={readOnly} />}
     </div>
+  );
+}
+
+/**
+ * Re-embed with the embedder the store already names — the way out when a
+ * switch stalled half way, or the model behind an endpoint was replaced. The
+ * server probes the embedder first; if it still fails, nothing is dropped.
+ */
+function ReembedAction({ settings, status }: { settings: EmbedderSettings; status: ServerStatus | undefined }) {
+  const [confirming, setConfirming] = useState(false);
+  const reembed = useReembed();
+  const vectors = status?.engine.embeddings ?? 0;
+  const turns = status?.engine.turns ?? 0;
+  const name = settings.embedder ?? '';
+
+  const confirm = () => {
+    reembed.mutate(undefined, {
+      onSuccess: (report) => {
+        toast.success(`Re-embedding with ${report.embedder}; ${formatCount(report.turns_to_embed)} turns queued.`);
+      },
+      onError: toastApiError,
+      onSettled: () => setConfirming(false),
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">
+        Vectors missing or stale? Re-embed every turn with <span className="font-mono">{name}</span>. It is tested
+        first, so an embedder that still fails leaves the vectors alone.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        className="shrink-0"
+        disabled={reembed.isPending || turns === 0}
+        onClick={() => setConfirming(true)}
+      >
+        <RefreshCwIcon aria-hidden />
+        {reembed.isPending ? 'Re-embedding…' : 'Re-embed all turns'}
+      </Button>
+      <AlertDialog open={confirming} onOpenChange={(open) => !open && setConfirming(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-embed every turn with {name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This drops {formatCount(vectors)} vectors and re-embeds {formatCount(turns)} turns in the background.
+              Recall uses the lexical and entity views for turns not yet re-embedded.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reembed.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                confirm();
+              }}
+              disabled={reembed.isPending}
+            >
+              {reembed.isPending ? 'Re-embedding…' : 'Re-embed'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** The word typed to confirm clearing the whole memory. */
+const CLEAR_WORD = 'clear';
+
+/**
+ * What the store holds, and clearing it: the vectors alone (the worker
+ * re-embeds them, no probe needed), or every turn and session. The embedder
+ * settings survive both.
+ */
+function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: boolean }) {
+  const [confirming, setConfirming] = useState<'embeddings' | 'memory' | null>(null);
+  const [typed, setTyped] = useState('');
+  const clear = useClearStore();
+  const { turns, sessions, embeddings, entities } = status.engine;
+
+  const close = () => {
+    setConfirming(null);
+    setTyped('');
+  };
+  const confirm = () => {
+    if (!confirming) {
+      return;
+    }
+    clear.mutate(confirming, {
+      onSuccess: (report) => {
+        toast.success(
+          confirming === 'embeddings'
+            ? `Cleared ${formatCount(report.vectors_removed)} vectors; ${formatCount(report.turns_to_embed)} turns queued for re-embedding.`
+            : `Cleared ${formatCount(report.turns_removed)} turns from ${formatCount(report.sessions_removed)} sessions.`,
+        );
+      },
+      onError: toastApiError,
+      onSettled: close,
+    });
+  };
+  const memoryLocked = confirming === 'memory' && typed.trim().toLowerCase() !== CLEAR_WORD;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Stored data</CardTitle>
+        <CardDescription>
+          {formatCount(turns)} turns in {formatCount(sessions)} sessions, {formatCount(entities)} entities and{' '}
+          {formatCount(embeddings)} vectors.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {readOnly ? (
+          <p className="text-sm text-muted-foreground">
+            This server is read-only (ZEROMEM_READ_ONLY), so nothing can be cleared from here.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Drop every vector and keep the turns. The server re-embeds them in the background with the current
+                embedder, which is not tested first.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                disabled={clear.isPending || embeddings === 0}
+                onClick={() => setConfirming('embeddings')}
+              >
+                <EraserIcon aria-hidden />
+                Clear vectors
+              </Button>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Forget every turn and session, and everything derived from them. The embedder settings are kept. This
+                cannot be undone.
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                className="shrink-0"
+                disabled={clear.isPending || turns === 0}
+                onClick={() => setConfirming('memory')}
+              >
+                <Trash2Icon aria-hidden />
+                Clear all memory
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && close()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirming === 'memory' ? 'Clear all memory?' : `Clear ${formatCount(embeddings)} vectors?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirming === 'memory'
+                ? `This deletes ${formatCount(turns)} turns from ${formatCount(sessions)} sessions, with their entities, summaries and vectors, for every process using this store. It cannot be undone.`
+                : `The ${formatCount(turns)} turns stay and are re-embedded in the background. Recall uses the lexical and entity views until they are.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirming === 'memory' && (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="clear-confirm">
+                Type <span className="font-mono">{CLEAR_WORD}</span> to confirm
+              </Label>
+              <Input
+                id="clear-confirm"
+                autoComplete="off"
+                spellCheck={false}
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+              />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clear.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={confirming === 'memory' ? 'destructive' : 'default'}
+              onClick={(event) => {
+                event.preventDefault();
+                confirm();
+              }}
+              disabled={clear.isPending || memoryLocked}
+            >
+              {clear.isPending ? 'Clearing…' : confirming === 'memory' ? 'Clear memory' : 'Clear vectors'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
   );
 }
 
