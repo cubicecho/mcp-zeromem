@@ -1,5 +1,6 @@
 import { TableIcon, TrendingUpIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { StickyHeaderContentFooter } from '@/components/header-content-footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -66,33 +67,37 @@ export function ChartCard<Row>({
         ) : view === 'chart' ? (
           children
         ) : (
-          <div className="max-h-80 overflow-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columns.map((column) => (
-                    <TableHead key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
-                      {column.header}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={rowKey(row)}>
+          <StickyHeaderContentFooter
+            className="h-auto max-h-80"
+            contentClassName="overflow-x-auto rounded-md border"
+            content={
+              <Table sticky>
+                <TableHeader>
+                  <TableRow>
                     {columns.map((column) => (
-                      <TableCell
-                        key={column.key}
-                        className={column.align === 'right' ? 'text-right tabular-nums' : undefined}
-                      >
-                        {column.render(row)}
-                      </TableCell>
+                      <TableHead key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
+                        {column.header}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={rowKey(row)}>
+                      {columns.map((column) => (
+                        <TableCell
+                          key={column.key}
+                          className={column.align === 'right' ? 'text-right tabular-nums' : undefined}
+                        >
+                          {column.render(row)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
         )}
       </CardContent>
     </Card>

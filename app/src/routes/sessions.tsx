@@ -2,6 +2,7 @@ import type { SessionSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ScanSearchIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
+import { StickyHeaderContentFooter } from '@/components/header-content-footer';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,65 +66,71 @@ export function SessionsPage() {
 
       {sessions.data && sessions.data.sessions.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Session</TableHead>
-                  <TableHead className="text-right">Turns</TableHead>
-                  <TableHead>First</TableHead>
-                  <TableHead>Last</TableHead>
-                  <TableHead className="w-20" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.data.sessions.map((session) => (
-                  <TableRow
-                    key={session.session_id}
-                    data-state={selected === session.session_id ? 'selected' : undefined}
-                    className="cursor-pointer"
-                    onClick={() => setSelected(session.session_id)}
-                  >
-                    <TableCell className="font-mono text-xs">{session.session_id}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCount(session.turns)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatDateTime(session.first_ts)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground" title={formatDateTime(session.last_ts)}>
-                      {formatRelativeTime(session.last_ts)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        asChild
-                        aria-label={`Inspect session ${session.session_id}`}
-                      >
-                        <Link
-                          to="/sessions/$sessionId"
-                          params={{ sessionId: session.session_id }}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <ScanSearchIcon />
-                        </Link>
-                      </Button>
-                      {!readOnly && (
+          <StickyHeaderContentFooter
+            className="h-auto max-h-[70vh] self-start"
+            contentClassName="overflow-x-auto rounded-md border"
+            content={
+              <Table sticky>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Session</TableHead>
+                    <TableHead className="text-right">Turns</TableHead>
+                    <TableHead>First</TableHead>
+                    <TableHead>Last</TableHead>
+                    <TableHead className="w-20" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessions.data.sessions.map((session) => (
+                    <TableRow
+                      key={session.session_id}
+                      data-state={selected === session.session_id ? 'selected' : undefined}
+                      className="cursor-pointer"
+                      onClick={() => setSelected(session.session_id)}
+                    >
+                      <TableCell className="font-mono text-xs">{session.session_id}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatCount(session.turns)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDateTime(session.first_ts)}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground" title={formatDateTime(session.last_ts)}>
+                        {formatRelativeTime(session.last_ts)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Forget session ${session.session_id}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setToForget(session);
-                          }}
+                          asChild
+                          aria-label={`Inspect session ${session.session_id}`}
                         >
-                          <Trash2Icon />
+                          <Link
+                            to="/sessions/$sessionId"
+                            params={{ sessionId: session.session_id }}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <ScanSearchIcon />
+                          </Link>
                         </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Forget session ${session.session_id}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setToForget(session);
+                            }}
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
           <SessionInspector sessionId={selected} />
         </div>
       )}

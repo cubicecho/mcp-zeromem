@@ -2,6 +2,7 @@ import type { Evidence, QueryResult, RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { GitCompareIcon, PinIcon, PinOffIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
+import { StickyHeaderContentFooter } from '@/components/header-content-footer';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -174,67 +175,73 @@ export function ComparePage() {
 
       {resultA && resultB && !liveA.isFetching && !liveB.isFetching && (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge variant="secondary">{formatPercent(overlap)} overlap</Badge>
-            <span className="text-muted-foreground">
-              {formatCount(shared)} shared ({formatCount(moved)} moved) · {formatCount(onlyA)} only in A ·{' '}
-              {formatCount(onlyB)} only in B
-            </span>
-          </div>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Turn</TableHead>
-                  <TableHead className="text-right">
-                    <span className="inline-flex items-center gap-1">
-                      <span aria-hidden className="size-2 rounded-[2px]" style={{ background: seriesColor(1) }} /> A
-                      rank
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-right">A score</TableHead>
-                  <TableHead className="text-right">
-                    <span className="inline-flex items-center gap-1">
-                      <span aria-hidden className="size-2 rounded-[2px]" style={{ background: seriesColor(2) }} /> B
-                      rank
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-right">B score</TableHead>
-                  <TableHead>Change</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.uuid}>
-                    <TableCell>
-                      <p className="text-xs text-muted-foreground">
-                        <span className="font-mono">#{row.evidence.turn.id}</span> · {row.evidence.turn.session_id} ·{' '}
-                        {row.evidence.turn.speaker}
-                      </p>
-                      <p className="text-sm">{excerpt(row.evidence.turn.text, 120)}</p>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{row.rankA ?? '–'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.scoreA?.toFixed(3) ?? '–'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.rankB ?? '–'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.scoreB?.toFixed(3) ?? '–'}</TableCell>
-                    <TableCell>
-                      {row.rankA === null ? (
-                        <Badge variant="outline">only B</Badge>
-                      ) : row.rankB === null ? (
-                        <Badge variant="outline">only A</Badge>
-                      ) : row.rankA === row.rankB ? (
-                        <span className="text-xs text-muted-foreground">same</span>
-                      ) : (
-                        <Badge variant="secondary">
-                          {row.rankA > row.rankB ? `up ${row.rankA - row.rankB}` : `down ${row.rankB - row.rankA}`}
-                        </Badge>
-                      )}
-                    </TableCell>
+          <StickyHeaderContentFooter
+            className="h-auto max-h-[70vh] gap-4"
+            contentClassName="overflow-x-auto rounded-md border"
+            header={
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge variant="secondary">{formatPercent(overlap)} overlap</Badge>
+                <span className="text-muted-foreground">
+                  {formatCount(shared)} shared ({formatCount(moved)} moved) · {formatCount(onlyA)} only in A ·{' '}
+                  {formatCount(onlyB)} only in B
+                </span>
+              </div>
+            }
+            content={
+              <Table sticky>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Turn</TableHead>
+                    <TableHead className="text-right">
+                      <span className="inline-flex items-center gap-1">
+                        <span aria-hidden className="size-2 rounded-[2px]" style={{ background: seriesColor(1) }} /> A
+                        rank
+                      </span>
+                    </TableHead>
+                    <TableHead className="text-right">A score</TableHead>
+                    <TableHead className="text-right">
+                      <span className="inline-flex items-center gap-1">
+                        <span aria-hidden className="size-2 rounded-[2px]" style={{ background: seriesColor(2) }} /> B
+                        rank
+                      </span>
+                    </TableHead>
+                    <TableHead className="text-right">B score</TableHead>
+                    <TableHead>Change</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.uuid}>
+                      <TableCell>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-mono">#{row.evidence.turn.id}</span> · {row.evidence.turn.session_id} ·{' '}
+                          {row.evidence.turn.speaker}
+                        </p>
+                        <p className="text-sm">{excerpt(row.evidence.turn.text, 120)}</p>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{row.rankA ?? '–'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.scoreA?.toFixed(3) ?? '–'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.rankB ?? '–'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.scoreB?.toFixed(3) ?? '–'}</TableCell>
+                      <TableCell>
+                        {row.rankA === null ? (
+                          <Badge variant="outline">only B</Badge>
+                        ) : row.rankB === null ? (
+                          <Badge variant="outline">only A</Badge>
+                        ) : row.rankA === row.rankB ? (
+                          <span className="text-xs text-muted-foreground">same</span>
+                        ) : (
+                          <Badge variant="secondary">
+                            {row.rankA > row.rankB ? `up ${row.rankA - row.rankB}` : `down ${row.rankB - row.rankA}`}
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
           <details>
             <summary className="cursor-pointer text-sm text-muted-foreground">Full evidence, side by side</summary>
             <div className="mt-3 grid gap-4 md:grid-cols-2">

@@ -1,6 +1,7 @@
 import type { EvalHistory } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
+import { StickyHeaderContentFooter } from '@/components/header-content-footer';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -156,55 +157,65 @@ export function EvalDashboard() {
       </div>
 
       <section className="flex flex-col gap-2">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-lg font-medium">Latest recording</h2>
-          {latestAt && <span className="text-xs text-muted-foreground">{formatDateTime(Date.parse(latestAt))}</span>}
-          {latest[0]?.label && <Badge variant="outline">{latest[0].label}</Badge>}
-        </div>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Profile</TableHead>
-                <TableHead>Embedder</TableHead>
-                <TableHead>Commit</TableHead>
-                <TableHead className="text-right">Queries</TableHead>
-                <TableHead className="text-right">Recall@{k}</TableHead>
-                <TableHead className="text-right">MRR</TableHead>
-                <TableHead className="text-right">nDCG@{k}</TableHead>
-                <TableHead className="text-right">Missed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {latest.map((r) => (
-                <TableRow key={`${seriesKey(r)}|${pointKey(r)}`}>
-                  <TableCell>{r.profile}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="inline-block size-2.5 rounded-sm"
-                        style={{ backgroundColor: colors.color(seriesKey(r)) }}
-                        aria-hidden
-                      />
-                      {r.embedder}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{shortCommit(r.commit)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCount(r.queries)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPercent(r.recall_at_k)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPercent(r.mrr)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPercent(r.ndcg_at_k)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCount(r.missed)}</TableCell>
+        <StickyHeaderContentFooter
+          className="h-auto max-h-[70vh] gap-2"
+          contentClassName="overflow-x-auto rounded-md border"
+          header={
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-lg font-medium">Latest recording</h2>
+              {latestAt && (
+                <span className="text-xs text-muted-foreground">{formatDateTime(Date.parse(latestAt))}</span>
+              )}
+              {latest[0]?.label && <Badge variant="outline">{latest[0].label}</Badge>}
+            </div>
+          }
+          content={
+            <Table sticky>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Profile</TableHead>
+                  <TableHead>Embedder</TableHead>
+                  <TableHead>Commit</TableHead>
+                  <TableHead className="text-right">Queries</TableHead>
+                  <TableHead className="text-right">Recall@{k}</TableHead>
+                  <TableHead className="text-right">MRR</TableHead>
+                  <TableHead className="text-right">nDCG@{k}</TableHead>
+                  <TableHead className="text-right">Missed</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
-          <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends one
-          line per profile × embedder.
-        </p>
+              </TableHeader>
+              <TableBody>
+                {latest.map((r) => (
+                  <TableRow key={`${seriesKey(r)}|${pointKey(r)}`}>
+                    <TableCell>{r.profile}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="inline-block size-2.5 rounded-sm"
+                          style={{ backgroundColor: colors.color(seriesKey(r)) }}
+                          aria-hidden
+                        />
+                        {r.embedder}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{shortCommit(r.commit)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCount(r.queries)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatPercent(r.recall_at_k)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatPercent(r.mrr)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatPercent(r.ndcg_at_k)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCount(r.missed)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          }
+          footer={
+            <p className="text-xs text-muted-foreground">
+              Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
+              <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends
+              one line per profile × embedder.
+            </p>
+          }
+        />
       </section>
     </div>
   );
