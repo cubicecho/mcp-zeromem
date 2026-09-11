@@ -121,6 +121,33 @@ describe('gateway server', () => {
     expect(result.evidence.map((e) => e.turn.session_id)).toEqual(['earlier']);
   });
 
+  it('sends recall as plain text lines with `format: "text"`', async () => {
+    await rig.engine.ingestMany([
+      {
+        session_id: 'a',
+        speaker: 'user',
+        text: 'Maya Okafor owns the billing service on Heron.',
+        ts: Date.UTC(2026, 8, 10),
+      },
+    ]);
+    const client = await connectedClient();
+    const recalled = await client.callTool({
+      name: 'zeromem_recall',
+      arguments: { query: 'who owns the billing service on Heron?', format: 'text' },
+    });
+    expect(recalled.isError).toBeFalsy();
+    expect(textOf(recalled).split('\n')[0]).toBe(
+      '[primary] 2026-09-10 user (session a): Maya Okafor owns the billing service on Heron.',
+    );
+
+    const empty = await client.callTool({
+      name: 'zeromem_recall',
+      arguments: { query: 'who owns the billing service?', session: 'nobody', format: 'text' },
+    });
+    expect(empty.isError).toBeFalsy();
+    expect(textOf(empty)).toBe('');
+  });
+
   it('ingests JSONL, reporting the bad lines, and refuses a path outside the data dir', async () => {
     const client = await connectedClient();
     const jsonl = ['{"session_id":"j","speaker":"user","text":"line one"}', 'garbage'].join('\n');
