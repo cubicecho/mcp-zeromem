@@ -29,9 +29,13 @@ async function main(): Promise<void> {
     followRemote: false,
   });
 
-  const server = createGatewayServer({ engine, config });
+  // ZEROMEM_CURATOR=true, or "expose to every client" on the Settings page, adds the curator tools.
+  const curator = config.curator || (await engine.curatorConfig()).expose_to_all;
+  const server = createGatewayServer({ engine, config, curator });
   await server.connect(new StdioServerTransport());
-  console.error(`mcp-zeromem stdio ready (store: ${config.dataDir}${config.readOnly ? ', read-only' : ''})`);
+  console.error(
+    `mcp-zeromem stdio ready (store: ${config.dataDir}${config.readOnly ? ', read-only' : ''}${curator ? ', curator' : ''})`,
+  );
 
   const shutdown = () => process.exit(0);
   process.on('SIGTERM', shutdown);

@@ -11,6 +11,7 @@
 //! `turns` table, and the tests in `tests/oracle.rs` hold the engine to
 //! that.
 
+pub mod curation;
 pub mod dense;
 pub mod entities;
 pub mod error;
@@ -557,6 +558,9 @@ impl ZeroMem {
             embedder_warning: self.embedder_warning(),
             generation: self.store.generation()?,
             schema_version: self.store.meta_i64("schema_version")?,
+            curation_seq: self.store.curation_seq()?,
+            hidden: self.store.count_hidden()?,
+            notes: self.store.count_notes()?,
         })
     }
 
@@ -574,6 +578,10 @@ impl ZeroMem {
             edges: self.store.all_edges()?,
             segments: self.store.all_segments()?,
             embeddings: self.store.all_embeddings()?,
+            flags: self.store.all_flags()?,
+            aliases: self.store.all_aliases()?,
+            blocklist: self.store.all_blocklist()?,
+            note_sources: self.store.all_note_sources()?,
         })
     }
 
@@ -650,6 +658,77 @@ impl ZeroMem {
         self.store.rebuild(false)?;
         self.refresh()?;
         Ok(())
+    }
+
+    // --- curation ---------------------------------------------------------
+
+    /// The curator's limits, token and exposure, as stored.
+    pub fn curator_config(&self) -> Result<curation::CuratorConfig> {
+        self.store.curator_config()
+    }
+
+    pub fn set_curator_config(&mut self, config: &curation::CuratorConfig) -> Result<curation::CuratorConfig> {
+        self.store.set_curator_config(config)?;
+        self.store.curator_config()
+    }
+
+    /// Apply a batch of curation actions; see [`curation`].
+    pub fn curate_apply(
+        &mut self,
+        run_id: &str,
+        actor: &str,
+        actions: &[curation::CurationAction],
+        dry_run: bool,
+    ) -> Result<curation::ApplyReport> {
+        self.refresh()?;
+        let report = self.store.curate_apply(run_id, actor, actions, dry_run, store::now_ms())?;
+        self.refresh()?;
+        Ok(report)
+    }
+
+    pub fn curate_undo(&mut self, target: &curation::UndoTarget, actor: &str) -> Result<curation::UndoReport> {
+        self.refresh()?;
+        let report = self.store.curate_undo(target, actor, store::now_ms())?;
+        self.refresh()?;
+        Ok(report)
+    }
+
+    pub fn curate_candidates(
+        &mut self,
+        kind: curation::finders::CandidateKind,
+        opts: &curation::finders::FinderOptions,
+    ) -> Result<curation::finders::CandidatePage> {
+        self.refresh()?;
+        curation::finders::find(&self.store, &self.index, kind, opts, store::now_ms())
+    }
+
+    pub fn curation_turns(
+        &mut self,
+        selector: &curation::TurnSelector,
+        limit: u32,
+    ) -> Result<Vec<curation::CuratedTurn>> {
+        self.refresh()?;
+        self.store.curation_turns(selector, limit)
+    }
+
+    pub fn curation_runs(&mut self, limit: u32, offset: u32) -> Result<curation::CurationRuns> {
+        self.refresh()?;
+        self.store.curation_runs(limit, offset)
+    }
+
+    pub fn curation_actions(
+        &mut self,
+        run_id: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<curation::CurationActions> {
+        self.refresh()?;
+        self.store.curation_actions(run_id, limit, offset)
+    }
+
+    pub fn curation_aliases(&mut self) -> Result<curation::CurationAliases> {
+        self.refresh()?;
+        self.store.curation_aliases()
     }
 
     // --- reads for the visualisations -------------------------------------

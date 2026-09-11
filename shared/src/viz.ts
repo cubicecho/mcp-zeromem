@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { storedTurnSchema } from './memory.ts';
+import { storedTurnSchema, turnCurationSchema } from './memory.ts';
 
 /**
  * Shapes behind the visualisations: the entity graph, the temporal hierarchy,
@@ -113,7 +113,9 @@ export const mentionSchema = z.object({
 });
 export type Mention = z.infer<typeof mentionSchema>;
 
-export const turnWithEntitiesSchema = storedTurnSchema.extend({ entities: z.array(mentionSchema) });
+export const turnWithEntitiesSchema = storedTurnSchema
+  .merge(turnCurationSchema)
+  .extend({ entities: z.array(mentionSchema) });
 export type TurnWithEntities = z.infer<typeof turnWithEntitiesSchema>;
 
 // --- embedding projection ---------------------------------------------------

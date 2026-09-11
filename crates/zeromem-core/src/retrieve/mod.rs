@@ -9,16 +9,23 @@
 //! fused scores into a confidence and a role and drops what is not worth
 //! showing. The trace of every stage is kept, so `query_trace` is the same
 //! run with the intermediate state left in, not a second implementation.
+//!
+//! Curation shapes the run without changing any view: hidden turns are
+//! never nominated; outside a temporal question a superseded turn hands its
+//! fused score to the turn that replaced it, is halved itself, and drops out
+//! when its replacement is kept; and a turn drops out under a kept note that
+//! stands for it.
 
 pub mod calibrate;
 pub mod fuse;
 pub mod profile;
 pub mod route;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::curation::Flags;
 use crate::dense::{Embedder, VectorIndex};
 use crate::error::Result;
 use crate::store::Store;
@@ -53,12 +60,21 @@ pub struct QueryOptions {
     /// Only turns at or before this timestamp (ms).
     pub until: Option<i64>,
     pub detail: Option<Detail>,
+    /// Let hidden turns be recalled too, flagged; for the curator and the
+    /// admin UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_hidden: Option<bool>,
 }
 
 pub const DEFAULT_TOP_K: u32 = 5;
 pub const MAX_TOP_K: u32 = 50;
 /// How many candidates each view nominates.
 pub const VIEW_LIMIT: usize = 50;
+/// What a superseded turn's fused score is multiplied by.
+pub const SUPERSEDED_FACTOR: f64 = 0.5;
+/// Collapsing frees places that calibration refills; bounded so a chain
+/// of notes and supersessions cannot loop.
+const COLLAPSE_PASSES: usize = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Evidence {
@@ -74,6 +90,16 @@ pub struct Evidence {
     /// Entity keys the turn mentions. Empty under `Detail::Compact`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<String>,
+    /// A newer turn restates this one. Kept only when that turn is not in
+    /// the answer, or the question is about history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<i64>,
+    /// Hidden by curation; only with `include_hidden`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
+    /// For a note, the turns it stands for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub covers: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -144,11 +170,14 @@ struct Filter<'a> {
     session: Option<&'a str>,
     since: Option<i64>,
     until: Option<i64>,
+    /// Hidden turns to leave out; `None` with `include_hidden`.
+    hidden: Option<&'a BTreeSet<i64>>,
 }
 
 impl Filter<'_> {
     fn keeps(&self, t: &Turn) -> bool {
-        self.exclude_session.is_none_or(|s| t.session_id != s)
+        self.hidden.is_none_or(|h| !h.contains(&t.id))
+            && self.exclude_session.is_none_or(|s| t.session_id != s)
             && self.session.is_none_or(|s| t.session_id == s)
             && self.since.is_none_or(|s| t.ts >= s)
             && self.until.is_none_or(|u| t.ts <= u)
@@ -161,11 +190,13 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let detail = opts.detail.unwrap_or_default();
     let profile = profile::profile(query);
     let plan = route::plan(&profile, ctx);
+    let include_hidden = opts.include_hidden.unwrap_or(false);
+    let flags = ctx.store.curation_flags()?;
 
     // Nominate.
     let mut views: Vec<ViewTrace> = Vec::with_capacity(plan.len());
     for view in &plan {
-        let candidates = nominate(ctx, view, &profile)?;
+        let candidates = nominate(ctx, view, &profile, include_hidden, &flags)?;
         views.push(ViewTrace { view: view.kind, weight: view.weight, candidates });
     }
 
@@ -178,8 +209,9 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
         session: opts.session.as_deref(),
         since: opts.since,
         until: opts.until,
+        hidden: (!include_hidden).then_some(&flags.hidden),
     };
-    let turns: BTreeMap<i64, Turn> =
+    let mut turns: BTreeMap<i64, Turn> =
         ctx.store.turns_by_ids(&ids)?.into_iter().filter(|(_, t)| filter.keeps(t)).collect();
     for v in &mut views {
         v.candidates.retain(|c| turns.contains_key(&c.0));
@@ -188,8 +220,11 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
 
     // Fuse and calibrate.
     let recency_weight = route::recency_weight(&profile);
-    let fused = fuse::fuse(&views, &turns, recency_weight, ctx.latest_ts);
-    let Calibrated { kept, dropped } = calibrate::calibrate(&fused, top_k);
+    let mut fused = fuse::fuse(&views, &turns, recency_weight, ctx.latest_ts);
+    if !profile.temporal && fused.iter().any(|f| flags.superseded_by.contains_key(&f.id)) {
+        hand_over(ctx.store, &mut fused, &mut turns, &flags, &filter)?;
+    }
+    let Calibrated { kept, dropped } = collapse(&fused, top_k, &flags, profile.temporal);
 
     let mut evidence = Vec::with_capacity(kept.len());
     for item in kept {
@@ -203,7 +238,12 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
                 (item.sources.clone(), keys)
             }
         };
+        let kept_by = flags.superseded_by.get(&item.id).copied();
+        let covers = flags.sources.get(&item.id).cloned().unwrap_or_default();
         evidence.push(Evidence {
+            hidden: flags.hidden.contains(&item.id),
+            superseded_by: kept_by,
+            covers,
             turn,
             score: item.score,
             confidence: item.confidence,
@@ -225,6 +265,116 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     })
 }
 
+/// A superseded turn hands its score to the turn that replaced it: the
+/// views found the old statement, and the curator said the new one is what
+/// it now reads. The replacement scores at least as well as what it
+/// replaced, and is brought in when no view nominated it (a changed value
+/// often shares few words with the question); the old turn is halved, and
+/// `collapse` folds it away when both make the answer. Chains are followed
+/// to the latest turn; a replacement the filter refuses leaves the old turn
+/// only halved.
+fn hand_over(
+    store: &Store,
+    fused: &mut Vec<Fused>,
+    turns: &mut BTreeMap<i64, Turn>,
+    flags: &Flags,
+    filter: &Filter<'_>,
+) -> Result<()> {
+    let latest = |mut id: i64| {
+        for _ in 0..flags.superseded_by.len() {
+            match flags.superseded_by.get(&id) {
+                Some(next) if *next != id => id = *next,
+                _ => break,
+            }
+        }
+        id
+    };
+    let heirs: Vec<(usize, i64)> = fused
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| flags.superseded_by.contains_key(&f.id))
+        .map(|(i, f)| (i, latest(f.id)))
+        .filter(|(i, heir)| *heir != fused[*i].id)
+        .collect();
+    let missing: Vec<i64> = heirs.iter().map(|(_, h)| *h).filter(|h| !turns.contains_key(h)).collect();
+    if !missing.is_empty() {
+        for (id, turn) in store.turns_by_ids(&missing)? {
+            if filter.keeps(&turn) {
+                turns.insert(id, turn);
+            }
+        }
+    }
+    let mut inherited: BTreeMap<i64, Fused> = BTreeMap::new();
+    for (i, heir) in heirs {
+        let old = &fused[i];
+        let Some(turn) = turns.get(&heir) else { continue };
+        let entry = inherited.entry(heir).or_insert_with(|| Fused {
+            id: heir,
+            score: 0.0,
+            sources: Vec::new(),
+            ts: turn.ts,
+            uuid: turn.uuid.clone(),
+        });
+        if old.score > entry.score {
+            entry.score = old.score;
+            entry.sources = old.sources.clone();
+        }
+    }
+    for f in fused.iter_mut() {
+        if flags.superseded_by.contains_key(&f.id) {
+            f.score = fuse::round6(f.score * SUPERSEDED_FACTOR);
+        }
+        if let Some(heir) = inherited.remove(&f.id) {
+            if heir.score > f.score {
+                f.score = heir.score;
+            }
+        }
+    }
+    fused.extend(inherited.into_values());
+    fused.sort_by(fuse::order);
+    Ok(())
+}
+
+/// Calibrate, then fold superseded turns into the turn that supersedes
+/// them and sources into the note that stands for them, when both made the
+/// answer; recalibrate over what is left so the freed places refill.
+fn collapse(fused: &[Fused], top_k: usize, flags: &Flags, temporal: bool) -> Calibrated {
+    let mut calibrated = calibrate::calibrate(fused, top_k);
+    if flags.superseded_by.is_empty() && flags.covered_by.is_empty() {
+        return calibrated;
+    }
+    let mut pool: Vec<Fused> = fused.to_vec();
+    let mut collapsed: Vec<Dropped> = Vec::new();
+    for _ in 0..COLLAPSE_PASSES {
+        let kept: BTreeSet<i64> = calibrated.kept.iter().map(|k| k.id).collect();
+        let mut removed: BTreeSet<i64> = BTreeSet::new();
+        // Best first, so of two turns pointing at each other the better stays.
+        for k in &calibrated.kept {
+            let alive = |id: &i64| kept.contains(id) && !removed.contains(id);
+            let reason = match flags.superseded_by.get(&k.id) {
+                Some(by) if !temporal && alive(by) => Some(format!("superseded by {by}")),
+                _ => flags
+                    .covered_by
+                    .get(&k.id)
+                    .and_then(|notes| notes.iter().find(|n| alive(n)))
+                    .map(|n| format!("covered by note {n}")),
+            };
+            if let Some(reason) = reason {
+                removed.insert(k.id);
+                collapsed.push(Dropped { id: k.id, score: k.score, reason });
+            }
+        }
+        if removed.is_empty() {
+            break;
+        }
+        pool.retain(|f| !removed.contains(&f.id));
+        calibrated = calibrate::calibrate(&pool, top_k);
+    }
+    collapsed.append(&mut calibrated.dropped);
+    calibrated.dropped = collapsed;
+    calibrated
+}
+
 /// Shrink a trace to what `query` returns.
 pub fn to_result(trace: QueryTrace, detail: Detail) -> QueryResult {
     let considered = trace.fused.len();
@@ -242,17 +392,26 @@ pub fn to_result(trace: QueryTrace, detail: Detail) -> QueryResult {
     QueryResult { query: trace.query, route, evidence: trace.evidence, considered, took_ms: trace.took_ms }
 }
 
-fn nominate(ctx: &mut Context<'_>, view: &ViewPlan, profile: &Profile) -> Result<Vec<(i64, f64)>> {
+fn nominate(
+    ctx: &mut Context<'_>,
+    view: &ViewPlan,
+    profile: &Profile,
+    include_hidden: bool,
+    flags: &Flags,
+) -> Result<Vec<(i64, f64)>> {
     Ok(match view.kind {
-        ViewKind::Lexical => ctx.store.lexical_search(&profile.tokens, VIEW_LIMIT)?,
-        ViewKind::Entity => entity_view(ctx.store, &profile.entities)?,
+        ViewKind::Lexical => ctx.store.lexical_search(&profile.tokens, VIEW_LIMIT, include_hidden)?,
+        ViewKind::Entity => entity_view(ctx.store, &profile.entities, include_hidden)?,
         ViewKind::Dense => match ctx.embedder.as_deref_mut() {
             // A failing embedder (a remote box that is down) empties this
             // view; the others still answer.
             Some(embedder) if !ctx.index.is_empty() => match embedder.embed_query(&profile.text) {
-                Ok(q) => {
-                    ctx.index.search(&q, VIEW_LIMIT, |_| true).into_iter().map(|(id, s)| (id, f64::from(s))).collect()
-                }
+                Ok(q) => ctx
+                    .index
+                    .search(&q, VIEW_LIMIT, |id| include_hidden || !flags.hidden.contains(&id))
+                    .into_iter()
+                    .map(|(id, s)| (id, f64::from(s)))
+                    .collect(),
                 Err(e) => {
                     log::warn!("dense view skipped: {e}");
                     Vec::new()
@@ -260,7 +419,9 @@ fn nominate(ctx: &mut Context<'_>, view: &ViewPlan, profile: &Profile) -> Result
             },
             _ => Vec::new(),
         },
-        ViewKind::Recent => ctx.store.recent_turn_ids(VIEW_LIMIT)?.into_iter().map(|id| (id, 1.0)).collect(),
+        ViewKind::Recent => {
+            ctx.store.recent_turn_ids(VIEW_LIMIT, include_hidden)?.into_iter().map(|id| (id, 1.0)).collect()
+        }
     })
 }
 
@@ -268,11 +429,11 @@ fn nominate(ctx: &mut Context<'_>, view: &ViewPlan, profile: &Profile) -> Result
 /// turns mentioning an entity that often co-occurs with one of them score
 /// a fraction, so a question about a person also reaches the project they
 /// are always mentioned with.
-fn entity_view(store: &Store, keys: &[String]) -> Result<Vec<(i64, f64)>> {
+fn entity_view(store: &Store, keys: &[String], include_hidden: bool) -> Result<Vec<(i64, f64)>> {
     const NEIGHBOURS: usize = 5;
     const NEIGHBOUR_WEIGHT: f64 = 0.3;
     let mut scores: BTreeMap<i64, f64> = BTreeMap::new();
-    for (id, n) in store.turns_mentioning(keys, VIEW_LIMIT * 2)? {
+    for (id, n) in store.turns_mentioning(keys, VIEW_LIMIT * 2, include_hidden)? {
         scores.insert(id, f64::from(n));
     }
     let mut neighbours: Vec<String> = Vec::new();
@@ -283,7 +444,7 @@ fn entity_view(store: &Store, keys: &[String]) -> Result<Vec<(i64, f64)>> {
             }
         }
     }
-    for (id, n) in store.turns_mentioning(&neighbours, VIEW_LIMIT * 2)? {
+    for (id, n) in store.turns_mentioning(&neighbours, VIEW_LIMIT * 2, include_hidden)? {
         *scores.entry(id).or_insert(0.0) += NEIGHBOUR_WEIGHT * f64::from(n);
     }
     let mut ranked: Vec<(i64, f64)> = scores.into_iter().collect();

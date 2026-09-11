@@ -3,8 +3,10 @@ import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TurnList } from '@/components/viz/turn-list';
+import { Switch } from '@/components/ui/switch';
+import { isCurated, TurnList } from '@/components/viz/turn-list';
 import { formatCount, formatDateTime } from '@/lib/format';
 import { useSessionTurnsWithEntities } from '@/lib/queries';
 import { entityKindColor } from '@/lib/viz';
@@ -26,6 +28,12 @@ function SessionInspectorPage() {
 export function SessionInspector({ sessionId }: { sessionId: string }) {
   const turns = useSessionTurnsWithEntities(sessionId);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [showCurated, setShowCurated] = useState(true);
+  const curated = useMemo(() => (turns.data?.turns ?? []).filter(isCurated).length, [turns.data]);
+  const shown = useMemo(
+    () => (showCurated ? (turns.data?.turns ?? []) : (turns.data?.turns ?? []).filter((turn) => !isCurated(turn))),
+    [turns.data, showCurated],
+  );
 
   const entities = useMemo(() => {
     const counts = new Map<string, { key: string; kind: 'name' | 'date' | 'quantity'; mentions: number }>();
@@ -65,9 +73,17 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
 
       {turns.data && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
-          <div className="rounded-md border p-4">
+          <div className="flex flex-col gap-3 rounded-md border p-4">
+            {curated > 0 && (
+              <div className="flex items-center gap-2">
+                <Switch id="show-curated" size="sm" checked={showCurated} onCheckedChange={setShowCurated} />
+                <Label htmlFor="show-curated" className="text-xs font-normal text-muted-foreground">
+                  Show {formatCount(curated)} curated turns (hidden, superseded or in a note)
+                </Label>
+              </div>
+            )}
             <TurnList
-              turns={turns.data.turns}
+              turns={shown}
               highlight={highlight ?? undefined}
               onEntityClick={(key) => setHighlight(key === highlight ? null : key)}
             />

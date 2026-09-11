@@ -11,6 +11,7 @@ import {
   MoonIcon,
   SearchIcon,
   SettingsIcon,
+  SparklesIcon,
   SunIcon,
   WavesIcon,
   WaypointsIcon,
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { to: '/embeddings', label: 'Embeddings', icon: ChartScatterIcon },
   { to: '/compare', label: 'Compare', icon: GitCompareIcon },
   { to: '/eval', label: 'Eval', icon: ClipboardCheckIcon },
+  { to: '/curation', label: 'Curation', icon: SparklesIcon },
   { to: '/health', label: 'Health', icon: ActivityIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ] as const;

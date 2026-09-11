@@ -1,5 +1,7 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Router } from 'express';
+import type { Scope } from '../auth.ts';
+import type { CuratorSettingsStore } from '../curator.ts';
 import { errorMessage } from '../errors.ts';
 import { createGatewayServer, type GatewayDeps } from './server.ts';
 
@@ -13,11 +15,18 @@ import { createGatewayServer, type GatewayDeps } from './server.ts';
  * and send a DELETE to end a session, and a POST-only mount answers those with
  * a 404 that looks like a broken server.
  */
-export function createMcpRouter(deps: GatewayDeps): Router {
+export interface McpRouterDeps extends Omit<GatewayDeps, 'curator'> {
+  curatorSettings: CuratorSettingsStore;
+}
+
+/** The curator tools are served to the curator scope, or to every caller when the settings say so. */
+export function createMcpRouter(deps: McpRouterDeps): Router {
   const router = Router();
 
   router.all('/', async (req, res) => {
-    const server = createGatewayServer(deps);
+    const scope = (res.locals.scope as Scope | undefined) ?? 'default';
+    const curator = scope === 'curator' || (await deps.curatorSettings.config()).expose_to_all;
+    const server = createGatewayServer({ engine: deps.engine, config: deps.config, curator });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

@@ -1,7 +1,23 @@
 import { Engine } from '@mcp-zeromem/native';
 import {
+  type ApplyReport,
+  applyReportSchema,
+  type CandidateKind,
+  type CandidatePage,
   type ClearReport,
+  type CuratedTurn,
+  type CurationAction,
+  type CurationActions,
+  type CurationAliases,
+  type CurationRuns,
+  type CuratorConfig,
+  candidatePageSchema,
   clearReportSchema,
+  curatedTurnSchema,
+  curationActionsSchema,
+  curationAliasesSchema,
+  curationRunsSchema,
+  curatorConfigSchema,
   type EmbedderChoice,
   type EmbedderProbe,
   type EmbedderSettings,
@@ -40,6 +56,8 @@ import {
   type TurnInput,
   type TurnWithEntities,
   turnWithEntitiesSchema,
+  type UndoReport,
+  undoReportSchema,
 } from '@mcp-zeromem/shared';
 import type { ZodType, ZodTypeDef } from 'zod';
 import { Metrics } from '../metrics.ts';
@@ -226,6 +244,63 @@ export class ZeroMemEngine {
   /** Forget every turn, session, derived index and vector; the embedder settings stay. */
   clearMemory(): Promise<ClearReport> {
     return check(clearReportSchema, this.native.clearMemory());
+  }
+
+  // --- curation ---------------------------------------------------------------
+
+  /** The curator settings as stored, token included; never send this to a client. */
+  curatorConfig(): Promise<CuratorConfig> {
+    return check(curatorConfigSchema, this.native.curatorConfig());
+  }
+
+  /** Validate and store the curator settings; resolves to what was stored. */
+  setCuratorConfig(config: CuratorConfig): Promise<CuratorConfig> {
+    return check(curatorConfigSchema, this.native.setCuratorConfig({ ...config, token: config.token ?? undefined }));
+  }
+
+  /**
+   * Apply reversible curation actions in one transaction. Each is checked on
+   * its own; a rejected one is reported and does not stop the rest. The
+   * store's limits (per call, per run, minimum age) are enforced here.
+   */
+  curateApply(runId: string, actor: string, actions: CurationAction[], dryRun = false): Promise<ApplyReport> {
+    return check(applyReportSchema, this.native.curateApply(runId, actor, actions, dryRun));
+  }
+
+  /** Undo one action or every live action of a run. */
+  curateUndo(target: { action_id?: number; run_id?: string }, actor: string): Promise<UndoReport> {
+    return check(undoReportSchema, this.native.curateUndo(target, actor));
+  }
+
+  /** One page of candidates for the curator to judge. */
+  curateCandidates(
+    kind: CandidateKind,
+    options: { since_turn_id?: number; limit?: number; offset?: number } = {},
+  ): Promise<CandidatePage> {
+    return check(candidatePageSchema, this.native.curateCandidates(kind, options));
+  }
+
+  /** Turns by id, session or entity, with their spans and curation flags. */
+  curationTurns(
+    selector: { turn_ids?: number[]; session_id?: string; entity?: string },
+    limit?: number,
+  ): Promise<CuratedTurn[]> {
+    return check(curatedTurnSchema.array(), this.native.curationTurns(selector, limit));
+  }
+
+  /** Curation runs, newest first, with the cursor the next run starts from. */
+  curationRuns(page?: { limit?: number; offset?: number }): Promise<CurationRuns> {
+    return check(curationRunsSchema, this.native.curationRuns(page));
+  }
+
+  /** The action log, newest first; one run's when `runId` is given. */
+  curationActions(runId?: string, page?: { limit?: number; offset?: number }): Promise<CurationActions> {
+    return check(curationActionsSchema, this.native.curationActions(runId, page));
+  }
+
+  /** Live entity aliases and the blocklist. */
+  curationAliases(): Promise<CurationAliases> {
+    return check(curationAliasesSchema, this.native.curationAliases());
   }
 
   // --- reads for the visualisations; every one is capped on the Rust side ---

@@ -28,7 +28,7 @@ describe('ZeroMemEngine', () => {
       embedder: 'hash-384',
       embedder_is_fallback: true,
       generation: 0,
-      schema_version: 3,
+      schema_version: 4,
     });
   });
 

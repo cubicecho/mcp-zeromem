@@ -247,6 +247,9 @@ pub struct TurnWithEntities {
     #[serde(flatten)]
     pub turn: Turn,
     pub entities: Vec<Mention>,
+    /// Hidden, superseded, covered by a note; empty for most turns.
+    #[serde(flatten)]
+    pub curation: crate::curation::TurnCuration,
 }
 
 pub fn session_turns_with_entities(
@@ -258,7 +261,8 @@ pub fn session_turns_with_entities(
     let mut out = Vec::new();
     for turn in store.session_turns(session_id, limit, offset)? {
         let entities = store.mentions(turn.id)?;
-        out.push(TurnWithEntities { turn, entities });
+        let curation = store.turn_curation(turn.id)?;
+        out.push(TurnWithEntities { turn, entities, curation });
     }
     Ok(out)
 }

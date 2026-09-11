@@ -8,7 +8,8 @@ pub mod mock_embeddings;
 use tempfile::TempDir;
 use zeromem_core::dense::EmbedderChoice;
 use zeromem_core::{
-    EdgeRow, EmbeddingRow, EntityStat, MentionRow, OpenOptions, SegmentRow, Snapshot, Turn, TurnInput, ZeroMem,
+    AliasRow, EdgeRow, EmbeddingRow, EntityStat, FlagRow, MentionRow, NoteSourceRow, OpenOptions, SegmentRow, Snapshot,
+    Turn, TurnInput, TurnKind, ZeroMem,
 };
 use zeromem_harness::corpus::{self, Corpus, Profile};
 
@@ -63,6 +64,7 @@ pub struct Content {
     pub speaker: String,
     pub text: String,
     pub ts: i64,
+    pub kind: TurnKind,
 }
 
 impl From<&Turn> for Content {
@@ -73,6 +75,7 @@ impl From<&Turn> for Content {
             speaker: t.speaker.clone(),
             text: t.text.clone(),
             ts: t.ts,
+            kind: t.kind,
         }
     }
 }
@@ -89,6 +92,10 @@ pub struct Derived {
     pub edges: Vec<EdgeRow>,
     pub segments: Vec<SegmentRow>,
     pub embeddings: Vec<EmbeddingRow>,
+    pub flags: Vec<FlagRow>,
+    pub aliases: Vec<AliasRow>,
+    pub blocklist: Vec<String>,
+    pub note_sources: Vec<NoteSourceRow>,
 }
 
 pub fn contents(snapshot: &Snapshot) -> Derived {
@@ -100,5 +107,9 @@ pub fn contents(snapshot: &Snapshot) -> Derived {
         edges: snapshot.edges.clone(),
         segments: snapshot.segments.clone(),
         embeddings: snapshot.embeddings.clone(),
+        flags: snapshot.flags.clone(),
+        aliases: snapshot.aliases.clone(),
+        blocklist: snapshot.blocklist.clone(),
+        note_sources: snapshot.note_sources.clone(),
     }
 }

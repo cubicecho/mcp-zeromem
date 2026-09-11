@@ -1,5 +1,6 @@
 import type {
   ClearScope,
+  CuratorSettingsUpdate,
   EmbedderChangeRequest,
   GraphOptions,
   GrowthOptions,
@@ -7,6 +8,7 @@ import type {
   PageQuery,
   ProjectionOptions,
   RecallRequest,
+  UndoRequest,
 } from '@mcp-zeromem/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
@@ -25,6 +27,10 @@ export const queryKeys = {
   health: ['viz', 'health'] as const,
   evalHistory: ['viz', 'eval'] as const,
   embedderSettings: ['settings', 'embedder'] as const,
+  curatorSettings: ['settings', 'curator'] as const,
+  curationRuns: (page: PageQuery = {}) => ['curation', 'runs', page] as const,
+  curationActions: (runId: string) => ['curation', 'actions', runId] as const,
+  curationAliases: ['curation', 'aliases'] as const,
 };
 
 // --- queries ---
@@ -153,6 +159,33 @@ export function useEmbedderSettings() {
   });
 }
 
+export function useCuratorSettings() {
+  return useQuery({ queryKey: queryKeys.curatorSettings, queryFn: api.getCuratorSettings });
+}
+
+// --- curation ---
+
+/** The curator runs on someone else's schedule, so the log is polled like the status. */
+export function useCurationRuns(page: PageQuery = {}) {
+  return useQuery({
+    queryKey: queryKeys.curationRuns(page),
+    queryFn: () => api.getCurationRuns(page),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useCurationActions(runId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.curationActions(runId ?? ''),
+    queryFn: () => api.getCurationActions({ run_id: runId ?? undefined, limit: 500 }),
+    enabled: runId !== null,
+  });
+}
+
+export function useCurationAliases() {
+  return useQuery({ queryKey: queryKeys.curationAliases, queryFn: api.getCurationAliases });
+}
+
 // --- mutations ---
 
 /** Try a candidate embedder without changing anything; the result is the spec's name, dimension and latency. */
@@ -221,5 +254,36 @@ export function useIngest() {
       client.invalidateQueries({ queryKey: ['recall'] });
       client.invalidateQueries({ queryKey: ['viz'] });
     },
+  });
+}
+
+/** Undo one action or a whole run; recall, the session views and the entity views all change with it. */
+export function useUndoCuration() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UndoRequest) => api.undoCuration(body),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['curation'] });
+      client.invalidateQueries({ queryKey: queryKeys.curatorSettings });
+      client.invalidateQueries({ queryKey: queryKeys.status });
+      client.invalidateQueries({ queryKey: ['recall'] });
+      client.invalidateQueries({ queryKey: ['viz'] });
+    },
+  });
+}
+
+export function useUpdateCuratorSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CuratorSettingsUpdate) => api.updateCuratorSettings(body),
+    onSuccess: (settings) => client.setQueryData(queryKeys.curatorSettings, settings),
+  });
+}
+
+export function useGenerateCuratorToken() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.generateCuratorToken(),
+    onSuccess: (response) => client.setQueryData(queryKeys.curatorSettings, response.settings),
   });
 }

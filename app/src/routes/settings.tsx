@@ -1,6 +1,23 @@
-import type { EmbedderKind, EmbedderProbe, EmbedderSettings, EmbedderSpec, ServerStatus } from '@mcp-zeromem/shared';
+import {
+  CURATOR_LIMITS,
+  type CuratorSettings,
+  type EmbedderKind,
+  type EmbedderProbe,
+  type EmbedderSettings,
+  type EmbedderSpec,
+  type ServerStatus,
+} from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import { CheckIcon, EraserIcon, PlugZapIcon, RefreshCwIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  CopyIcon,
+  EraserIcon,
+  KeyRoundIcon,
+  PlugZapIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -20,15 +37,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { ApiRequestError } from '@/lib/api';
-import { formatCount } from '@/lib/format';
+import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import {
   useClearStore,
+  useCuratorSettings,
   useEmbedderSettings,
+  useGenerateCuratorToken,
   useReembed,
   useServerStatus,
   useSetEmbedder,
   useTestEmbedder,
+  useUpdateCuratorSettings,
 } from '@/lib/queries';
 import { toastApiError } from '@/lib/toast';
 
@@ -89,6 +110,8 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Curator readOnly={readOnly} />
 
       {status.data && <StoredData status={status.data} readOnly={readOnly} />}
     </div>
@@ -606,4 +629,296 @@ function sameEmbedder(a: EmbedderSpec, b: EmbedderSpec): boolean {
     return true;
   }
   return a.url.replace(/\/+$/, '') === b.url.replace(/\/+$/, '') && a.model === b.model;
+}
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * The curator: an outside agent that tidies the memory over /mcp. Its token
+ * opens the curator tools and the `zeromem_curate` prompt; the limits bound
+ * what one run can do; "every client" serves the curator tools to anyone who
+ * can reach /mcp, for a setup with a single trusted agent.
+ */
+function Curator({ readOnly }: { readOnly: boolean }) {
+  const settings = useCuratorSettings();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Curator</CardTitle>
+        <CardDescription>
+          An agent that hides duplicates and noise, marks superseded facts, merges entity names and writes notes, on a
+          schedule. It reaches the store over /mcp with the curator token and the{' '}
+          <span className="font-mono">zeromem_curate</span> prompt; every action it takes can be undone on the Curation
+          page.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        {settings.isPending && <Skeleton className="h-40 w-full" />}
+        {settings.error && (
+          <p className="text-sm text-destructive">Failed to load the curator settings: {settings.error.message}</p>
+        )}
+        {settings.data && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {settings.data.last_run_at === null ? (
+                'No run yet.'
+              ) : (
+                <>
+                  Last run ended{' '}
+                  <span title={formatDateTime(settings.data.last_run_at)}>
+                    {formatRelativeTime(settings.data.last_run_at)}
+                  </span>
+                  ; the next one starts after turn <span className="font-mono">#{settings.data.cursor}</span>.
+                </>
+              )}
+            </p>
+            <CuratorToken settings={settings.data} readOnly={readOnly} />
+            <CuratorLimits
+              key={`${settings.data.max_per_call}-${settings.data.max_per_run}-${settings.data.min_age_ms}-${settings.data.expose_to_all}`}
+              settings={settings.data}
+              readOnly={readOnly}
+            />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readOnly: boolean }) {
+  const generate = useGenerateCuratorToken();
+  const update = useUpdateCuratorSettings();
+  const [shown, setShown] = useState<string | null>(null);
+  const [custom, setCustom] = useState('');
+  const fromEnv = settings.token_source === 'env';
+  const busy = generate.isPending || update.isPending;
+  const limits = {
+    max_per_call: settings.max_per_call,
+    max_per_run: settings.max_per_run,
+    min_age_ms: settings.min_age_ms,
+    expose_to_all: settings.expose_to_all,
+  };
+
+  const onGenerate = () => generate.mutate(undefined, { onSuccess: (r) => setShown(r.token), onError: toastApiError });
+  const onClear = () =>
+    update.mutate(
+      { ...limits, token: null },
+      { onSuccess: () => toast.success('Curator token cleared.'), onError: toastApiError },
+    );
+  const onSave = (event: FormEvent) => {
+    event.preventDefault();
+    update.mutate(
+      { ...limits, token: custom.trim() },
+      {
+        onSuccess: () => {
+          setCustom('');
+          toast.success('Curator token saved.');
+        },
+        onError: toastApiError,
+      },
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-medium">Token</h3>
+        {settings.token_set ? (
+          <Badge variant="outline">{fromEnv ? 'set by MCP_ZEROMEM_CURATOR_TOKEN' : 'set'}</Badge>
+        ) : (
+          <Badge variant="secondary">not set</Badge>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {fromEnv
+          ? 'The environment sets the token, which overrides one stored here; change it there.'
+          : 'A bearer token for /mcp that adds the curator tools and prompt. It opens nothing under /api. The token is shown once, when it is generated.'}
+      </p>
+      {!readOnly && !fromEnv && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={onGenerate}>
+              <KeyRoundIcon aria-hidden />
+              {settings.token_set ? 'Generate a new token' : 'Generate a token'}
+            </Button>
+            {settings.token_set && (
+              <Button type="button" variant="ghost" disabled={busy} onClick={onClear}>
+                Clear token
+              </Button>
+            )}
+          </div>
+          <form className="flex flex-col gap-1 sm:flex-row sm:items-end sm:gap-2" onSubmit={onSave}>
+            <div className="flex flex-1 flex-col gap-1">
+              <Label htmlFor="curator-token">Or use your own</Label>
+              <Input
+                id="curator-token"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={`At least ${CURATOR_LIMITS.tokenMinLength} characters`}
+                value={custom}
+                onChange={(event) => setCustom(event.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={busy || custom.trim().length < CURATOR_LIMITS.tokenMinLength}
+            >
+              Save token
+            </Button>
+          </form>
+        </>
+      )}
+
+      <AlertDialog open={shown !== null} onOpenChange={(open) => !open && setShown(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>The curator token</AlertDialogTitle>
+            <AlertDialogDescription>
+              Copy it now: it is not shown again. Give it to the curator's MCP client as its bearer token. Any earlier
+              token stops working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-2">
+            <Input readOnly value={shown ?? ''} className="font-mono" aria-label="Curator token" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Copy the token"
+              onClick={() => {
+                void navigator.clipboard?.writeText(shown ?? '').then(() => toast.success('Copied.'));
+              }}
+            >
+              <CopyIcon />
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShown(null)}>Done</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; readOnly: boolean }) {
+  const update = useUpdateCuratorSettings();
+  const [perCall, setPerCall] = useState(String(settings.max_per_call));
+  const [perRun, setPerRun] = useState(String(settings.max_per_run));
+  const [minAgeHours, setMinAgeHours] = useState(String(settings.min_age_ms / HOUR_MS));
+  const [exposeToAll, setExposeToAll] = useState(settings.expose_to_all);
+
+  const perCallN = Number(perCall);
+  const perRunN = Number(perRun);
+  const minAgeN = Number(minAgeHours);
+  const valid =
+    Number.isInteger(perCallN) &&
+    perCallN >= 1 &&
+    perCallN <= CURATOR_LIMITS.maxPerCall &&
+    Number.isInteger(perRunN) &&
+    perRunN >= 1 &&
+    perRunN <= CURATOR_LIMITS.maxPerRun &&
+    Number.isFinite(minAgeN) &&
+    minAgeN >= 0;
+  const dirty =
+    perCallN !== settings.max_per_call ||
+    perRunN !== settings.max_per_run ||
+    Math.round(minAgeN * HOUR_MS) !== settings.min_age_ms ||
+    exposeToAll !== settings.expose_to_all;
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    update.mutate(
+      {
+        max_per_call: perCallN,
+        max_per_run: perRunN,
+        min_age_ms: Math.round(minAgeN * HOUR_MS),
+        expose_to_all: exposeToAll,
+      },
+      { onSuccess: () => toast.success('Curator settings saved.'), onError: toastApiError },
+    );
+  };
+
+  return (
+    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+      <h3 className="text-sm font-medium">Limits</h3>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="curator-per-call">Actions per call</Label>
+          <Input
+            id="curator-per-call"
+            type="number"
+            min={1}
+            max={CURATOR_LIMITS.maxPerCall}
+            disabled={readOnly}
+            value={perCall}
+            onChange={(event) => setPerCall(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="curator-per-run">Actions per run</Label>
+          <Input
+            id="curator-per-run"
+            type="number"
+            min={1}
+            max={CURATOR_LIMITS.maxPerRun}
+            disabled={readOnly}
+            value={perRun}
+            onChange={(event) => setPerRun(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="curator-min-age">Minimum turn age (hours)</Label>
+          <Input
+            id="curator-min-age"
+            type="number"
+            min={0}
+            step="any"
+            disabled={readOnly}
+            value={minAgeHours}
+            onChange={(event) => setMinAgeHours(event.target.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The minimum age keeps a live conversation from being curated under the person having it. Actions beyond a limit
+        are refused and reported to the curator.
+      </p>
+      <div className="flex items-start gap-3">
+        <Switch
+          id="curator-expose"
+          checked={exposeToAll}
+          disabled={readOnly}
+          onCheckedChange={setExposeToAll}
+          className="mt-0.5"
+        />
+        <div className="flex flex-col gap-0.5">
+          <Label htmlFor="curator-expose">Serve the curator tools to every client</Label>
+          <p className="text-xs text-muted-foreground">
+            Every client that can reach /mcp gets the curator tools and prompt, not only the curator token. The stdio
+            server follows this too. Use it when a single trusted agent both remembers and curates.
+          </p>
+        </div>
+      </div>
+      {exposeToAll && !settings.expose_to_all && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
+          Every agent will see five more tools, and can hide or supersede turns.
+        </p>
+      )}
+      {readOnly ? (
+        <p className="text-sm text-muted-foreground">
+          This server is read-only (ZEROMEM_READ_ONLY), so the curator settings cannot be changed from here.
+        </p>
+      ) : (
+        <div>
+          <Button type="submit" disabled={!valid || !dirty || update.isPending}>
+            {update.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      )}
+    </form>
+  );
 }

@@ -23,6 +23,41 @@ pub struct Turn {
     pub speaker: String,
     pub text: String,
     pub ts: i64,
+    /// `note` for a curator's consolidated note; left out for an ordinary
+    /// turn so results read as they always did.
+    #[serde(default, skip_serializing_if = "TurnKind::is_turn")]
+    pub kind: TurnKind,
+}
+
+/// What a stored turn is. Notes are turns in every index; the kind only
+/// changes how recall presents them.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnKind {
+    #[default]
+    Turn,
+    Note,
+}
+
+impl TurnKind {
+    pub fn is_turn(&self) -> bool {
+        *self == TurnKind::Turn
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TurnKind::Turn => "turn",
+            TurnKind::Note => "note",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        if s == "note" {
+            TurnKind::Note
+        } else {
+            TurnKind::Turn
+        }
+    }
 }
 
 /// What happened to one ingested turn.
@@ -86,6 +121,14 @@ pub struct Stats {
     pub embedder_warning: Option<String>,
     pub generation: i64,
     pub schema_version: i64,
+    /// Advances on every curation change; the UI refetches on it.
+    #[serde(default)]
+    pub curation_seq: i64,
+    /// Turns hidden by curation.
+    #[serde(default)]
+    pub hidden: u64,
+    #[serde(default)]
+    pub notes: u64,
 }
 
 /// Where a remote embedder's key comes from. The key itself never leaves
@@ -164,6 +207,35 @@ pub struct Snapshot {
     pub edges: Vec<EdgeRow>,
     pub segments: Vec<SegmentRow>,
     pub embeddings: Vec<EmbeddingRow>,
+    /// Curation state, keyed by uuid like the rest. The action log is left
+    /// out: it is history, not state.
+    #[serde(default)]
+    pub flags: Vec<FlagRow>,
+    #[serde(default)]
+    pub aliases: Vec<AliasRow>,
+    #[serde(default)]
+    pub blocklist: Vec<String>,
+    #[serde(default)]
+    pub note_sources: Vec<NoteSourceRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FlagRow {
+    pub uuid: String,
+    pub hidden: bool,
+    pub superseded_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AliasRow {
+    pub alias: String,
+    pub canonical: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NoteSourceRow {
+    pub note: String,
+    pub source: String,
 }
 
 /// One entity as the store counts it.

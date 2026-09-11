@@ -15,6 +15,8 @@ use std::sync::{Arc, Mutex};
 use napi::bindgen_prelude::*;
 use napi::tokio::task::spawn_blocking;
 use napi_derive::napi;
+use zeromem_core::curation::finders::{CandidateKind, FinderOptions};
+use zeromem_core::curation::{CurationAction, CuratorConfig, TurnSelector, UndoTarget};
 use zeromem_core::dense::{EmbedderChoice, EmbedderSpec, RemoteSpec};
 use zeromem_core::viz;
 use zeromem_core::{Detail, OpenOptions, QueryOptions, TurnInput, ZeroMem};
@@ -120,6 +122,9 @@ pub struct RecallOptions {
     pub until: Option<i64>,
     /// `compact` (default) or `full`.
     pub detail: Option<String>,
+    /// Include turns curation hid; they come back flagged `hidden`.
+    #[napi(js_name = "include_hidden")]
+    pub include_hidden: Option<bool>,
 }
 
 impl TryFrom<RecallOptions> for QueryOptions {
@@ -137,6 +142,7 @@ impl TryFrom<RecallOptions> for QueryOptions {
             since: o.since,
             until: o.until,
             detail,
+            include_hidden: o.include_hidden,
         })
     }
 }
@@ -227,6 +233,66 @@ pub struct ProjectionOptions {
 pub struct TimeRange {
     pub since: Option<i64>,
     pub until: Option<i64>,
+}
+
+/// The curator settings to store. Every field is required: the settings
+/// page sends the whole object.
+#[napi(object)]
+pub struct CuratorConfigInput {
+    #[napi(js_name = "max_per_call")]
+    pub max_per_call: u32,
+    #[napi(js_name = "max_per_run")]
+    pub max_per_run: u32,
+    #[napi(js_name = "min_age_ms")]
+    pub min_age_ms: i64,
+    /// At least 16 characters; empty or absent clears it.
+    pub token: Option<String>,
+    #[napi(js_name = "expose_to_all")]
+    pub expose_to_all: bool,
+}
+
+impl From<CuratorConfigInput> for CuratorConfig {
+    fn from(c: CuratorConfigInput) -> Self {
+        CuratorConfig {
+            max_per_call: c.max_per_call,
+            max_per_run: c.max_per_run,
+            min_age_ms: c.min_age_ms,
+            token: c.token,
+            expose_to_all: c.expose_to_all,
+        }
+    }
+}
+
+/// Exactly one of the two.
+#[napi(object)]
+pub struct UndoInput {
+    #[napi(js_name = "action_id")]
+    pub action_id: Option<i64>,
+    #[napi(js_name = "run_id")]
+    pub run_id: Option<String>,
+}
+
+#[napi(object)]
+#[derive(Default)]
+pub struct CandidateOptions {
+    /// Look only at turns after this id; defaults to the run cursor.
+    #[napi(js_name = "since_turn_id")]
+    pub since_turn_id: Option<i64>,
+    /// Candidates per page; default 20, at most 100.
+    pub limit: Option<u32>,
+    /// For aliases and consolidation: skip this many ranked candidates.
+    pub offset: Option<u32>,
+}
+
+/// Which turns to read: by id, a whole session, or those mentioning an entity.
+#[napi(object)]
+#[derive(Default)]
+pub struct CurationSelector {
+    #[napi(js_name = "turn_ids")]
+    pub turn_ids: Option<Vec<i64>>,
+    #[napi(js_name = "session_id")]
+    pub session_id: Option<String>,
+    pub entity: Option<String>,
 }
 
 type Shared = Arc<Mutex<ZeroMem>>;
@@ -413,6 +479,108 @@ impl Engine {
     #[napi(ts_return_type = "Promise<ClearReport>")]
     pub async fn clear_memory(&self) -> Result<serde_json::Value> {
         with_engine(&self.inner, |zm| zm.clear_memory().map(|r| serde_json::to_value(r).unwrap())).await
+    }
+
+    // --- curation ----------------------------------------------------------------
+
+    /// The curator settings as stored, token included; the server redacts it.
+    #[napi(ts_return_type = "Promise<CuratorConfig>")]
+    pub async fn curator_config(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.curator_config().map(|c| serde_json::to_value(c).unwrap())).await
+    }
+
+    /// Validate and store the curator settings; resolves to what was stored.
+    #[napi(ts_return_type = "Promise<CuratorConfig>")]
+    pub async fn set_curator_config(&self, config: CuratorConfigInput) -> Result<serde_json::Value> {
+        let config = CuratorConfig::from(config);
+        with_engine(&self.inner, move |zm| zm.set_curator_config(&config).map(|c| serde_json::to_value(c).unwrap()))
+            .await
+    }
+
+    /// Apply a batch of reversible curation actions in one transaction.
+    /// Each is checked on its own and a rejected one does not stop the rest;
+    /// `dry_run` reports what would happen and changes nothing.
+    #[napi(ts_return_type = "Promise<ApplyReport>")]
+    pub async fn curate_apply(
+        &self,
+        run_id: String,
+        actor: String,
+        #[napi(ts_arg_type = "CurationAction[]")] actions: serde_json::Value,
+        dry_run: Option<bool>,
+    ) -> Result<serde_json::Value> {
+        let actions: Vec<CurationAction> =
+            serde_json::from_value(actions).map_err(|e| Error::from_reason(format!("bad curation actions: {e}")))?;
+        let dry_run = dry_run.unwrap_or(false);
+        with_engine(&self.inner, move |zm| {
+            zm.curate_apply(&run_id, &actor, &actions, dry_run).map(|r| serde_json::to_value(r).unwrap())
+        })
+        .await
+    }
+
+    /// Undo one action or every live action of a run, newest first.
+    #[napi(ts_return_type = "Promise<UndoReport>")]
+    pub async fn curate_undo(&self, target: UndoInput, actor: String) -> Result<serde_json::Value> {
+        let target = match (target.action_id, target.run_id) {
+            (Some(id), None) => UndoTarget::Action(id),
+            (None, Some(run)) => UndoTarget::Run(run),
+            _ => return Err(Error::from_reason("undo needs exactly one of action_id or run_id")),
+        };
+        with_engine(&self.inner, move |zm| zm.curate_undo(&target, &actor).map(|r| serde_json::to_value(r).unwrap()))
+            .await
+    }
+
+    /// One page of candidates of `kind` for the curator to judge.
+    #[napi(ts_return_type = "Promise<CandidatePage>")]
+    pub async fn curate_candidates(
+        &self,
+        #[napi(ts_arg_type = "CandidateKind")] kind: String,
+        opts: Option<CandidateOptions>,
+    ) -> Result<serde_json::Value> {
+        let kind = CandidateKind::parse(&kind).ok_or_else(|| {
+            Error::from_reason(format!(
+                "unknown candidate kind `{kind}`: use duplicates, noise, aliases, supersession or consolidation"
+            ))
+        })?;
+        let opts = opts.unwrap_or_default();
+        let opts = FinderOptions { since_turn_id: opts.since_turn_id, limit: opts.limit, offset: opts.offset };
+        with_engine(&self.inner, move |zm| zm.curate_candidates(kind, &opts).map(|r| serde_json::to_value(r).unwrap()))
+            .await
+    }
+
+    /// Turns with their entity spans and everything curation says about them.
+    #[napi(ts_return_type = "Promise<CuratedTurn[]>")]
+    pub async fn curation_turns(&self, selector: CurationSelector, limit: Option<u32>) -> Result<serde_json::Value> {
+        let selector =
+            TurnSelector { turn_ids: selector.turn_ids, session_id: selector.session_id, entity: selector.entity };
+        let limit = limit.unwrap_or(50).clamp(1, 500);
+        with_engine(&self.inner, move |zm| {
+            zm.curation_turns(&selector, limit).map(|r| serde_json::to_value(r).unwrap())
+        })
+        .await
+    }
+
+    /// Curation runs, newest first, with the cursor the next run starts from.
+    #[napi(ts_return_type = "Promise<CurationRuns>")]
+    pub async fn curation_runs(&self, page: Option<Page>) -> Result<serde_json::Value> {
+        let (limit, offset) = page_bounds(page);
+        with_engine(&self.inner, move |zm| zm.curation_runs(limit, offset).map(|r| serde_json::to_value(r).unwrap()))
+            .await
+    }
+
+    /// The action log, newest first; one run's actions when `run_id` is given.
+    #[napi(ts_return_type = "Promise<CurationActions>")]
+    pub async fn curation_actions(&self, run_id: Option<String>, page: Option<Page>) -> Result<serde_json::Value> {
+        let (limit, offset) = page_bounds(page);
+        with_engine(&self.inner, move |zm| {
+            zm.curation_actions(run_id.as_deref(), limit, offset).map(|r| serde_json::to_value(r).unwrap())
+        })
+        .await
+    }
+
+    /// Live entity aliases and the blocklist.
+    #[napi(ts_return_type = "Promise<CurationAliases>")]
+    pub async fn curation_aliases(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.curation_aliases().map(|r| serde_json::to_value(r).unwrap())).await
     }
 
     // --- reads for the visualisations ---------------------------------------

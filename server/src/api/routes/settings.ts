@@ -1,6 +1,9 @@
 import {
   type ClearReport,
+  type CuratorSettings,
+  type CuratorTokenResponse,
   clearRequestSchema,
+  curatorSettingsUpdateSchema,
   type EmbedderProbe,
   type EmbedderSettings,
   type EmbedderSwitch,
@@ -8,6 +11,7 @@ import {
 } from '@mcp-zeromem/shared';
 import { Router } from 'express';
 import type { Config } from '../../config.ts';
+import { CuratorSettingsStore } from '../../curator.ts';
 import type { EmbedWorker } from '../../engine/embed-worker.ts';
 import type { ZeroMemEngine } from '../../engine/index.ts';
 import { errorChainMessage, HttpError } from '../../errors.ts';
@@ -17,16 +21,25 @@ export interface SettingsDeps {
   config: Config;
   /** Woken after a switch so the re-embed starts at once; absent in a stdio process. */
   worker?: EmbedWorker;
+  /** The curator settings; built from the engine when absent. */
+  curatorSettings?: CuratorSettingsStore;
 }
 
 /**
  * `/api/settings` — the store's embedder: what it is, whether a candidate
  * works, changing it and re-embedding with it; and clearing what the store
  * holds. Every change is persisted in the store, so the stdio server and the
- * host's `zm` hooks follow it on their next read.
+ * host's `zm` hooks follow it on their next read. The curator's limits, token
+ * and exposure live here too.
  */
 export function createSettingsRouter(deps: SettingsDeps): Router {
   const router = Router();
+  const curator = deps.curatorSettings ?? new CuratorSettingsStore(deps.engine, deps.config.curatorToken);
+  const refuseEnvToken = () => {
+    if (curator.envOverridesToken) {
+      throw new HttpError(409, 'MCP_ZEROMEM_CURATOR_TOKEN is set; it overrides the stored curator token');
+    }
+  };
   const refuseReadOnly = () => {
     if (deps.config.readOnly) {
       throw new HttpError(403, 'This server is read-only (ZEROMEM_READ_ONLY)');
@@ -106,6 +119,46 @@ export function createSettingsRouter(deps: SettingsDeps): Router {
       if (body.turns_to_embed > 0) {
         deps.worker?.kick();
       }
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/curator', async (_req, res, next) => {
+    try {
+      const body: CuratorSettings = await curator.view();
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put('/curator', async (req, res, next) => {
+    try {
+      refuseReadOnly();
+      const update = curatorSettingsUpdateSchema.parse(req.body);
+      if (update.token !== undefined) {
+        refuseEnvToken();
+      }
+      let body: CuratorSettings;
+      try {
+        body = await curator.update(update);
+      } catch (err) {
+        throw new HttpError(400, 'The curator settings were refused', errorChainMessage(err), { cause: err });
+      }
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // A fresh token, returned once; only its presence is reported afterwards.
+  router.post('/curator/token', async (_req, res, next) => {
+    try {
+      refuseReadOnly();
+      refuseEnvToken();
+      const body: CuratorTokenResponse = await curator.generateToken();
       res.json(body);
     } catch (err) {
       next(err);
