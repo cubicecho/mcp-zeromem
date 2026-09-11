@@ -118,7 +118,7 @@ VOLUME /data
 
 EXPOSE 3000
 
-LABEL io.modelcontextprotocol.server.name="io.github.vantreeseba/mcp-zeromem"
+LABEL io.modelcontextprotocol.server.name="io.github.cubicecho/mcp-zeromem"
 
 # /api/status is unauthenticated liveness; anything but 2xx means the engine
 # failed to open its store. The start period covers the first-boot model

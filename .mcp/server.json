@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
-  "name": "io.github.vantreeseba/mcp-zeromem",
+  "name": "io.github.cubicecho/mcp-zeromem",
   "description": "Zero-token conversational memory for agents: turns go into one SQLite store and come back through recall with no LLM in the loop.",
   "version": "0.0.0",
   "repository": {
-    "url": "https://github.com/vantreeseba/mcp-zeromem",
+    "url": "https://github.com/cubicecho/mcp-zeromem",
     "source": "github"
   },
   "packages": [
     {
       "registryType": "oci",
       "registryBaseUrl": "https://docker.io",
-      "identifier": "vantreeseba/mcp-zeromem",
+      "identifier": "cubicecho/mcp-zeromem",
       "version": "0.0.0",
       "transport": {
         "type": "streamable-http",
