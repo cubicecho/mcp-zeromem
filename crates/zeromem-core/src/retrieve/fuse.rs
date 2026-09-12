@@ -51,8 +51,13 @@ pub fn fuse(views: &[ViewTrace], turns: &BTreeMap<i64, Turn>, recency_weight: f6
             Some(Fused { id, score, sources, ts: turn.ts, uuid: turn.uuid.clone() })
         })
         .collect();
-    out.sort_by(|a, b| b.score.total_cmp(&a.score).then(b.ts.cmp(&a.ts)).then(a.uuid.cmp(&b.uuid)));
+    out.sort_by(order);
     out
+}
+
+/// Best first; ties to the newer turn, then by uuid so the order is total.
+pub fn order(a: &Fused, b: &Fused) -> std::cmp::Ordering {
+    b.score.total_cmp(&a.score).then(b.ts.cmp(&a.ts)).then(a.uuid.cmp(&b.uuid))
 }
 
 pub fn decay(ts: i64, latest_ts: i64) -> f64 {
@@ -69,7 +74,15 @@ mod tests {
     use super::*;
 
     fn turn(id: i64, ts: i64) -> Turn {
-        Turn { id, uuid: format!("u{id}"), session_id: "s".into(), speaker: "user".into(), text: "t".into(), ts }
+        Turn {
+            id,
+            uuid: format!("u{id}"),
+            session_id: "s".into(),
+            speaker: "user".into(),
+            text: "t".into(),
+            ts,
+            kind: Default::default(),
+        }
     }
 
     #[test]

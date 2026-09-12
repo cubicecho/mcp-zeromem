@@ -42,6 +42,13 @@ const configSchema = z.object({
    * default so memory does not echo the conversation in progress.
    */
   sessionId: z.string().min(1).nullable(),
+  /**
+   * Bearer token that grants the curator scope on /mcp. Overrides the token
+   * set from the Settings page; never written to the store or returned.
+   */
+  curatorToken: z.string().min(16, 'must be at least 16 characters').nullable(),
+  /** stdio only: serve the curator tools and prompt to whoever spawned this process. */
+  curator: z.boolean(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -109,6 +116,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, options: LoadOp
     remoteEmbedder: remoteEmbedderFromEnv(env),
     embeddingApiKey: envValue(env, 'ZEROMEM_EMBEDDING_API_KEY') ?? null,
     sessionId: envValue(env, 'ZEROMEM_SESSION_ID') ?? null,
+    curatorToken: envValue(env, 'MCP_ZEROMEM_CURATOR_TOKEN') ?? null,
+    curator: envBoolean(env, 'ZEROMEM_CURATOR', false),
   });
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${envKeyFor(i.path.map(String))}: ${i.message}`);
@@ -205,4 +214,6 @@ const ENV_KEYS: Record<string, string> = {
   remoteEmbedder: 'ZEROMEM_EMBEDDING_URL',
   embeddingApiKey: 'ZEROMEM_EMBEDDING_API_KEY',
   sessionId: 'ZEROMEM_SESSION_ID',
+  curatorToken: 'MCP_ZEROMEM_CURATOR_TOKEN',
+  curator: 'ZEROMEM_CURATOR',
 };

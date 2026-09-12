@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CompareRouteImport } from './routes/compare'
+import { Route as CurationRouteImport } from './routes/curation'
 import { Route as EmbeddingsRouteImport } from './routes/embeddings'
 import { Route as EvalRouteImport } from './routes/eval'
 import { Route as GraphRouteImport } from './routes/graph'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const CompareRoute = CompareRouteImport.update({
   id: '/compare',
   path: '/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CurationRoute = CurationRouteImport.update({
+  id: '/curation',
+  path: '/curation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmbeddingsRoute = EmbeddingsRouteImport.update({
@@ -80,6 +86,7 @@ const SessionsSessionIdRoute = SessionsSessionIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/curation': typeof CurationRoute
   '/embeddings': typeof EmbeddingsRoute
   '/eval': typeof EvalRoute
   '/graph': typeof GraphRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/curation': typeof CurationRoute
   '/embeddings': typeof EmbeddingsRoute
   '/eval': typeof EvalRoute
   '/graph': typeof GraphRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/curation': typeof CurationRoute
   '/embeddings': typeof EmbeddingsRoute
   '/eval': typeof EvalRoute
   '/graph': typeof GraphRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/compare'
+    | '/curation'
     | '/embeddings'
     | '/eval'
     | '/graph'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/compare'
+    | '/curation'
     | '/embeddings'
     | '/eval'
     | '/graph'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/compare'
+    | '/curation'
     | '/embeddings'
     | '/eval'
     | '/graph'
@@ -162,6 +174,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CompareRoute: typeof CompareRoute
+  CurationRoute: typeof CurationRoute
   EmbeddingsRoute: typeof EmbeddingsRoute
   EvalRoute: typeof EvalRoute
   GraphRoute: typeof GraphRoute
@@ -187,6 +200,13 @@ declare module '@tanstack/react-router' {
       path: '/compare'
       fullPath: '/compare'
       preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/curation': {
+      id: '/curation'
+      path: '/curation'
+      fullPath: '/curation'
+      preLoaderRoute: typeof CurationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/embeddings': {
@@ -258,6 +278,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CompareRoute: CompareRoute,
+  CurationRoute: CurationRoute,
   EmbeddingsRoute: EmbeddingsRoute,
   EvalRoute: EvalRoute,
   GraphRoute: GraphRoute,

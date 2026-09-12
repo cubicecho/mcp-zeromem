@@ -25,6 +25,49 @@ export function tokensEqual(a: string, b: string): boolean {
   return timingSafeEqual(digestA, digestB);
 }
 
+function bearerToken(header: string | undefined): string | undefined {
+  return header?.match(/^Bearer\s+(.+)$/i)?.[1];
+}
+
+/** What an MCP caller may see: the curator scope adds the curation tools and prompt. */
+export type Scope = 'default' | 'curator';
+
+/**
+ * Bearer-token middleware for /mcp that also sets `res.locals.scope`. The
+ * curator token opens /mcp on its own and grants the curator scope; the main
+ * token (or no auth at all) grants the default scope. The curator token is
+ * read per request because it can change from the Settings page.
+ */
+export function createMcpAuthMiddleware(
+  getAuth: () => AuthConfig,
+  getCuratorToken: () => Promise<string | null>,
+): RequestHandler {
+  return async (req, res, next) => {
+    try {
+      const provided = bearerToken(req.headers.authorization);
+      const curatorToken = provided ? await getCuratorToken() : null;
+      if (provided && curatorToken && tokensEqual(provided, curatorToken)) {
+        res.locals.scope = 'curator' satisfies Scope;
+        next();
+        return;
+      }
+      const { enabled, token } = getAuth();
+      if (enabled && !token) {
+        res.status(401).json({ error: 'Auth is enabled but no token is configured' });
+        return;
+      }
+      if (enabled && (!provided || !token || !tokensEqual(provided, token))) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      res.locals.scope = 'default' satisfies Scope;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
 /**
  * Bearer-token middleware for /api and /mcp. Skipped entirely when auth is
  * disabled; otherwise rejects with a 401 JSON envelope.
@@ -40,8 +83,7 @@ export function createAuthMiddleware(getAuth: () => AuthConfig): RequestHandler 
       res.status(401).json({ error: 'Auth is enabled but no token is configured' });
       return;
     }
-    const header = req.headers.authorization;
-    const provided = header?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const provided = bearerToken(req.headers.authorization);
     if (!provided || !tokensEqual(provided, token)) {
       res.status(401).json({ error: 'Unauthorized' });
       return;

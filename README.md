@@ -126,6 +126,9 @@ does not hand the current conversation back to itself.
 Set `ZEROMEM_READ_ONLY=true` to drop the three write tools from the listing
 entirely.
 
+A client holding the curator token also gets five `zeromem_curate_*` tools and
+the `zeromem_curate` prompt; see [Curation](#curation).
+
 The same operations are on the REST API the UI uses (`/api/status`,
 `/api/sessions`, `/api/sessions/:id/turns`, `/api/recall`, `/api/recall/trace`,
 `/api/ingest`), under the same bearer token.
@@ -137,6 +140,8 @@ The same operations are on the REST API the UI uses (`/api/status`,
 | `MCP_ZEROMEM_TOKEN` | — | Bearer token for `/mcp`. The HTTP server refuses to start without one unless `SECURE_LOCAL_NET=true` |
 | `SECURE_LOCAL_NET` | — | `true` disables auth: for a trusted network only |
 | `ZEROMEM_READ_ONLY` | `false` | Hide the write tools |
+| `MCP_ZEROMEM_CURATOR_TOKEN` | — | Bearer token for `/mcp` that adds the curator tools. Overrides a token set from the Settings page (see [Curation](#curation)) |
+| `ZEROMEM_CURATOR` | `false` | Stdio server only: serve the curator tools |
 | `DATA_DIR` | `/data` in the image, `./data` on the host | Where the store lives. Also exported to the engine as `ZEROMEM_HOME`; if both are set they must agree |
 | `ZEROMEM_EMBEDDER` | `auto` | The embedder for a **new** store: `auto` loads bge-small-en-v1.5 over ONNX and falls back to a hashed embedder, loudly, if it cannot; `onnx` refuses to start instead; `hash` never downloads anything; `openai` uses the endpoint below; `none` gives this process no dense view. An existing store keeps the embedder it was built with (see [Choosing an embedder](#choosing-an-embedder)) |
 | `ZEROMEM_ALLOW_EMBEDDER_SWITCH` | `false` | Force an existing store onto `ZEROMEM_EMBEDDER` at boot: drops every vector and re-embeds in the background |
@@ -232,6 +237,7 @@ text.
 | Eval | recall@k / MRR / nDCG per commit, one line per corpus × embedder | `/api/viz/eval` |
 | Health | Recall latency percentiles and throughput per minute for the last hour, cold-open time, errors, then the raw status payload | `/api/viz/health` |
 | Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; and clearing the vectors or the whole memory | `/api/settings/embedder`, `/api/settings/clear` |
+| Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases` |
 
 Every snapshot endpoint is capped (`limit`) so a 50k-turn store never lands
 whole in a browser tab; the graph page says when it cut at the node cap. The
@@ -242,6 +248,118 @@ The eval page reads `docs/eval/history.jsonl` (override with `EVAL_HISTORY`).
 `scripts/record-eval.sh [label]` runs the harness and appends one line per
 corpus × embedder, stamped with the commit; commit the file with the change
 that moved the numbers.
+
+## Curation
+
+The store only grows: near-duplicates, pasted tool output and "ok, thanks" compete
+in recall, one person is split across "Maya" and "Maya Okafor", and an old fact
+ranks level with the one that replaced it. A **curator** is any MCP client, most
+usefully an LLM agent on a schedule, that cleans this up. The engine stays
+deterministic: it finds candidates cheaply and applies reversible operations. The
+judgement, the only part that costs tokens, lives in the agent.
+
+**Curation never deletes.** Turns are immutable; every action is logged with its
+reason and can be undone from the Curation page. Purging is left to a human
+(`zeromem_forget_session`, Settings → Stored data).
+
+| Op | Effect on recall |
+| --- | --- |
+| `hide` / `unhide` | The turn is left out of recall (still shown, flagged, in session reads) |
+| `supersede` | The old turn hands its score to its replacement, which is recalled in its place even when it shares few words with the question; the old turn is halved and folds away when both make the answer. Temporal questions ("what did … used to …") are left alone |
+| `alias` / `unalias` | Mentions of the alias count as the canonical entity in the graph and entity stats |
+| `block` / `unblock` | The name is not an entity at all |
+| `note` | A new turn (`kind: note`, speaker `zeromem-curator`) summarising source turns; when both make the list the sources fold under the note |
+| `run_end` | Records the run's summary and advances the cursor the finders start from |
+
+### The curator surface
+
+| Tool | What it does |
+| --- | --- |
+| `zeromem_curate_runs` | Past runs, their action counts and summaries, the cursor, and the limits in force |
+| `zeromem_curate_candidates` | `{kind, since_turn_id?, limit?, offset?}`: candidates of one kind (`duplicates`, `noise`, `aliases`, `supersession`, `consolidation`), each with a score, a reason and a suggested op; `scanned_through` is the cursor to hand to `run_end` |
+| `zeromem_curate_read` | `{turn_ids? \| session_id? \| entity?}`: turns with their flags, supersession links and covering notes |
+| `zeromem_curate_apply` | `{run_id, actions[{op, …, reason}], dry_run?}`: applies a batch; each action is accepted or rejected on its own |
+| `zeromem_curate_undo` | `{action_id? \| run_id?}` |
+
+The `zeromem_curate` prompt carries the procedure
+([`docs/curator-playbook.md`](docs/curator-playbook.md)), so a client gets it from the
+server: orient, gather candidates since the cursor, judge (when unsure, skip), dry
+run, apply in batches, finish with `run_end`. Its optional `focus` argument limits a
+run to some kinds.
+
+### Access and limits
+
+Settings → Curator holds all of it:
+
+- **The curator token.** Generate one (shown once) or paste your own. A request to
+  `/mcp` bearing it gets the normal tools plus the curator surface; the normal token
+  never sees them, so an ordinary agent keeps its five-tool budget. The token opens
+  `/mcp` only, not the REST API. `MCP_ZEROMEM_CURATOR_TOKEN` overrides the stored one,
+  and the page then says so and will not change it.
+- **Serve the curator tools to every client.** Off by default; on, every `/mcp`
+  client and the stdio server get them, token or not.
+- **Limits.** Actions per call (default 100), actions per run (300), and a minimum
+  turn age (24 h) so a live conversation is never curated under the user. A reason
+  is required on every action.
+
+`ZEROMEM_READ_ONLY` drops the curator's write tools like the others. For the stdio
+server, `ZEROMEM_CURATOR=true` serves the curator tools.
+
+### Scheduling a curator
+
+The server runs no agent. Anything that speaks MCP can be the curator, from this
+machine or another; it needs the `/mcp` URL and the curator token, no shared disk.
+Notes it writes are embedded by this server.
+
+A Claude Code scheduled task, or `claude -p` under cron, with an MCP config that
+points at the store:
+
+```json
+{
+  "mcpServers": {
+    "zeromem": {
+      "type": "http",
+      "url": "http://memory-host:3200/mcp",
+      "headers": { "Authorization": "Bearer ${ZEROMEM_CURATOR_TOKEN}" }
+    }
+  }
+}
+```
+
+```cron
+# Nightly at 03:30: run the playbook the server serves as its zeromem_curate prompt.
+30 3 * * * claude -p "/mcp__zeromem__zeromem_curate" --mcp-config /etc/zeromem/curator.json --allowedTools "mcp__zeromem__*"
+```
+
+An Agent SDK script does the same from code: fetch the prompt, hand it to the agent
+as its task, and let it call the tools.
+
+```ts
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const url = 'http://memory-host:3200/mcp';
+const headers = { Authorization: `Bearer ${process.env.ZEROMEM_CURATOR_TOKEN}` };
+
+const client = new Client({ name: 'curator', version: '1.0.0' });
+await client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } }));
+const { messages } = await client.getPrompt({ name: 'zeromem_curate' });
+await client.close();
+const playbook = messages.map((m) => (m.content.type === 'text' ? m.content.text : '')).join('\n');
+
+for await (const message of query({
+  prompt: playbook,
+  options: {
+    mcpServers: { zeromem: { type: 'http', url, headers } },
+    allowedTools: ['mcp__zeromem__*'],
+  },
+})) {
+  if (message.type === 'result') console.log(message.subtype);
+}
+```
+
+Review a run on the Curation page. Undoing a run restores recall to what it was.
 
 ## How recall works
 

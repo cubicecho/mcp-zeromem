@@ -32,6 +32,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     remoteEmbedder: null,
     embeddingApiKey: null,
     sessionId: null,
+    curatorToken: null,
+    curator: false,
     ...overrides,
   };
 }

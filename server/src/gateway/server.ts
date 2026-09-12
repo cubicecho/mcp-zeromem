@@ -3,7 +3,9 @@ import type { Config } from '../config.ts';
 import type { ZeroMemEngine } from '../engine/index.ts';
 import { errorChainMessage } from '../errors.ts';
 import { SERVER_VERSION } from '../version.ts';
+import { registerCuratorPrompt } from './prompts.ts';
 import type { ToolDefinition } from './tool.ts';
+import { curateTools } from './tools/curate.ts';
 import { forgetTools } from './tools/forget.ts';
 import { recallTools } from './tools/recall.ts';
 import { rememberTools } from './tools/remember.ts';
@@ -12,13 +14,16 @@ import { statsTools } from './tools/stats.ts';
 export interface GatewayDeps {
   engine: ZeroMemEngine;
   config: Config;
+  /** Serve the curator tools and the `zeromem_curate` prompt: the curator token, or everyone when configured. */
+  curator?: boolean;
 }
 
 /**
  * Every tool this server serves, after the read-only gate.
  *
  * The listing is sent to the model before every request, so the surface stays
- * small and deliberate; see the plan for the five-tool budget.
+ * small and deliberate; see the plan for the five-tool budget. The curator's
+ * tools are added only for the curator scope.
  */
 export function allTools(deps: GatewayDeps): ToolDefinition[] {
   const { engine, config } = deps;
@@ -27,6 +32,7 @@ export function allTools(deps: GatewayDeps): ToolDefinition[] {
     ...rememberTools(engine, config),
     ...statsTools(engine),
     ...forgetTools(engine),
+    ...(deps.curator ? curateTools(engine) : []),
   ];
   return deps.config.readOnly ? tools.filter((tool) => tool.kind === 'read') : tools;
 }
@@ -74,6 +80,10 @@ export function createGatewayServer(deps: GatewayDeps): McpServer {
         }
       },
     );
+  }
+
+  if (deps.curator) {
+    registerCuratorPrompt(server);
   }
 
   return server;

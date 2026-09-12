@@ -30,6 +30,9 @@ describe('OverviewPage', () => {
         embedder_warning: null,
         generation: 2,
         schema_version: 3,
+        curation_seq: 0,
+        hidden: 0,
+        notes: 0,
       },
     });
     vi.spyOn(api, 'getGrowth').mockResolvedValue({

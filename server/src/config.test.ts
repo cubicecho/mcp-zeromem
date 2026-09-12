@@ -15,6 +15,8 @@ describe('loadConfig', () => {
       remoteEmbedder: null,
       embeddingApiKey: null,
       sessionId: null,
+      curatorToken: null,
+      curator: false,
     });
   });
 

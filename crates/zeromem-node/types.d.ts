@@ -20,6 +20,12 @@ export interface Stats {
   embedder_warning: string | null;
   generation: number;
   schema_version: number;
+  /** Advances on every curation change. */
+  curation_seq: number;
+  /** Turns hidden by curation. */
+  hidden: number;
+  /** Curator notes. */
+  notes: number;
 }
 
 export type EmbedderKind = 'onnx' | 'hash' | 'openai';
@@ -97,6 +103,8 @@ export interface SessionSummary {
   last_ts: number;
 }
 
+export type TurnKind = 'turn' | 'note';
+
 export interface StoredTurn {
   id: number;
   uuid: string;
@@ -104,6 +112,8 @@ export interface StoredTurn {
   speaker: string;
   text: string;
   ts: number;
+  /** `note` for a curator's note; left out for an ordinary turn. */
+  kind?: TurnKind;
 }
 
 export type ViewKind = 'lexical' | 'entity' | 'dense' | 'recent';
@@ -137,6 +147,12 @@ export interface Evidence {
   sources?: ViewKind[];
   /** Present under `detail: 'full'`. */
   entities?: string[];
+  /** The newer turn that restates this one; its score was halved. */
+  superseded_by?: number;
+  /** Hidden by curation; only with `include_hidden`. */
+  hidden?: boolean;
+  /** For a note: the source turns collapsed under it. */
+  covers?: number[];
 }
 
 export interface QueryResult {
@@ -239,7 +255,7 @@ export interface Mention {
   end: number;
 }
 
-export interface TurnWithEntities extends StoredTurn {
+export interface TurnWithEntities extends StoredTurn, TurnCuration {
   entities: Mention[];
 }
 
@@ -285,4 +301,165 @@ export interface GrowthDay {
 export interface Growth {
   days: GrowthDay[];
   generation: number;
+}
+
+// --- curation ---------------------------------------------------------------
+
+export interface CuratorConfig {
+  /** Most actions one apply call may carry. */
+  max_per_call: number;
+  /** Most actions one run may apply in total. */
+  max_per_run: number;
+  /** Turns younger than this are never touched. */
+  min_age_ms: number;
+  /** Bearer token that grants the curator scope; null when none is stored. */
+  token: string | null;
+  /** Give every MCP client the curator tools. */
+  expose_to_all: boolean;
+}
+
+export type CurationOp =
+  | { op: 'hide'; turn_ids: number[] }
+  | { op: 'unhide'; turn_ids: number[] }
+  | { op: 'supersede'; turn_ids: number[]; by: number }
+  | { op: 'alias'; alias: string; canonical: string }
+  | { op: 'unalias'; alias: string }
+  | { op: 'block'; entity: string }
+  | { op: 'unblock'; entity: string }
+  | { op: 'note'; session_id: string; text: string; source_ids: number[] }
+  | { op: 'run_end'; summary?: string; cursor?: number | null };
+
+/** An op and why; `reason` is required for everything but `run_end`. */
+export type CurationAction = CurationOp & { reason?: string };
+
+export interface ActionResult {
+  index: number;
+  op: string;
+  ok: boolean;
+  action_id?: number;
+  note_id?: number;
+  error?: string;
+}
+
+export interface ApplyReport {
+  run_id: string;
+  dry_run: boolean;
+  results: ActionResult[];
+  applied: number;
+  rejected: number;
+}
+
+export interface UndoReport {
+  /** Action ids undone, in the order they were undone. */
+  undone: number[];
+}
+
+/** Curation facts about a turn, each left out when empty. */
+export interface TurnCuration {
+  hidden?: boolean;
+  superseded_by?: number;
+  /** Turns this one supersedes. */
+  supersedes?: number[];
+  /** Notes that stand for this turn. */
+  covered_by?: number[];
+  /** For a note, the turns it stands for. */
+  sources?: number[];
+}
+
+export interface CuratedTurn extends StoredTurn, TurnCuration {
+  entities: Mention[];
+}
+
+export interface RunSummary {
+  run_id: string;
+  actor: string;
+  started_at: number;
+  ended_at: number;
+  actions: number;
+  undone: number;
+  /** Live actions per op. */
+  ops: Record<string, number>;
+  summary: string | null;
+  finished: boolean;
+}
+
+export interface CurationRuns {
+  runs: RunSummary[];
+  total: number;
+  /** Where the next run's finders start. */
+  cursor: number;
+  curation_seq: number;
+}
+
+export interface TargetTurn {
+  uuid: string;
+  /** Null once the turn is gone. */
+  id: number | null;
+  session_id: string | null;
+  text: string | null;
+}
+
+export interface ActionRow {
+  id: number;
+  run_id: string;
+  actor: string;
+  ts: number;
+  op: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  undone_at: number | null;
+  undone_by: string | null;
+  targets: TargetTurn[];
+}
+
+export interface CurationActions {
+  actions: ActionRow[];
+  total: number;
+}
+
+export interface AliasEntry {
+  alias: string;
+  canonical: string;
+  action_id: number | null;
+}
+
+export interface BlockEntry {
+  entity: string;
+  action_id: number | null;
+}
+
+export interface CurationAliases {
+  aliases: AliasEntry[];
+  blocklist: BlockEntry[];
+}
+
+export type CandidateKind = 'duplicates' | 'noise' | 'aliases' | 'supersession' | 'consolidation';
+
+export interface CandidateTurn {
+  id: number;
+  session_id: string;
+  speaker: string;
+  ts: number;
+  /** Clipped; `curationTurns` has the rest. */
+  text: string;
+}
+
+export interface Candidate {
+  kind: CandidateKind;
+  /** How sure the finder is, in [0, 1]. Not a verdict. */
+  score: number;
+  turns: CandidateTurn[];
+  entities?: string[];
+  reason: string;
+  /** What applying it would look like; a note's text is left empty. */
+  suggested: CurationOp;
+}
+
+export interface CandidatePage {
+  kind: CandidateKind;
+  since_turn_id: number;
+  candidates: Candidate[];
+  /** Pass as `since_turn_id` to continue. */
+  scanned_through: number;
+  more: boolean;
 }

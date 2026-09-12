@@ -37,6 +37,12 @@ export const statsSchema = z.object({
   embedder_warning: z.string().nullable(),
   generation: count,
   schema_version: z.number().int().positive(),
+  /** Advances on every curation change; the UI refetches on it. */
+  curation_seq: count,
+  /** Turns hidden by curation. */
+  hidden: count,
+  /** Notes written by the curator. */
+  notes: count,
 });
 export type Stats = z.infer<typeof statsSchema>;
 
@@ -133,6 +139,10 @@ export const sessionSummarySchema = z.object({
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 
+/** `note` is a curator's consolidated note; an ordinary turn leaves the field out. */
+export const turnKindSchema = z.enum(['turn', 'note']);
+export type TurnKind = z.infer<typeof turnKindSchema>;
+
 export const storedTurnSchema = z.object({
   id: z.number().int(),
   uuid: z.string(),
@@ -140,8 +150,23 @@ export const storedTurnSchema = z.object({
   speaker: z.string(),
   text: z.string(),
   ts: z.number().int(),
+  kind: turnKindSchema.optional(),
 });
 export type StoredTurn = z.infer<typeof storedTurnSchema>;
+
+/** What curation says about one turn; every field is left out when empty. */
+export const turnCurationSchema = z.object({
+  hidden: z.boolean().optional(),
+  /** The newer turn that restates this one. */
+  superseded_by: z.number().int().optional(),
+  /** Turns this one supersedes. */
+  supersedes: z.array(z.number().int()).optional(),
+  /** Notes that stand for this turn. */
+  covered_by: z.array(z.number().int()).optional(),
+  /** For a note, the turns it stands for. */
+  sources: z.array(z.number().int()).optional(),
+});
+export type TurnCuration = z.infer<typeof turnCurationSchema>;
 
 export const ingestOutcomeSchema = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('indexed'), id: z.number().int() }),
@@ -185,6 +210,8 @@ export const recallOptionsSchema = z.object({
   since: z.number().int().optional(),
   until: z.number().int().optional(),
   detail: detailSchema.optional(),
+  /** Include turns curation hid; they come back flagged `hidden`. */
+  include_hidden: z.boolean().optional(),
 });
 export type RecallOptions = z.infer<typeof recallOptionsSchema>;
 
@@ -217,6 +244,12 @@ export const evidenceSchema = z.object({
   role: roleSchema,
   sources: z.array(viewKindSchema).optional(),
   entities: z.array(z.string()).optional(),
+  /** The newer turn that restates this one; its score was halved. */
+  superseded_by: z.number().int().optional(),
+  /** Hidden by curation; only with `include_hidden`. */
+  hidden: z.boolean().optional(),
+  /** For a note, the source turns collapsed under it. */
+  covers: z.array(z.number().int()).optional(),
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 

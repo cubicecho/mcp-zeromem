@@ -223,6 +223,9 @@ enum Command {
         /// Print every stage of the run instead of the result.
         #[arg(long)]
         trace: bool,
+        /// Recall turns a curator hid, too.
+        #[arg(long)]
+        include_hidden: bool,
     },
     /// Recompute every derived index from the turns. Embeddings are kept.
     Rebuild,
@@ -296,7 +299,7 @@ fn run() -> Result<()> {
 
     match cli.command {
         Command::Stats => emit(&zm.stats()?)?,
-        Command::Query { query, top_k, exclude_session, session, since, until, full, trace } => {
+        Command::Query { query, top_k, exclude_session, session, since, until, full, trace, include_hidden } => {
             let opts = QueryOptions {
                 top_k: Some(top_k),
                 exclude_session,
@@ -304,6 +307,7 @@ fn run() -> Result<()> {
                 since,
                 until,
                 detail: Some(if full || trace { Detail::Full } else { Detail::Compact }),
+                include_hidden: include_hidden.then_some(true),
             };
             if trace {
                 emit(&zm.query_trace(&query, &opts)?)?;

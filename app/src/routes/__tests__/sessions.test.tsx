@@ -30,6 +30,9 @@ const status: ServerStatus = {
     embedder_warning: 'no model',
     generation: 0,
     schema_version: 3,
+    curation_seq: 0,
+    hidden: 0,
+    notes: 0,
   },
 };
 

@@ -2,6 +2,13 @@ import type {
   ApiError,
   ClearReport,
   ClearScope,
+  CurationActions,
+  CurationActionsQuery,
+  CurationAliases,
+  CurationRuns,
+  CuratorSettings,
+  CuratorSettingsUpdate,
+  CuratorTokenResponse,
   EmbedderChangeRequest,
   EmbedderProbe,
   EmbedderSettings,
@@ -27,6 +34,8 @@ import type {
   SessionsResponse,
   SessionTurnsResponse,
   SessionTurnsWithEntitiesResponse,
+  UndoReport,
+  UndoRequest,
 } from '@mcp-zeromem/shared';
 import { getToken, requireAuth } from './auth';
 
@@ -205,4 +214,35 @@ export function reembed(): Promise<EmbedderSwitch> {
 
 export function clearStore(scope: ClearScope): Promise<ClearReport> {
   return request('/api/settings/clear', { method: 'POST', body: { scope } });
+}
+
+export function getCuratorSettings(): Promise<CuratorSettings> {
+  return request('/api/settings/curator');
+}
+
+export function updateCuratorSettings(body: CuratorSettingsUpdate): Promise<CuratorSettings> {
+  return request('/api/settings/curator', { method: 'PUT', body });
+}
+
+/** A fresh curator token; the response is the only time it is shown. */
+export function generateCuratorToken(): Promise<CuratorTokenResponse> {
+  return request('/api/settings/curator/token', { method: 'POST' });
+}
+
+// --- curation ---
+
+export function getCurationRuns(page: PageQuery = {}): Promise<CurationRuns> {
+  return request(`/api/curation/runs${queryString(page)}`);
+}
+
+export function getCurationActions(query: CurationActionsQuery = {}): Promise<CurationActions> {
+  return request(`/api/curation/actions${queryString(query)}`);
+}
+
+export function getCurationAliases(): Promise<CurationAliases> {
+  return request('/api/curation/aliases');
+}
+
+export function undoCuration(body: UndoRequest): Promise<UndoReport> {
+  return request('/api/curation/undo', { method: 'POST', body });
 }

@@ -33,6 +33,11 @@ pub enum Error {
     /// clear, the turn ids they were computed for can name other turns.
     #[error("the store changed while this process was embedding a batch")]
     StoreChanged,
+    /// A curation call refused as a whole (too many actions, an unknown
+    /// action or run to undo). Refusals of single actions are reported per
+    /// action instead.
+    #[error("curation: {0}")]
+    Curation(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

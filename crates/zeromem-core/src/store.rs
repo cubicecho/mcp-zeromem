@@ -18,7 +18,7 @@
 //! model it embedded with is still the store's. A writer that lost that
 //! race stores its turns without vectors and reports `EmbedderChanged`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,12 +30,14 @@ use crate::entities::{self, EntityKind, Mention};
 use crate::error::{Error, Result};
 use crate::timeline::{self, Level, Segment, TurnRef};
 use crate::types::{
-    EdgeRow, EmbeddingRow, EntityStat, IngestOutcome, MentionRow, SegmentRow, SessionSummary, Turn, TurnInput,
+    EdgeRow, EmbeddingRow, EntityStat, IngestOutcome, MentionRow, SegmentRow, SessionSummary, Turn, TurnInput, TurnKind,
 };
 
-/// v3 gave `embeddings` an insertion sequence so backfilled vectors are
-/// picked up by readers; v2 was the last change to a derived table.
-pub const SCHEMA_VERSION: i64 = 3;
+/// v4 added curation (`turns.kind`, the flag, alias, blocklist and note
+/// tables, the action log); v3 gave `embeddings` an insertion sequence so
+/// backfilled vectors are picked up by readers; v2 was the last change to a
+/// derived table.
+pub const SCHEMA_VERSION: i64 = 4;
 const REBUILD_BELOW: i64 = 2;
 const DB_FILE: &str = "zeromem.db";
 
@@ -54,7 +56,7 @@ pub struct Inserted {
 pub type EmbeddingSample = (Vec<(i64, Vec<f32>)>, u64);
 
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
     path: PathBuf,
 }
 
@@ -156,9 +158,44 @@ impl Store {
              END;
              CREATE TRIGGER IF NOT EXISTS turns_fts_delete AFTER DELETE ON turns BEGIN
                 INSERT INTO turns_fts(turns_fts, rowid, text) VALUES ('delete', old.id, old.text);
-             END;",
+             END;
+
+             CREATE TABLE IF NOT EXISTS curation_actions (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id    TEXT    NOT NULL,
+                actor     TEXT    NOT NULL,
+                ts        INTEGER NOT NULL,
+                op        TEXT    NOT NULL,
+                payload   TEXT    NOT NULL,
+                reason    TEXT    NOT NULL,
+                undone_at INTEGER,
+                undone_by TEXT
+             );
+             CREATE INDEX IF NOT EXISTS curation_actions_run ON curation_actions (run_id, id);
+             CREATE TABLE IF NOT EXISTS turn_flags (
+                turn_id       INTEGER PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+                hidden        INTEGER NOT NULL DEFAULT 0,
+                superseded_by INTEGER REFERENCES turns(id) ON DELETE SET NULL,
+                action_id     INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS entity_aliases (
+                alias     TEXT PRIMARY KEY,
+                canonical TEXT    NOT NULL,
+                action_id INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS entity_blocklist (
+                entity    TEXT PRIMARY KEY,
+                action_id INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS note_sources (
+                note_id INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+                turn_id INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+                PRIMARY KEY (note_id, turn_id)
+             );
+             CREATE INDEX IF NOT EXISTS note_sources_turn ON note_sources (turn_id);",
         )?;
         self.migrate_embeddings_to_v3()?;
+        self.migrate_turn_kind()?;
         let stored = self.meta_i64("schema_version")?;
         let mut needs_rebuild = false;
         if stored == 0 {
@@ -201,6 +238,21 @@ impl Store {
              ALTER TABLE embeddings_v3 RENAME TO embeddings;
              COMMIT;",
         )?;
+        Ok(())
+    }
+
+    /// v4 gave `turns` a `kind`. Decided by the table's shape, like v3.
+    fn migrate_turn_kind(&self) -> Result<()> {
+        let has_kind: bool = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(turns)")?;
+            let names = stmt.query_map([], |r| r.get::<_, String>(1))?;
+            let names: Vec<String> = names.collect::<rusqlite::Result<_>>()?;
+            names.iter().any(|n| n == "kind")
+        };
+        if !has_kind {
+            log::info!("adding turns.kind for schema v4");
+            self.conn.execute_batch("ALTER TABLE turns ADD COLUMN kind TEXT NOT NULL DEFAULT 'turn';")?;
+        }
         Ok(())
     }
 
@@ -282,7 +334,7 @@ impl Store {
         Ok(tx.query_row("SELECT value FROM meta WHERE key = 'embedder'", [], |r| r.get(0)).optional()?)
     }
 
-    fn stored_generation(tx: &Transaction<'_>) -> Result<i64> {
+    pub(crate) fn stored_generation(tx: &Transaction<'_>) -> Result<i64> {
         Ok(tx
             .query_row("SELECT value FROM meta WHERE key = 'generation'", [], |r| r.get::<_, String>(0))
             .optional()?
@@ -290,7 +342,7 @@ impl Store {
             .unwrap_or(0))
     }
 
-    fn bump_generation(tx: &Transaction<'_>) -> Result<i64> {
+    pub(crate) fn bump_generation(tx: &Transaction<'_>) -> Result<i64> {
         let next = Self::stored_generation(tx)? + 1;
         tx.execute(
             "INSERT INTO meta (key, value) VALUES ('generation', ?1)
@@ -321,9 +373,10 @@ impl Store {
         let model = if embedder_changed { None } else { model };
         let mut outcomes = Vec::with_capacity(inputs.len());
         let mut touched_sessions = BTreeSet::new();
+        let map = EntityMap::load(&tx)?;
         for (i, input) in inputs.iter().enumerate() {
             let vector = vectors.get(i).and_then(|v| v.as_deref());
-            match insert_one(&tx, input, vector, model) {
+            match insert_one(&tx, input, vector, model, TurnKind::Turn, &map) {
                 Ok(outcome) => {
                     if matches!(outcome, IngestOutcome::Indexed { .. }) {
                         touched_sessions.insert(input.session_id.clone());
@@ -355,34 +408,15 @@ impl Store {
 
     /// Throw away every derived table and recompute it from `turns`. The
     /// embeddings survive unless `clear_embeddings` — they are the one thing
-    /// that is expensive to make again.
+    /// that is expensive to make again. Curation is state, not derived: it
+    /// survives, and the aliases and blocklist are applied again.
     pub fn rebuild(&mut self, clear_embeddings: bool) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute_batch(
-            "DELETE FROM turn_entities;
-             DELETE FROM segments;
-             INSERT INTO turns_fts(turns_fts) VALUES ('rebuild');",
-        )?;
+        tx.execute_batch("INSERT INTO turns_fts(turns_fts) VALUES ('rebuild');")?;
         if clear_embeddings {
             tx.execute("DELETE FROM embeddings", [])?;
         }
-        let turns: Vec<(i64, String)> = {
-            let mut stmt = tx.prepare("SELECT id, text FROM turns ORDER BY id")?;
-            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
-        for (id, text) in &turns {
-            write_mentions(&tx, *id, &entities::extract(text))?;
-        }
-        rebuild_aggregates(&tx)?;
-        let sessions: Vec<String> = {
-            let mut stmt = tx.prepare("SELECT DISTINCT session_id FROM turns ORDER BY session_id")?;
-            let rows = stmt.query_map([], |r| r.get(0))?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
-        for session in &sessions {
-            resegment(&tx, session)?;
-        }
+        rederive_entities(&tx)?;
         Self::bump_generation(&tx)?;
         tx.commit()?;
         Ok(())
@@ -410,10 +444,17 @@ impl Store {
             "DELETE FROM turn_entities;
              DELETE FROM segments;
              DELETE FROM entity_stats;
-             DELETE FROM entity_edges;",
+             DELETE FROM entity_edges;
+             DELETE FROM turn_flags;
+             DELETE FROM note_sources;
+             DELETE FROM entity_aliases;
+             DELETE FROM entity_blocklist;
+             DELETE FROM curation_actions;
+             DELETE FROM meta WHERE key = 'curation_cursor';",
         )?;
         // The delete trigger keeps turns_fts in step, row by row.
         let turns = tx.execute("DELETE FROM turns", [])?;
+        crate::curation::bump_curation_seq(&tx)?;
         Self::bump_generation(&tx)?;
         tx.commit()?;
         Ok(crate::types::ClearReport {
@@ -452,12 +493,17 @@ impl Store {
     pub fn turn(&self, id: i64) -> Result<Option<Turn>> {
         Ok(self
             .conn
-            .query_row("SELECT id, uuid, session_id, speaker, text, ts FROM turns WHERE id = ?1", [id], row_to_turn)
+            .query_row(
+                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns WHERE id = ?1",
+                [id],
+                row_to_turn,
+            )
             .optional()?)
     }
 
     pub fn turns_by_ids(&self, ids: &[i64]) -> Result<BTreeMap<i64, Turn>> {
-        let mut stmt = self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts FROM turns WHERE id = ?1")?;
+        let mut stmt =
+            self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns WHERE id = ?1")?;
         let mut out = BTreeMap::new();
         for id in ids {
             if let Some(t) = stmt.query_row([id], row_to_turn).optional()? {
@@ -502,7 +548,7 @@ impl Store {
 
     pub fn session_turns(&self, session_id: &str, limit: u32, offset: u32) -> Result<Vec<Turn>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, uuid, session_id, speaker, text, ts FROM turns
+            "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
              WHERE session_id = ?1 ORDER BY ts, id LIMIT ?2 OFFSET ?3",
         )?;
         let rows = stmt.query_map(params![session_id, limit, offset], row_to_turn)?;
@@ -511,7 +557,8 @@ impl Store {
 
     /// Every turn, ordered by uuid.
     pub fn all_turns(&self) -> Result<Vec<Turn>> {
-        let mut stmt = self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts FROM turns ORDER BY uuid")?;
+        let mut stmt =
+            self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns ORDER BY uuid")?;
         let rows = stmt.query_map([], row_to_turn)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -520,32 +567,38 @@ impl Store {
 
     /// BM25 over the full-text index. `terms` are OR-ed; the score is
     /// positive, larger is better.
-    pub fn lexical_search(&self, terms: &[String], limit: usize) -> Result<Vec<(i64, f64)>> {
+    /// Hidden turns are left out unless `include_hidden`.
+    pub fn lexical_search(&self, terms: &[String], limit: usize, include_hidden: bool) -> Result<Vec<(i64, f64)>> {
         if terms.is_empty() {
             return Ok(Vec::new());
         }
         let query = terms.iter().map(|t| format!("\"{}\"", t.replace('"', ""))).collect::<Vec<_>>().join(" OR ");
         let mut stmt = self.conn.prepare(
             "SELECT rowid, -bm25(turns_fts) AS score FROM turns_fts
-             WHERE turns_fts MATCH ?1 ORDER BY score DESC, rowid DESC LIMIT ?2",
+             WHERE turns_fts MATCH ?1
+               AND (?3 OR rowid NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1))
+             ORDER BY score DESC, rowid DESC LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![query, limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let rows = stmt.query_map(params![query, limit as i64, include_hidden], |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     /// Turns mentioning any of `keys`, with the count of distinct keys each
     /// mentions. Larger counts first.
-    pub fn turns_mentioning(&self, keys: &[String], limit: usize) -> Result<Vec<(i64, u32)>> {
+    pub fn turns_mentioning(&self, keys: &[String], limit: usize, include_hidden: bool) -> Result<Vec<(i64, u32)>> {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
         let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!(
             "SELECT turn_id, COUNT(DISTINCT entity) AS n FROM turn_entities
-             WHERE entity IN ({placeholders}) GROUP BY turn_id ORDER BY n DESC, turn_id DESC LIMIT ?"
+             WHERE entity IN ({placeholders})
+               AND (? OR turn_id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1))
+             GROUP BY turn_id ORDER BY n DESC, turn_id DESC LIMIT ?"
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let mut args: Vec<rusqlite::types::Value> = keys.iter().map(|k| k.clone().into()).collect();
+        args.push(i64::from(include_hidden).into());
         args.push((limit as i64).into());
         let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u32)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -754,9 +807,13 @@ impl Store {
 
     /// The ids of the turns in the most recent window of the store, across
     /// sessions, for temporal queries.
-    pub fn recent_turn_ids(&self, limit: usize) -> Result<Vec<i64>> {
-        let mut stmt = self.conn.prepare("SELECT id FROM turns ORDER BY ts DESC, id DESC LIMIT ?1")?;
-        let rows = stmt.query_map([limit as i64], |r| r.get(0))?;
+    pub fn recent_turn_ids(&self, limit: usize, include_hidden: bool) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM turns
+             WHERE ?2 OR id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1)
+             ORDER BY ts DESC, id DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64, include_hidden], |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -874,27 +931,29 @@ impl Store {
 
 // --- write helpers ---------------------------------------------------------
 
-fn insert_one(
+pub(crate) fn insert_one(
     tx: &Transaction<'_>,
     input: &TurnInput,
     vector: Option<&[f32]>,
     model: Option<&str>,
+    kind: TurnKind,
+    map: &EntityMap,
 ) -> Result<IngestOutcome> {
     validate(input)?;
     let uuid = input.uuid.clone().unwrap_or_else(|| derived_uuid(input));
     let ts = input.ts.unwrap_or_else(now_ms);
     let created_at = now_ms();
     let inserted = tx.execute(
-        "INSERT OR IGNORE INTO turns (uuid, session_id, speaker, text, ts, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![uuid, input.session_id, input.speaker, input.text, ts, created_at],
+        "INSERT OR IGNORE INTO turns (uuid, session_id, speaker, text, ts, created_at, kind)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![uuid, input.session_id, input.speaker, input.text, ts, created_at, kind.as_str()],
     )?;
     if inserted != 1 {
         let id: i64 = tx.query_row("SELECT id FROM turns WHERE uuid = ?1", [&uuid], |r| r.get(0))?;
         return Ok(IngestOutcome::Duplicate { id });
     }
     let id = tx.last_insert_rowid();
-    let mentions = entities::extract(&input.text);
+    let mentions = map.apply(entities::extract(&input.text));
     write_mentions(tx, id, &mentions)?;
     add_to_aggregates(tx, ts, &mentions)?;
     if let (Some(vec), Some(model)) = (vector, model) {
@@ -912,6 +971,88 @@ fn write_mentions(tx: &Transaction<'_>, turn_id: i64, mentions: &[Mention]) -> R
     )?;
     for m in mentions {
         stmt.execute(params![turn_id, m.key, m.kind.as_str(), m.start as i64, m.end as i64, m.surface])?;
+    }
+    Ok(())
+}
+
+/// The curator's entity aliases and blocklist, applied to mentions as they
+/// are written: an alias is stored under its canonical key, a blocked key
+/// is not stored at all. Surfaces and offsets are left as extracted.
+#[derive(Debug, Default)]
+pub(crate) struct EntityMap {
+    aliases: HashMap<String, String>,
+    blocked: HashSet<String>,
+}
+
+impl EntityMap {
+    pub(crate) fn load(conn: &Connection) -> Result<Self> {
+        let mut stmt = conn.prepare_cached("SELECT alias, canonical FROM entity_aliases")?;
+        let aliases = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<HashMap<_, _>>>()?;
+        let mut stmt = conn.prepare_cached("SELECT entity FROM entity_blocklist")?;
+        let blocked = stmt.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<HashSet<_>>>()?;
+        Ok(EntityMap { aliases, blocked })
+    }
+
+    /// Follow aliases to the end of the chain. Apply refuses chains, but an
+    /// undo can recreate one; the hop cap guards against a cycle.
+    pub(crate) fn canonical<'a>(&'a self, key: &'a str) -> &'a str {
+        let mut key = key;
+        for _ in 0..8 {
+            match self.aliases.get(key) {
+                Some(next) => key = next,
+                None => break,
+            }
+        }
+        key
+    }
+
+    pub(crate) fn apply(&self, mentions: Vec<Mention>) -> Vec<Mention> {
+        if self.aliases.is_empty() && self.blocked.is_empty() {
+            return mentions;
+        }
+        mentions
+            .into_iter()
+            .filter_map(|mut m| {
+                if self.blocked.contains(&m.key) {
+                    return None;
+                }
+                let canonical = self.canonical(&m.key);
+                if self.blocked.contains(canonical) {
+                    return None;
+                }
+                if canonical != m.key {
+                    m.key = canonical.to_string();
+                }
+                Some(m)
+            })
+            .collect()
+    }
+}
+
+/// Recompute every mention, aggregate and segment from the turns' text
+/// through the current `EntityMap`. What `rebuild` does short of FTS and
+/// vectors, and what an alias or blocklist change does.
+pub(crate) fn rederive_entities(tx: &Transaction<'_>) -> Result<()> {
+    tx.execute_batch("DELETE FROM turn_entities; DELETE FROM segments;")?;
+    let map = EntityMap::load(tx)?;
+    let turns: Vec<(i64, String)> = {
+        let mut stmt = tx.prepare("SELECT id, text FROM turns ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for (id, text) in &turns {
+        write_mentions(tx, *id, &map.apply(entities::extract(text)))?;
+    }
+    rebuild_aggregates(tx)?;
+    let sessions: Vec<String> = {
+        let mut stmt = tx.prepare("SELECT DISTINCT session_id FROM turns ORDER BY session_id")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for session in &sessions {
+        resegment(tx, session)?;
     }
     Ok(())
 }
@@ -952,7 +1093,7 @@ fn add_to_aggregates(tx: &Transaction<'_>, ts: i64, mentions: &[Mention]) -> Res
 /// Recompute `entity_stats` and `entity_edges` from `turn_entities`. Used
 /// after deletes and by `rebuild`; the incremental path must agree with
 /// this exactly, which the oracle tests check.
-fn rebuild_aggregates(tx: &Transaction<'_>) -> Result<()> {
+pub(crate) fn rebuild_aggregates(tx: &Transaction<'_>) -> Result<()> {
     tx.execute_batch(
         "DELETE FROM entity_stats;
          DELETE FROM entity_edges;
@@ -971,7 +1112,7 @@ fn rebuild_aggregates(tx: &Transaction<'_>) -> Result<()> {
 }
 
 /// Replace one session's segments from its turns in time order.
-fn resegment(tx: &Transaction<'_>, session_id: &str) -> Result<()> {
+pub(crate) fn resegment(tx: &Transaction<'_>, session_id: &str) -> Result<()> {
     tx.execute("DELETE FROM segments WHERE session_id = ?1", [session_id])?;
     let turns: Vec<TurnRef> = {
         let mut stmt = tx.prepare_cached(
@@ -1009,7 +1150,7 @@ fn resegment(tx: &Transaction<'_>, session_id: &str) -> Result<()> {
 
 // --- row mappers -----------------------------------------------------------
 
-fn row_to_turn(r: &rusqlite::Row<'_>) -> rusqlite::Result<Turn> {
+pub(crate) fn row_to_turn(r: &rusqlite::Row<'_>) -> rusqlite::Result<Turn> {
     Ok(Turn {
         id: r.get(0)?,
         uuid: r.get(1)?,
@@ -1017,6 +1158,7 @@ fn row_to_turn(r: &rusqlite::Row<'_>) -> rusqlite::Result<Turn> {
         speaker: r.get(3)?,
         text: r.get(4)?,
         ts: r.get(5)?,
+        kind: TurnKind::parse(&r.get::<_, String>(6)?),
     })
 }
 
@@ -1042,7 +1184,7 @@ fn row_to_segment(r: &rusqlite::Row<'_>) -> rusqlite::Result<Segment> {
     })
 }
 
-fn validate(input: &TurnInput) -> Result<()> {
+pub(crate) fn validate(input: &TurnInput) -> Result<()> {
     if input.session_id.trim().is_empty() {
         return Err(Error::InvalidTurn("session_id is empty".into()));
     }
@@ -1157,8 +1299,8 @@ mod tests {
             store.neighbours("maya okafor", 5).unwrap(),
             vec![("lisbon".into(), 1), ("project heron".into(), 1)]
         );
-        assert_eq!(store.turns_mentioning(&["lisbon".into()], 10).unwrap(), vec![(2, 1)]);
-        let hits = store.lexical_search(&["billing".into()], 10).unwrap();
+        assert_eq!(store.turns_mentioning(&["lisbon".into()], 10, false).unwrap(), vec![(2, 1)]);
+        let hits = store.lexical_search(&["billing".into()], 10, false).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 1);
         assert_eq!(store.count_segments(Level::Window).unwrap(), 1);
@@ -1175,7 +1317,7 @@ mod tests {
         assert_eq!(store.count_turns().unwrap(), 1);
         assert_eq!(store.entity_stat("maya okafor").unwrap().unwrap().turns, 1);
         assert!(store.entity_stat("lisbon").unwrap().is_none());
-        assert!(store.lexical_search(&["lisbon".into()], 10).unwrap().is_empty());
+        assert!(store.lexical_search(&["lisbon".into()], 10, false).unwrap().is_empty());
         assert_eq!(store.count_segments(Level::Window).unwrap(), 1);
         assert_eq!(store.delete_session("nope").unwrap(), 0);
         assert_eq!(store.generation().unwrap(), 1, "an empty delete invalidates nothing");
@@ -1251,7 +1393,7 @@ mod tests {
         assert_eq!(store.generation().unwrap(), stale + 2);
         assert_eq!(store.count_turns().unwrap(), 0);
         assert!(store.entity_stat("maya okafor").unwrap().is_none());
-        assert!(store.lexical_search(&["lisbon".into()], 10).unwrap().is_empty());
+        assert!(store.lexical_search(&["lisbon".into()], 10, false).unwrap().is_empty());
         assert_eq!(store.count_segments(Level::Window).unwrap(), 0);
         assert_eq!(store.embedder_spec().unwrap(), Some(EmbedderSpec::Hash), "meta stays");
     }
@@ -1333,8 +1475,9 @@ mod tests {
             }
         }
         let Opened { store, needs_rebuild } = Store::open(dir.path()).unwrap();
-        assert!(!needs_rebuild, "v2 → v3 reshapes one table; nothing derived changes");
-        assert_eq!(store.meta_i64("schema_version").unwrap(), 3);
+        assert!(!needs_rebuild, "v2 → v4 reshapes one table and adds curation; nothing derived changes");
+        assert_eq!(store.meta_i64("schema_version").unwrap(), SCHEMA_VERSION);
+        assert!(store.all_turns().unwrap().iter().all(|t| t.kind == TurnKind::Turn), "old turns are ordinary turns");
         assert_eq!(store.generation().unwrap(), 4);
         assert_eq!(store.embedder_spec().unwrap(), Some(EmbedderSpec::Hash), "read through the legacy name");
         let rows = store.embeddings_after(0, "hash-384", 384).unwrap();

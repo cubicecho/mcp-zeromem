@@ -120,6 +120,20 @@ the reference-vector and eval tests.
 **Write tools are gated, not stubbed.** Under `ZEROMEM_READ_ONLY` the write tools are dropped from
 the listing entirely — an agent should never see a tool it cannot call.
 
+**Curation never deletes.** The curator (an outside agent; `docs/curator-playbook.md`, served as
+the `zeromem_curate` MCP prompt) hides, supersedes, aliases, blocks and writes notes, each an
+action in `curation_actions` with a reason, undone by replaying its inverse. Turns stay immutable;
+flags, aliases, the blocklist and note sources live beside them and cascade on turn delete. Payloads
+name turns by uuid, so the log survives a `rebuild`. Hide and supersede advance `meta.curation_seq`
+and `refresh()` reloads only the flag set, keeping the vector index; alias and block changes re-derive
+the entity tables and bump `generation`; a note is an ordinary turn (`kind = 'note'`) and undoing one
+deletes it and bumps `generation`. The settings (limits, token, exposure) are `meta.curator_config`,
+changed on the Settings page; `MCP_ZEROMEM_CURATOR_TOKEN` overrides the stored token and the API only
+reports `token_source`. The curator token opens `/mcp` with the curator scope (the default tools
+plus the curator tools and prompt) and nothing under `/api`; `expose_to_all` (or `ZEROMEM_CURATOR`
+for stdio) gives every client that scope. New `Turn` and `Evidence` fields are skipped when empty, so
+the goldens do not move. In recall a superseded turn hands its fused score to its replacement (`retrieve::hand_over`), pulling it in when no view nominated it; the oracle curator in `tests/eval.rs` must raise nDCG on the large corpus, so a change that makes curation hurt ranking fails there.
+
 **Tests use a real store.** `server/src/test-support.ts` opens the engine in a temp directory;
 nothing mocks the addon or SQLite. App tests mock only `src/lib/api.ts` (`vi.spyOn(api, …)`);
 pages that use `Link` render through `app/src/test-support.tsx`'s `renderPage`, a one-route

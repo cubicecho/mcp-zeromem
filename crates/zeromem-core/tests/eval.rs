@@ -12,10 +12,12 @@
 
 mod common;
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
 use common::*;
+use zeromem_core::curation::{CurationAction, CurationOp, CuratorConfig};
 use zeromem_core::dense::remote::{RemoteSpec, DEFAULT_TIMEOUT_MS};
 use zeromem_core::dense::{self, EmbedderChoice};
 use zeromem_core::{Detail, OpenOptions, QueryOptions, ZeroMem};
@@ -145,4 +147,70 @@ fn retrieval_clears_the_floors() {
             );
         }
     }
+}
+
+/// An oracle curator: it knows the labels, so for every query it marks the
+/// turns stating a superseded value (grade 1) as superseded by one stating
+/// the current value (grade 2). This is the best a curating agent could do
+/// with supersession alone. nDCG, which grades the current value above the
+/// old, must rise and MRR must hold. Recall is recorded, not gated: it
+/// counts a superseded turn as a hit, and folding those under their
+/// replacement is the point.
+#[test]
+fn an_oracle_curator_does_not_hurt_recall() {
+    let corpus = corpus(&LARGE);
+    let dir = tempfile::tempdir().unwrap();
+    let mut zm =
+        ZeroMem::open(dir.path(), OpenOptions { embedder: EmbedderChoice::Hash, ..OpenOptions::default() }).unwrap();
+    zm.ingest_many(&inputs(&corpus)).unwrap();
+    let name = zm.stats().unwrap().embedder.unwrap();
+
+    let score = |zm: &mut ZeroMem| {
+        let mut per_query = Vec::new();
+        let summary = eval::evaluate(&corpus.queries, 5, |q| {
+            let opts = QueryOptions { top_k: Some(5), detail: Some(Detail::Compact), ..Default::default() };
+            let ranked: Vec<String> =
+                zm.query(&q.query, &opts).unwrap().evidence.into_iter().map(|e| e.turn.uuid).collect();
+            per_query.push((q.id.clone(), eval::score(&ranked, &q.relevant, 5).reciprocal_rank));
+            ranked
+        });
+        (summary, per_query)
+    };
+    let (before, _) = score(&mut zm);
+
+    let ids: HashMap<String, i64> = zm.snapshot().unwrap().turns.into_iter().map(|t| (t.uuid, t.id)).collect();
+    let current: HashSet<&str> =
+        corpus.queries.iter().flat_map(|q| &q.relevant).filter(|r| r.grade == 2).map(|r| r.uuid.as_str()).collect();
+    let mut seen = HashSet::new();
+    let mut actions = Vec::new();
+    for q in &corpus.queries {
+        // The latest grade-2 turn is the replacement; ids follow ingest order.
+        let Some(by) = q.relevant.iter().filter(|r| r.grade == 2).map(|r| ids[&r.uuid]).max() else { continue };
+        let old: Vec<i64> = q
+            .relevant
+            .iter()
+            .filter(|r| r.grade == 1 && !current.contains(r.uuid.as_str()) && seen.insert(r.uuid.clone()))
+            .map(|r| ids[&r.uuid])
+            .collect();
+        if !old.is_empty() {
+            actions.push(CurationAction {
+                op: CurationOp::Supersede { turn_ids: old, by },
+                reason: format!("oracle: {}", q.id),
+            });
+        }
+    }
+    assert!(!actions.is_empty(), "the large corpus has superseded facts");
+    zm.set_curator_config(&CuratorConfig { min_age_ms: 0, ..CuratorConfig::default() }).unwrap();
+    let mut applied = 0;
+    for (i, chunk) in actions.chunks(100).enumerate() {
+        applied += zm.curate_apply(&format!("oracle-{i}"), "eval", chunk, false).unwrap().applied;
+    }
+    let (after, per_query) = score(&mut zm);
+    write_results(&LARGE, &format!("{name}+oracle-curator"), &after, &per_query);
+    eprintln!(
+        "large / {name}: ndcg@5 {:.3} -> {:.3}, mrr {:.3} -> {:.3}, recall@5 {:.3} -> {:.3} after {applied} supersessions",
+        before.ndcg_at_k, after.ndcg_at_k, before.mrr, after.mrr, before.recall_at_k, after.recall_at_k
+    );
+    assert!(after.ndcg_at_k > before.ndcg_at_k, "ndcg@5 {:.3} -> {:.3}", before.ndcg_at_k, after.ndcg_at_k);
+    assert!(after.mrr >= before.mrr - 0.01, "mrr {:.3} -> {:.3}", before.mrr, after.mrr);
 }
