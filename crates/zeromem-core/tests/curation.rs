@@ -287,7 +287,7 @@ fn an_alias_bumps_the_generation_so_a_second_engine_reloads_its_entities() {
     let generation = reader.stats().unwrap().generation;
 
     let alias = act(CurationOp::Alias { alias: "maya".into(), canonical: "maya okafor".into() }, "same person");
-    writer.curate_apply("r", "test", &[alias.clone()], false).unwrap();
+    writer.curate_apply("r", "test", &[alias], false).unwrap();
     assert!(
         writer.stats().unwrap().generation > generation,
         "an alias re-derives every mention; that has to move the generation"
