@@ -17,6 +17,12 @@ const configSchema = z.object({
   authToken: z.string().min(1).nullable(),
   /** Hide the write tools from the MCP listing and refuse the REST writes. */
   readOnly: z.boolean(),
+  /**
+   * Longest turn text `zeromem_recall`'s `text` format carries per block, in
+   * code points. A cut is marked and names the call that returns the rest, so
+   * this trades prompt tokens against how often a model needs that second call.
+   */
+  recallTextLimit: z.number().int().min(100).max(20000),
   /** Which embedder opens the store; `auto` falls back to hashing, loudly, when ONNX cannot load. */
   embedder: embedderChoiceSchema,
   /**
@@ -111,6 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, options: LoadOp
     port: Number(envValue(env, 'PORT') ?? 3000),
     authToken: envValue(env, 'MCP_ZEROMEM_TOKEN') ?? null,
     readOnly: envBoolean(env, 'ZEROMEM_READ_ONLY', false),
+    recallTextLimit: Number(envValue(env, 'ZEROMEM_RECALL_TEXT_LIMIT') ?? 2000),
     embedder,
     allowEmbedderSwitch: envBoolean(env, 'ZEROMEM_ALLOW_EMBEDDER_SWITCH', false),
     remoteEmbedder: remoteEmbedderFromEnv(env),
@@ -209,6 +216,7 @@ const ENV_KEYS: Record<string, string> = {
   port: 'PORT',
   authToken: 'MCP_ZEROMEM_TOKEN',
   readOnly: 'ZEROMEM_READ_ONLY',
+  recallTextLimit: 'ZEROMEM_RECALL_TEXT_LIMIT',
   embedder: 'ZEROMEM_EMBEDDER',
   allowEmbedderSwitch: 'ZEROMEM_ALLOW_EMBEDDER_SWITCH',
   remoteEmbedder: 'ZEROMEM_EMBEDDING_URL',

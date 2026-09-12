@@ -78,6 +78,34 @@ describe('ZeroMemEngine', () => {
     expect(trace.views.length).toBeGreaterThan(0);
   });
 
+  it('carries neighbours and session windows across the boundary', async () => {
+    await engine.ingestMany([
+      { session_id: 's1', speaker: 'user', text: 'Can you remind me what we settled on?', ts: 1000 },
+      { session_id: 's1', speaker: 'assistant', text: 'Maya Okafor owns the billing service on Heron.', ts: 2000 },
+      { session_id: 's1', speaker: 'assistant', text: 'She is away until Tuesday.', ts: 3000 },
+    ]);
+
+    // Both ways through `check()`: a renamed `before`/`after` on the Rust side
+    // fails here rather than turning into a hit with no context at all.
+    const plain = await engine.query('who owns the billing service on Heron?');
+    expect(plain.evidence.every((e) => e.before === undefined && e.after === undefined)).toBe(true);
+
+    const withContext = await engine.query('who owns the billing service on Heron?', { context: 1 });
+    const hit = withContext.evidence.find((e) => e.turn.id === 2);
+    expect(hit?.before?.map((t) => t.text)).toEqual(['Can you remind me what we settled on?']);
+    expect(hit?.after?.map((t) => t.text)).toEqual(['She is away until Tuesday.']);
+    expect(withContext.evidence.map((e) => e.turn.id)).toEqual(plain.evidence.map((e) => e.turn.id));
+
+    const around = await engine.sessionWindow({ around_turn: 2, before: 1, after: 1 });
+    expect(around).toMatchObject({ session_id: 's1', around_turn: 2, total: 3, offset: 0, truncated: false });
+    expect(around.turns.map((t) => t.id)).toEqual([1, 2, 3]);
+
+    const page = await engine.sessionWindow({ session_id: 's1', limit: 2 });
+    expect(page.turns.map((t) => t.id)).toEqual([1, 2]);
+    expect(page.truncated).toBe(true);
+    await expect(engine.sessionWindow({ around_turn: 999 })).rejects.toThrow();
+  });
+
   it('rebuilds without changing the counts', async () => {
     await engine.ingestTurn({ session_id: 's1', speaker: 'user', text: 'Rebuild keeps Maya on billing.', ts: 5 });
     const before = await engine.stats();

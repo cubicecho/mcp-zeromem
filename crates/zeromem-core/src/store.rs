@@ -555,6 +555,54 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// The turns immediately before and after `turn` in its own session,
+    /// both oldest first. Two seeks on `turns_session_ts`, never a scan of
+    /// the session. The `(ts, id)` tie-break matches
+    /// [`Self::session_turns`], so a window and a session read never
+    /// disagree about turns that share a millisecond — a transcript ingest
+    /// writes many of those.
+    pub fn session_neighbours(&self, turn: &Turn, before: u32, after: u32) -> Result<(Vec<Turn>, Vec<Turn>)> {
+        let mut earlier = Vec::new();
+        if before > 0 {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
+                 WHERE session_id = ?1 AND (ts < ?2 OR (ts = ?2 AND id < ?3))
+                 ORDER BY ts DESC, id DESC LIMIT ?4",
+            )?;
+            let rows = stmt.query_map(params![turn.session_id, turn.ts, turn.id, before], row_to_turn)?;
+            earlier = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+            earlier.reverse();
+        }
+        let mut later = Vec::new();
+        if after > 0 {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
+                 WHERE session_id = ?1 AND (ts > ?2 OR (ts = ?2 AND id > ?3))
+                 ORDER BY ts, id LIMIT ?4",
+            )?;
+            let rows = stmt.query_map(params![turn.session_id, turn.ts, turn.id, after], row_to_turn)?;
+            later = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        }
+        Ok((earlier, later))
+    }
+
+    pub fn count_session_turns(&self, session_id: &str) -> Result<u32> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM turns WHERE session_id = ?1", [session_id], |r| r.get::<_, i64>(0))?
+            as u32)
+    }
+
+    /// How many of the session's turns come before `turn` in `ts, id` order
+    /// — a window's `offset` into its session.
+    pub fn session_turn_rank(&self, turn: &Turn) -> Result<u32> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM turns WHERE session_id = ?1 AND (ts < ?2 OR (ts = ?2 AND id < ?3))",
+            params![turn.session_id, turn.ts, turn.id],
+            |r| r.get::<_, i64>(0),
+        )? as u32)
+    }
+
     /// Every turn, ordered by uuid.
     pub fn all_turns(&self) -> Result<Vec<Turn>> {
         let mut stmt =

@@ -48,14 +48,14 @@ describe('curator scope', () => {
   it('serves the curator tools and prompt only to the curator scope', async () => {
     const plain = await connectedClient(false);
     const plainTools = (await plain.listTools()).tools.map((t) => t.name);
-    expect(plainTools).toHaveLength(5);
+    expect(plainTools).toHaveLength(6);
     expect(plainTools.some((name) => name.startsWith('zeromem_curate'))).toBe(false);
     expect(plain.getServerCapabilities()?.prompts).toBeUndefined();
 
     const curator = await connectedClient(true);
     const tools = (await curator.listTools()).tools.map((t) => t.name);
     expect(tools).toEqual(expect.arrayContaining(CURATOR_TOOLS));
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(11);
     const { prompts } = await curator.listPrompts();
     expect(prompts.map((p) => p.name)).toEqual(['zeromem_curate']);
   });
@@ -67,6 +67,7 @@ describe('curator scope', () => {
       'zeromem_curate_candidates',
       'zeromem_curate_read',
       'zeromem_curate_runs',
+      'zeromem_read_session',
       'zeromem_recall',
       'zeromem_stats',
     ]);

@@ -15,7 +15,7 @@ entity spans, tokens and embeddings in one transaction, keeps the entity
 graph, temporal hierarchy and lexical statistics on disk stamped with a
 generation counter, and recalls over four views (lexical, entity, dense,
 recent) fused by reciprocal rank and calibrated into a primary/supporting
-evidence set. The Node server exposes five MCP tools over Streamable HTTP and
+evidence set. The Node server exposes six MCP tools over Streamable HTTP and
 stdio plus a REST API. The admin UI shows the store's structure, not just its
 counts: an entity graph, a timeline of the temporal hierarchy, a session
 inspector with entity spans, a retrieval trace for any query, an embedding
@@ -117,7 +117,8 @@ does not hand the current conversation back to itself.
 
 | Tool | What it does |
 | --- | --- |
-| `zeromem_recall` | `{query, top_k, exclude_session?, session?, since?, until?, detail, format?}` — evidence turns with score, role (`primary`/`supporting`) and, with `detail: full`, the route taken and each turn's sources; `format: text` returns one line per hit instead, for pasting into a prompt |
+| `zeromem_recall` | `{query, top_k, exclude_session?, session?, since?, until?, detail, format?, context?, max_chars?}` — evidence turns with score, role (`primary`/`supporting`) and, with `detail: full`, the route taken and each turn's sources; `format: text` returns one block per hit instead, for pasting into a prompt |
+| `zeromem_read_session` | `{session_id? \| around_turn?, before?, after?, limit?, offset?, format?}` — stored turns in the order they were said, either a whole session or a window centred on one turn; reports `total` and `truncated` |
 | `zeromem_remember` | `{session_id, turns[{speaker, text, ts?, uuid?}]}` — reports `indexed` / `duplicates` |
 | `zeromem_ingest` | Bulk JSON Lines, inline (`jsonl`) or from a file under the data directory (`path`) |
 | `zeromem_stats` | Counts (turns, sessions, entities, edges, windows, episodes, embeddings), the embedder in use and whether it is the fallback; `include_sessions` adds the session list |
@@ -128,6 +129,26 @@ entirely.
 
 A client holding the curator token also gets five `zeromem_curate_*` tools and
 the `zeromem_curate` prompt; see [Curation](#curation).
+
+### How recall answers
+
+A hit is one turn, and one turn is rarely the whole answer — the question that
+prompted it and the sentence that finished it are the turns either side.
+`context: N` attaches up to N same-session turns on each side of every hit, as
+`before` and `after` (and as `[before]` / `[after]` lines under `format: text`).
+Neighbours are **attached to** evidence, never ranked **with** it: `evidence` is
+identical with and without `context`, so a neighbour never takes a slot from a
+real hit, and a turn that is already ranked is not repeated as another hit's
+context. Hidden turns stay hidden, leaving a gap rather than being backfilled.
+
+`format: text` keeps a turn's line breaks — a numbered list stays a list — and
+cuts a turn only past `max_chars` (default `ZEROMEM_RECALL_TEXT_LIMIT`, 2000
+characters). A real cut is marked, and the marker names the call that returns the
+rest: `… [clipped: 2000 of 6120 characters — zeromem_read_session {around_turn:
+418}]`. That matters because a model handed a fragment with no marker concludes
+its memory is incomplete and goes looking elsewhere; `zeromem_read_session`
+never clips, since it is what the marker points at. `format: json` has never
+truncated.
 
 The same operations are on the REST API the UI uses (`/api/status`,
 `/api/sessions`, `/api/sessions/:id/turns`, `/api/recall`, `/api/recall/trace`,
@@ -140,6 +161,7 @@ The same operations are on the REST API the UI uses (`/api/status`,
 | `MCP_ZEROMEM_TOKEN` | — | Bearer token for `/mcp`. The HTTP server refuses to start without one unless `SECURE_LOCAL_NET=true` |
 | `SECURE_LOCAL_NET` | — | `true` disables auth: for a trusted network only |
 | `ZEROMEM_READ_ONLY` | `false` | Hide the write tools |
+| `ZEROMEM_RECALL_TEXT_LIMIT` | `2000` | Characters per turn before `format: text` clips and marks the cut; `max_chars` overrides it per call (100–20000) |
 | `MCP_ZEROMEM_CURATOR_TOKEN` | — | Bearer token for `/mcp` that adds the curator tools. Overrides a token set from the Settings page (see [Curation](#curation)) |
 | `ZEROMEM_CURATOR` | `false` | Stdio server only: serve the curator tools |
 | `DATA_DIR` | `/data` in the image, `./data` on the host | Where the store lives. Also exported to the engine as `ZEROMEM_HOME`; if both are set they must agree |
@@ -293,7 +315,7 @@ Settings → Curator holds all of it:
 
 - **The curator token.** Generate one (shown once) or paste your own. A request to
   `/mcp` bearing it gets the normal tools plus the curator surface; the normal token
-  never sees them, so an ordinary agent keeps its five-tool budget. The token opens
+  never sees them, so an ordinary agent keeps its six-tool budget. The token opens
   `/mcp` only, not the REST API. `MCP_ZEROMEM_CURATOR_TOKEN` overrides the stored one,
   and the page then says so and will not change it.
 - **Serve the curator tools to every client.** Off by default; on, every `/mcp`

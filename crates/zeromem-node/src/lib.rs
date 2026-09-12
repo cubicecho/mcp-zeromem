@@ -125,6 +125,9 @@ pub struct RecallOptions {
     /// Include turns curation hid; they come back flagged `hidden`.
     #[napi(js_name = "include_hidden")]
     pub include_hidden: Option<bool>,
+    /// Attach this many same-session turns either side of each hit; default
+    /// 0, capped at 10. They fill `before`/`after` and never join the ranking.
+    pub context: Option<u32>,
 }
 
 impl TryFrom<RecallOptions> for QueryOptions {
@@ -143,6 +146,7 @@ impl TryFrom<RecallOptions> for QueryOptions {
             until: o.until,
             detail,
             include_hidden: o.include_hidden,
+            context: o.context,
         })
     }
 }
@@ -295,6 +299,39 @@ pub struct CurationSelector {
     pub entity: Option<String>,
 }
 
+/// Which turns of a conversation to read: the whole session, or a window
+/// centred on one turn. Clamping lives in the engine so `zm` and this agree.
+#[napi(object)]
+#[derive(Default)]
+pub struct SessionWindowOptions {
+    /// Required unless `around_turn` names the turn to take the session from.
+    #[napi(js_name = "session_id")]
+    pub session_id: Option<String>,
+    /// Centre the window on this turn id — the id a recall hit carries.
+    #[napi(js_name = "around_turn")]
+    pub around_turn: Option<i64>,
+    /// With `around_turn`: turns before it; default 5.
+    pub before: Option<u32>,
+    /// With `around_turn`: turns after it; default 5.
+    pub after: Option<u32>,
+    /// Without `around_turn`: how many turns; default 50, at most 200.
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+impl From<SessionWindowOptions> for zeromem_core::SessionWindowOptions {
+    fn from(o: SessionWindowOptions) -> Self {
+        Self {
+            session_id: o.session_id,
+            around_turn: o.around_turn,
+            before: o.before,
+            after: o.after,
+            limit: o.limit,
+            offset: o.offset,
+        }
+    }
+}
+
 type Shared = Arc<Mutex<ZeroMem>>;
 
 #[napi]
@@ -374,6 +411,15 @@ impl Engine {
             zm.session_turns(&session_id, limit, offset).map(|s| serde_json::to_value(s).unwrap())
         })
         .await
+    }
+
+    /// One conversation in order: the whole session, or a window around one
+    /// turn. For expanding a recall hit that came back clipped or reads like
+    /// a fragment.
+    #[napi(ts_return_type = "Promise<SessionWindow>")]
+    pub async fn session_window(&self, opts: SessionWindowOptions) -> Result<serde_json::Value> {
+        let opts: zeromem_core::SessionWindowOptions = opts.into();
+        with_engine(&self.inner, move |zm| zm.session_window(&opts).map(|w| serde_json::to_value(w).unwrap())).await
     }
 
     /// Delete a session's turns; resolves to how many were removed.

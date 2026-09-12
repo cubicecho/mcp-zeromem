@@ -43,7 +43,9 @@ little recall quality. A wrong one hides something a person later needs.
 
 3. **Judge each candidate.** A candidate is a lead, not a verdict, and its `suggested` action is only
    a starting point. When the clipped text is not enough, read the full turns and their neighbours
-   with `zeromem_curate_read {turn_ids}` or `{session_id}`.
+   with `zeromem_curate_read {turn_ids}` or `{session_id}`. To see a candidate in the order it was
+   said — what prompted it and what followed — `zeromem_read_session {around_turn}` reads a window
+   around one turn, which is often what settles a duplicate from a repeat.
    - **Duplicates.** Hide the later copy only when it adds nothing: the same fact with the same values.
      A repeated question with a different answer is not a duplicate. Neither is the same sentence in
      two sessions that go on to say different things.

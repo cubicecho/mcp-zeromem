@@ -27,6 +27,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     port: 3000,
     authToken: 'test-token',
     readOnly: false,
+    recallTextLimit: 2000,
     embedder: 'hash',
     allowEmbedderSwitch: false,
     remoteEmbedder: null,

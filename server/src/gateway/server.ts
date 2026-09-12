@@ -9,6 +9,7 @@ import { curateTools } from './tools/curate.ts';
 import { forgetTools } from './tools/forget.ts';
 import { recallTools } from './tools/recall.ts';
 import { rememberTools } from './tools/remember.ts';
+import { sessionTools } from './tools/session.ts';
 import { statsTools } from './tools/stats.ts';
 
 export interface GatewayDeps {
@@ -22,13 +23,18 @@ export interface GatewayDeps {
  * Every tool this server serves, after the read-only gate.
  *
  * The listing is sent to the model before every request, so the surface stays
- * small and deliberate; see the plan for the five-tool budget. The curator's
+ * small and deliberate; see the plan for the six-tool budget. The curator's
  * tools are added only for the curator scope.
+ *
+ * `zeromem_read_session` is a sixth tool rather than a mode of recall: a model
+ * holding a clipped hit has to find the way to the rest of it, and it does that
+ * by name in the listing.
  */
 export function allTools(deps: GatewayDeps): ToolDefinition[] {
   const { engine, config } = deps;
   const tools = [
     ...recallTools(engine, config),
+    ...sessionTools(engine),
     ...rememberTools(engine, config),
     ...statsTools(engine),
     ...forgetTools(engine),

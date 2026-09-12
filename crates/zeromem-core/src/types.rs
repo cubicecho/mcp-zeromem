@@ -92,6 +92,57 @@ pub struct SessionSummary {
     pub last_ts: i64,
 }
 
+/// Most turns one session read returns, however it is asked for.
+pub const SESSION_WINDOW_MAX_TURNS: u32 = 200;
+/// Turns a whole-session read returns when it names no limit.
+pub const SESSION_WINDOW_DEFAULT_TURNS: u32 = 50;
+/// Turns either side of the anchor when `around_turn` names no count.
+pub const SESSION_WINDOW_DEFAULT_SIDE: u32 = 5;
+
+/// What a session read asks for: a whole session from `offset`, or a window
+/// centred on `around_turn` — the turn id a recall hit carries, so an agent
+/// holding a clipped or fragmentary hit can read what surrounds it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionWindowOptions {
+    /// Required unless `around_turn` names the turn to take the session from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Centre the window on this turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub around_turn: Option<i64>,
+    /// With `around_turn`: turns before it. Default
+    /// [`SESSION_WINDOW_DEFAULT_SIDE`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<u32>,
+    /// With `around_turn`: turns after it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<u32>,
+    /// Without `around_turn`: turns from `offset`. Default
+    /// [`SESSION_WINDOW_DEFAULT_TURNS`], capped at
+    /// [`SESSION_WINDOW_MAX_TURNS`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
+/// A session read. `total` and `truncated` are what let a caller page on
+/// instead of guessing whether it saw the whole conversation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionWindow {
+    pub session_id: String,
+    pub turns: Vec<Turn>,
+    /// The anchor, when `around_turn` asked for one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub around_turn: Option<i64>,
+    /// Turns in the whole session.
+    pub total: u32,
+    /// Where the first returned turn sits in the session, in `ts, id` order.
+    pub offset: u32,
+    /// The cap cut this short; page on with `offset`.
+    pub truncated: bool,
+}
+
 /// Counts an operator looks at first. `generation` increments on every
 /// delete, which is what invalidates derived indexes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -593,6 +593,67 @@ impl ZeroMem {
         self.store.session_turns(session_id, limit, offset)
     }
 
+    /// One conversation in order: the whole session from `offset`, or a
+    /// window centred on `around_turn` — the turn id a recall hit carries,
+    /// so an agent holding a clipped or fragmentary hit can read what
+    /// surrounds it instead of going looking elsewhere.
+    ///
+    /// `refresh()` first, like every other read: expanding a hit in a
+    /// session a hook is still writing is exactly when this gets asked.
+    /// `truncated` means the answer is not the whole session, so a caller
+    /// can page on with `offset` rather than guess.
+    pub fn session_window(&mut self, opts: &SessionWindowOptions) -> Result<SessionWindow> {
+        self.refresh()?;
+        match opts.around_turn {
+            Some(id) => {
+                let anchor = self.store.turn(id)?.ok_or_else(|| Error::InvalidTurn(format!("no turn {id}")))?;
+                if let Some(session_id) = opts.session_id.as_deref().filter(|s| *s != anchor.session_id) {
+                    return Err(Error::InvalidTurn(format!(
+                        "turn {id} is in session {}, not {session_id}",
+                        anchor.session_id
+                    )));
+                }
+                // The whole window, anchor included, stays within the cap.
+                let before = opts.before.unwrap_or(SESSION_WINDOW_DEFAULT_SIDE).min(SESSION_WINDOW_MAX_TURNS - 1);
+                let after =
+                    opts.after.unwrap_or(SESSION_WINDOW_DEFAULT_SIDE).min(SESSION_WINDOW_MAX_TURNS - 1 - before);
+                let (earlier, later) = self.store.session_neighbours(&anchor, before, after)?;
+                let offset = self.store.session_turn_rank(earlier.first().unwrap_or(&anchor))?;
+                let total = self.store.count_session_turns(&anchor.session_id)?;
+                let session_id = anchor.session_id.clone();
+                let mut turns = earlier;
+                turns.push(anchor);
+                turns.extend(later);
+                Ok(SessionWindow {
+                    truncated: turns.len() < total as usize,
+                    session_id,
+                    around_turn: Some(id),
+                    turns,
+                    total,
+                    offset,
+                })
+            }
+            None => {
+                let session_id = opts
+                    .session_id
+                    .clone()
+                    .ok_or_else(|| Error::InvalidTurn("give session_id or around_turn".into()))?;
+                let limit = opts.limit.unwrap_or(SESSION_WINDOW_DEFAULT_TURNS).clamp(1, SESSION_WINDOW_MAX_TURNS);
+                let offset = opts.offset.unwrap_or(0);
+                let turns = self.store.session_turns(&session_id, limit, offset)?;
+                let total = self.store.count_session_turns(&session_id)?;
+                Ok(SessionWindow {
+                    truncated: offset as usize + turns.len() < total as usize,
+                    session_id,
+                    around_turn: None,
+                    turns,
+                    total,
+                    offset,
+                })
+            }
+        }
+    }
+
     pub fn delete_session(&mut self, session_id: &str) -> Result<u32> {
         let removed = self.store.delete_session(session_id)?;
         self.refresh()?;
