@@ -33,12 +33,13 @@ use crate::types::{
     EdgeRow, EmbeddingRow, EntityStat, IngestOutcome, MentionRow, SegmentRow, SessionSummary, Turn, TurnInput, TurnKind,
 };
 
-/// v4 added curation (`turns.kind`, the flag, alias, blocklist and note
+/// v5 changed extraction (paths, code symbols and env vars became kinds),
+/// so a store below it re-derives its entity tables once on open; v4 added curation (`turns.kind`, the flag, alias, blocklist and note
 /// tables, the action log); v3 gave `embeddings` an insertion sequence so
 /// backfilled vectors are picked up by readers; v2 was the last change to a
 /// derived table.
-pub const SCHEMA_VERSION: i64 = 4;
-const REBUILD_BELOW: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 5;
+const REBUILD_BELOW: i64 = 5;
 const DB_FILE: &str = "zeromem.db";
 
 /// One stored vector with its position in insertion order.
@@ -1547,7 +1548,7 @@ mod tests {
             }
         }
         let Opened { store, needs_rebuild } = Store::open(dir.path()).unwrap();
-        assert!(!needs_rebuild, "v2 → v4 reshapes one table and adds curation; nothing derived changes");
+        assert!(needs_rebuild, "v5 changed extraction, so every older store re-derives its entities");
         assert_eq!(store.meta_i64("schema_version").unwrap(), SCHEMA_VERSION);
         assert!(store.all_turns().unwrap().iter().all(|t| t.kind == TurnKind::Turn), "old turns are ordinary turns");
         assert_eq!(store.generation().unwrap(), 4);

@@ -1,5 +1,5 @@
-//! Entity extraction with no model: names, dates and quantities found by
-//! shape. This is what the entity graph and the entity view of retrieval are
+//! Entity extraction with no model: names, dates, quantities, paths, code
+//! symbols and env vars found by shape. This is what the entity graph and the entity view of retrieval are
 //! built from, so it errs toward precision — a missed name costs one edge, a
 //! false one pollutes the graph for every turn that shares the word.
 //!
@@ -19,14 +19,32 @@ pub enum EntityKind {
     Date,
     /// Money, percentages, versions, or a number with a unit.
     Quantity,
+    /// A file path: `server/src/engine/embed-worker.ts`, `./run.sh`.
+    Path,
+    /// A code symbol: `quill::billing::flush`, `rebuild_aggregates`, `refresh()`.
+    Symbol,
+    /// An environment variable: `ZEROMEM_HOME`, `HERON_LEDGER_URL`.
+    Env,
 }
 
 impl EntityKind {
+    pub const ALL: [EntityKind; 6] = [
+        EntityKind::Name,
+        EntityKind::Date,
+        EntityKind::Quantity,
+        EntityKind::Path,
+        EntityKind::Symbol,
+        EntityKind::Env,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             EntityKind::Name => "name",
             EntityKind::Date => "date",
             EntityKind::Quantity => "quantity",
+            EntityKind::Path => "path",
+            EntityKind::Symbol => "symbol",
+            EntityKind::Env => "env",
         }
     }
 
@@ -35,6 +53,9 @@ impl EntityKind {
             "name" => Some(EntityKind::Name),
             "date" => Some(EntityKind::Date),
             "quantity" => Some(EntityKind::Quantity),
+            "path" => Some(EntityKind::Path),
+            "symbol" => Some(EntityKind::Symbol),
+            "env" => Some(EntityKind::Env),
             _ => None,
         }
     }
@@ -173,9 +194,158 @@ fn is_acronym(word: &str) -> bool {
 /// Connectors allowed inside a multi-word name when both sides are capitalised.
 const CONNECTORS: &[&str] = &["of", "de", "van", "von", "der", "and", "&", "the"];
 
-pub fn extract(text: &str) -> Vec<Mention> {
-    let ws = words(text);
+/// File extensions that make a slash-free token a path (`Cargo.toml`) or a
+/// one-slash token one (`src/lib.rs`, where `and/or` is not).
+const EXTENSIONS: &[&str] = &[
+    "c", "cc", "cjs", "cpp", "css", "go", "h", "html", "java", "js", "json", "jsonl", "jsx", "kt", "lock", "md", "mjs",
+    "py", "rb", "rs", "sh", "sql", "swift", "toml", "ts", "tsx", "txt", "yaml", "yml",
+];
+
+fn is_ident(part: &str) -> bool {
+    let mut chars = part.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn has_extension(segment: &str) -> bool {
+    segment
+        .rsplit_once('.')
+        .is_some_and(|(stem, ext)| !stem.is_empty() && EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+/// `[A-Z][A-Z0-9]*` joined by `_`, at least two parts, with an optional
+/// `=value` that is not part of the key: `ZEROMEM_HOME`, `TIMEOUT_MS=5000`.
+fn env_var(token: &str) -> Option<&str> {
+    let name = token.split_once('=').map_or(token, |(name, _)| name);
+    let mut parts = name.split('_');
+    let first = parts.next()?;
+    let upper = |p: &str| !p.is_empty() && p.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    (first.starts_with(|c: char| c.is_ascii_uppercase()) && upper(first) && name.contains('_') && parts.all(upper))
+        .then_some(name)
+}
+
+/// `a::b::c`, `snake_case`, or any identifier called as `name()`. The `()`
+/// is not part of the key, so `refresh()` and `refresh` in a later turn are
+/// one entity only when both are called — a bare `refresh` is a word.
+fn symbol(token: &str) -> Option<&str> {
+    let name = token.strip_suffix("()").unwrap_or(token);
+    let called = name.len() < token.len();
+    let qualified = name.contains("::") && name.split("::").all(is_ident);
+    let snake = is_ident(name)
+        && name.contains('_')
+        && name.chars().any(|c| c.is_ascii_lowercase())
+        && !name.starts_with('_')
+        && !name.ends_with('_');
+    let dotted_call = called && name.split('.').all(is_ident);
+    (qualified || snake || dotted_call).then_some(name)
+}
+
+/// A token with a slash that reads as a path, not `and/or` or `24/7`: it is
+/// rooted (`/`, `./`, `../`, `~/`), or has two slashes, or ends in a known
+/// extension. A bare `Cargo.toml` counts too. URLs do not; a trailing
+/// `:line[:col]` is dropped.
+fn path(token: &str) -> Option<&str> {
+    if token.contains("://") {
+        return None;
+    }
+    let mut name = token;
+    for _ in 0..2 {
+        if let Some((head, tail)) = name.rsplit_once(':') {
+            if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) {
+                name = head;
+            }
+        }
+    }
+    let segment_ok = |seg: &str| seg.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '@' | '~'));
+    let segments: Vec<&str> = name.trim_start_matches('/').trim_end_matches('/').split('/').collect();
+    if segments.iter().any(|seg| seg.is_empty() || !segment_ok(seg)) {
+        return None;
+    }
+    if !segments.iter().any(|seg| seg.chars().any(|c| c.is_alphabetic())) {
+        return None;
+    }
+    let last = segments.last().copied().unwrap_or_default();
+    let slashes = name.matches('/').count();
+    let rooted = ["/", "./", "../", "~/"].iter().any(|r| name.starts_with(r));
+    // `Node.js` and `Next.js` are products; `index.js` is a file.
+    let product = slashes == 0 && last.ends_with(".js") && last.starts_with(char::is_uppercase);
+    let shaped =
+        if slashes == 0 { has_extension(last) && !product } else { rooted || slashes >= 2 || has_extension(last) };
+    // A bare `v2.1` or `e.g` is not a file, and a bare name needs a real stem.
+    (shaped && !(slashes == 0 && last.split('.').next().is_some_and(|s| s.len() < 2))).then_some(name)
+}
+
+/// Paths, symbols and env vars, found on whitespace-separated tokens before
+/// `words()` sees the text: `words()` splits on `_` and `:` (and must, since
+/// it also feeds the hash embedder), so a symbol would otherwise arrive in
+/// pieces and an env var as a run of acronyms.
+fn technical(text: &str) -> Vec<Mention> {
     let mut out = Vec::new();
+    let mut offset = 0;
+    for raw in text.split_inclusive(char::is_whitespace) {
+        let start_of_raw = offset;
+        offset += raw.len();
+        let token = raw.trim_end();
+        let lead = token.len() - token.trim_start_matches(['(', '[', '{', '"', '\'', '`', '<', '*']).len();
+        // Trailing punctuation goes, and so does any `)` that closes
+        // something opened before the token — but `refresh()` keeps its own.
+        let mut trimmed = &token[lead..];
+        loop {
+            let before = trimmed.len();
+            trimmed = trimmed.trim_end_matches([',', ';', '.', '!', '?', ']', '}', '"', '\'', '`', '>', '*', ':']);
+            if trimmed.ends_with(')') && trimmed.matches(')').count() > trimmed.matches('(').count() {
+                trimmed = &trimmed[..trimmed.len() - 1];
+            }
+            if trimmed.len() == before {
+                break;
+            }
+        }
+        if trimmed.is_empty() {
+            continue;
+        }
+        let start = start_of_raw + lead;
+        let found = if let Some(name) = env_var(trimmed) {
+            Some((EntityKind::Env, name))
+        } else if let Some(name) = path(trimmed) {
+            Some((EntityKind::Path, name))
+        } else {
+            symbol(trimmed).map(|name| (EntityKind::Symbol, name))
+        };
+        if let Some((kind, name)) = found {
+            out.push(Mention {
+                key: name.to_lowercase(),
+                kind,
+                surface: name.to_string(),
+                start,
+                end: start + name.len(),
+            });
+        }
+    }
+    out
+}
+
+pub fn extract(text: &str) -> Vec<Mention> {
+    let mut out = technical(text);
+    let all = words(text);
+    // The words between technical tokens, a run each, so a name or a date
+    // never spans one: `Maya HERON_URL Okafor` is not a name.
+    let mut runs: Vec<Vec<Word<'_>>> = vec![Vec::new()];
+    for w in all {
+        if out.iter().any(|m| w.start < m.end && m.start < w.end) {
+            runs.push(Vec::new());
+        } else {
+            runs.last_mut().expect("never empty").push(w);
+        }
+    }
+    for ws in &runs {
+        shaped(text, ws, &mut out);
+    }
+    out.sort_by_key(|m| m.start);
+    out
+}
+
+/// Names, dates and quantities in one run of words.
+fn shaped(text: &str, ws: &[Word<'_>], out: &mut Vec<Mention>) {
     let mut i = 0;
     while i < ws.len() {
         let w = &ws[i];
@@ -229,7 +399,6 @@ pub fn extract(text: &str) -> Vec<Mention> {
         }
         i += 1;
     }
-    out
 }
 
 fn is_name_token(w: &Word<'_>) -> bool {
@@ -344,6 +513,56 @@ mod tests {
     #[test]
     fn spans_index_the_source() {
         let text = "Tomasz Wierzbicki pinged me about Project Basalt.";
+        for m in extract(text) {
+            assert_eq!(&text[m.start..m.end], m.surface);
+        }
+    }
+
+    #[test]
+    fn paths_symbols_and_env_vars_are_whole_tokens() {
+        assert_eq!(
+            keys("the embed worker lives in `server/src/engine/embed-worker.ts:42` now, see Cargo.toml."),
+            vec![
+                ("server/src/engine/embed-worker.ts".into(), EntityKind::Path),
+                ("cargo.toml".into(), EntityKind::Path)
+            ]
+        );
+        assert_eq!(
+            keys("set ZEROMEM_HOME=/data and HERON_LEDGER_URL, then call quill::billing::flush or rebuild_aggregates."),
+            vec![
+                ("zeromem_home".into(), EntityKind::Env),
+                ("heron_ledger_url".into(), EntityKind::Env),
+                ("quill::billing::flush".into(), EntityKind::Symbol),
+                ("rebuild_aggregates".into(), EntityKind::Symbol),
+            ]
+        );
+        assert_eq!(keys("(it is in refresh())."), vec![("refresh".into(), EntityKind::Symbol)]);
+        // The same key whichever way it is typed, so a question finds it.
+        assert_eq!(keys("HERON_LEDGER_URL")[0].0, keys("heron_ledger_url")[0].0);
+    }
+
+    #[test]
+    fn slashes_and_dots_in_prose_are_not_paths() {
+        for text in
+            ["and/or", "24/7", "I/O", "e.g.", "v2.1", "https://example.com/a/b.rs", "3/14", "Node.js", "refresh"]
+        {
+            assert!(keys(text).iter().all(|(_, k)| !matches!(k, EntityKind::Path | EntityKind::Symbol)), "{text}");
+        }
+        assert_eq!(keys("TODO: ship it"), vec![("todo".into(), EntityKind::Name)], "an acronym is not an env var");
+    }
+
+    #[test]
+    fn a_name_does_not_run_across_a_technical_token() {
+        let text = "Maya HERON_URL Okafor pinged me about src/heron/ledger.rs today.";
+        assert_eq!(
+            keys(text),
+            vec![
+                ("maya".into(), EntityKind::Name),
+                ("heron_url".into(), EntityKind::Env),
+                ("okafor".into(), EntityKind::Name),
+                ("src/heron/ledger.rs".into(), EntityKind::Path),
+            ]
+        );
         for m in extract(text) {
             assert_eq!(&text[m.start..m.end], m.surface);
         }

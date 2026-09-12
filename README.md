@@ -385,8 +385,8 @@ Review a run on the Curation page. Undoing a run restores recall to what it was.
 
 ## How recall works
 
-Ingest writes, in one transaction, the turn, its entity spans (names, dates
-and quantities found by shape, no model), its FTS5 tokens and its embedding —
+Ingest writes, in one transaction, the turn, its entity spans (names, dates,
+quantities, paths, code symbols and env vars found by shape, no model), its FTS5 tokens and its embedding —
 or no embedding, when the writer has no dense view; every read then embeds
 one batch of the backlog first, and the server's worker drains the rest.
 The entity co-occurrence graph and the temporal hierarchy (sessions → windows

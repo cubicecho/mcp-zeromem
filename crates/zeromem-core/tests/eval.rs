@@ -49,8 +49,9 @@ struct Floor {
 /// sit below `large`'s.
 ///
 /// A third of its questions name a technical token (`what is
-/// HERON_BILLING_SERVICE_URL set to?`). Those are easy on their own; what
-/// they cost is the owner questions, because `_` and `::` split
+/// HERON_BILLING_SERVICE_URL set to?`), which the path, symbol and env kinds
+/// in `entities` route through the entity view whole. What they still cost
+/// is the owner questions: the lexical index splits
 /// `heron::billing_service::flush` into the very words `who owns the billing
 /// service on heron?` asks with.
 const FLOORS: &[Floor] = &[
@@ -58,8 +59,8 @@ const FLOORS: &[Floor] = &[
     Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.76, mrr: 0.84, ndcg_at_5: 0.69 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.82, mrr: 0.86, ndcg_at_5: 0.74 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.79, mrr: 0.87, ndcg_at_5: 0.74 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.91, ndcg_at_5: 0.80 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {

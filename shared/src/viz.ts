@@ -12,7 +12,7 @@ import { storedTurnSchema, turnCurationSchema } from './memory.ts';
 const count = z.number().int().nonnegative();
 const ts = z.number().int();
 
-export const entityKindSchema = z.enum(['name', 'date', 'quantity']);
+export const entityKindSchema = z.enum(['name', 'date', 'quantity', 'path', 'symbol', 'env']);
 export type EntityKind = z.infer<typeof entityKindSchema>;
 
 // --- entity graph -----------------------------------------------------------

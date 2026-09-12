@@ -399,7 +399,7 @@ fn supersession(store: &Store, t: &ScanTurn, cutoff: i64) -> Result<Option<Candi
         for row in rows {
             let (pid, ptext) = row?;
             let pkeys = keyed(store, pid)?;
-            let changed = [EntityKind::Name, EntityKind::Date, EntityKind::Quantity].into_iter().find_map(|kind| {
+            let changed = EntityKind::ALL.into_iter().find_map(|kind| {
                 let now = values_of(&keys, subject, kind);
                 let before = values_of(&pkeys, subject, kind);
                 (!now.is_empty() && !before.is_empty() && now.is_disjoint(&before)).then(|| {

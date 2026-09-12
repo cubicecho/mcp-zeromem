@@ -214,7 +214,7 @@ export interface QueryTrace {
 
 // --- visualisation reads -------------------------------------------------------
 
-export type EntityKind = 'name' | 'date' | 'quantity';
+export type EntityKind = 'name' | 'date' | 'quantity' | 'path' | 'symbol' | 'env';
 
 export interface GraphNode {
   entity: string;
