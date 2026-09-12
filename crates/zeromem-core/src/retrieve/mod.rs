@@ -76,6 +76,12 @@ pub const DEFAULT_TOP_K: u32 = 5;
 pub const MAX_TOP_K: u32 = 50;
 /// How many candidates each view nominates.
 pub const VIEW_LIMIT: usize = 50;
+
+/// A question's n-gram only resolves to an entity the store knows if that
+/// key stays under this share of the corpus. Chosen so a project name a
+/// third of the turns mention still resolves, while the shape rules' junk
+/// (`see`, `todo`) does not.
+pub const MAX_ENTITY_SHARE: f64 = 0.4;
 /// Most neighbours per side, per hit.
 pub const MAX_CONTEXT: u32 = 10;
 /// Most neighbour turns across one answer, filled in rank order, so a large
@@ -207,7 +213,8 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let started = std::time::Instant::now();
     let top_k = opts.top_k.unwrap_or(DEFAULT_TOP_K).clamp(1, MAX_TOP_K) as usize;
     let detail = opts.detail.unwrap_or_default();
-    let profile = profile::profile(query);
+    let mut profile = profile::profile(query);
+    resolve_known_entities(ctx.store, &mut profile)?;
     let plan = route::plan(&profile, ctx);
     let include_hidden = opts.include_hidden.unwrap_or(false);
     let flags = ctx.store.curation_flags()?;
@@ -510,6 +517,20 @@ fn nominate(
             ctx.store.recent_turn_ids(VIEW_LIMIT, include_hidden)?.into_iter().map(|id| (id, 1.0)).collect()
         }
     })
+}
+
+/// Add the entity keys the store already holds that the question's shape
+/// rules missed, so recall does not depend on whether the user capitalised
+/// their question. Discriminative keys only: see `Store::known_entities`.
+fn resolve_known_entities(store: &Store, profile: &mut Profile) -> Result<()> {
+    let cap = (store.count_turns()? as f64 * MAX_ENTITY_SHARE) as u32;
+    let candidates = profile::candidate_keys(&profile.text, profile::MAX_KEY_WORDS);
+    for key in store.known_entities(&candidates, cap.max(1))? {
+        if !profile.entities.contains(&key) {
+            profile.entities.push(key);
+        }
+    }
+    Ok(())
 }
 
 /// Turns mentioning the question's entities score one per distinct match;

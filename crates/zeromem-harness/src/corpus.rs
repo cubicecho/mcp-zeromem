@@ -55,7 +55,89 @@ pub struct Corpus {
     pub queries: Vec<Query>,
 }
 
-/// What to generate. Two are committed; see [`SMALL`] and [`LARGE`].
+/// How the turns are written. The facts, the labels and the queries are the
+/// same either way; only the surface form differs, which is the point — the
+/// entity extractor reads shape, so the register it is handed decides how
+/// much of it works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Register {
+    /// Tidy sentences with proper nouns capitalised, as a person writing
+    /// notes for someone else. What the first two corpora are written in.
+    Prose,
+    /// What an agent's transcript actually looks like: mostly lowercase, with
+    /// file paths, qualified symbols and env vars left as typed, and chatter
+    /// that opens on a capital which is not a name.
+    Transcript,
+}
+
+impl Register {
+    /// Applied to every turn as it is emitted. Pure, so it adds no draw to
+    /// the generator's stream.
+    fn render(self, text: &str) -> String {
+        match self {
+            Register::Prose => text.to_string(),
+            Register::Transcript => lowercase_prose(text, KEEP_CAPITAL_IN),
+        }
+    }
+
+    /// Applied to every question. A user types their question lowercase even
+    /// when the same user capitalised the name while stating the fact, and
+    /// that asymmetry is the whole point of the transcript corpus.
+    fn render_question(self, text: &str) -> String {
+        match self {
+            Register::Prose => text.to_string(),
+            Register::Transcript => lowercase_prose(text, 0),
+        }
+    }
+}
+
+/// One in this many capitalised words keeps its capital in the transcript
+/// register. Not zero, because a real session is not uniformly lowercase: a
+/// name is typed `Maya` sometimes and `maya` the rest of the time, so the
+/// store learns the key from the capitalised mentions and is then blind to
+/// the lowercase ones. Not one, because that is just prose. Three leaves
+/// roughly a third of each entity's mentions within reach of the shape
+/// rules, which is the asymmetry the query side has to close.
+const KEEP_CAPITAL_IN: u64 = 3;
+
+/// Lowercase the prose and leave the technical tokens as written: anything
+/// holding a `/`, `_` or `:`, and anything with an inner capital or a digit,
+/// is how it was typed. So `Maya Okafor` flattens to `maya okafor` while
+/// `server/src/engine/embed-worker.ts`, `ZEROMEM_EMBEDDING_URL`,
+/// `retrieve::hand_over`, `TODO:` and `$230k` survive intact.
+fn lowercase_prose(text: &str, keep_capital_in: u64) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for (i, word) in text.split(' ').enumerate() {
+        let technical =
+            word.contains(['/', '_', ':']) || word.chars().skip(1).any(|c| c.is_uppercase() || c.is_ascii_digit());
+        let capitalised = word.starts_with(char::is_uppercase);
+        if technical || (capitalised && keeps_capital(word, i, keep_capital_in)) {
+            out.push(word.to_string());
+        } else {
+            out.push(word.to_lowercase());
+        }
+    }
+    out.join(" ")
+}
+
+/// A pure, stable coin: the same word in the same position of a turn is
+/// always cased the same way, so the corpus stays a function of the seed
+/// alone and this takes no draw from the generator's stream. FNV-1a over
+/// the lowercased word and its position.
+fn keeps_capital(word: &str, position: usize, keep_capital_in: u64) -> bool {
+    if keep_capital_in == 0 {
+        return false;
+    }
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in word.to_lowercase().bytes().chain(position.to_le_bytes()) {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h % keep_capital_in == 0
+}
+
+/// What to generate. Three are committed; see [`SMALL`], [`LARGE`] and
+/// [`TRANSCRIPT`].
 #[derive(Debug, Clone, Copy)]
 pub struct Profile {
     pub name: &'static str,
@@ -63,16 +145,40 @@ pub struct Profile {
     pub sessions: usize,
     /// Inclusive bounds on the number of fact statements per session.
     pub facts_per_session: (u64, u64),
+    pub register: Register,
 }
 
 /// ~50 turns: enough for a golden snapshot a human can read.
-pub const SMALL: Profile = Profile { name: "small", seed: 0x5EED_0000_0001, sessions: 5, facts_per_session: (2, 4) };
+pub const SMALL: Profile = Profile {
+    name: "small",
+    seed: 0x5EED_0000_0001,
+    sessions: 5,
+    facts_per_session: (2, 4),
+    register: Register::Prose,
+};
 
 /// ~5k turns across a few hundred sessions: enough that the graph, the
 /// timeline and the lexical index all have real structure to get wrong.
-pub const LARGE: Profile = Profile { name: "large", seed: 0x5EED_0000_0002, sessions: 325, facts_per_session: (3, 7) };
+pub const LARGE: Profile = Profile {
+    name: "large",
+    seed: 0x5EED_0000_0002,
+    sessions: 325,
+    facts_per_session: (3, 7),
+    register: Register::Prose,
+};
 
-pub const PROFILES: &[Profile] = &[SMALL, LARGE];
+/// The same world in the register an agent's memory is actually written in.
+/// Sized like `LARGE` so the two are comparable row by row on the Eval page:
+/// the gap between them is what the extractor loses to case.
+pub const TRANSCRIPT: Profile = Profile {
+    name: "transcript",
+    seed: 0x5EED_0000_0003,
+    sessions: 325,
+    facts_per_session: (3, 7),
+    register: Register::Transcript,
+};
+
+pub const PROFILES: &[Profile] = &[SMALL, LARGE, TRANSCRIPT];
 
 pub fn generate(profile: &Profile) -> Corpus {
     Generator::new(profile).run()
@@ -230,6 +336,24 @@ const FILLER: &[&str] = &[
     "{person} is out this week, so the {component} work waits.",
     "Coffee with {person} turned into an hour on {project}.",
     "Still waiting on feedback from {person} about the {project} plan.",
+];
+
+/// Chatter in the shape the [`Register::Transcript`] corpus adds on top of
+/// [`FILLER`]: paths, qualified symbols, env vars and pasted output. It
+/// answers no query either, so a mention found in one of these is a false
+/// positive that costs entity-view precision — which is the whole reason
+/// these turns are here.
+const DEV_FILLER: &[&str] = &[
+    "moved the {component} handler into services/{slug}/src/handler.ts today.",
+    "TODO: the {slug}_worker retry loop still double-counts on timeout.",
+    "See {slug}::rebuild_aggregates for why the {component} numbers drifted.",
+    "set {ENV}_URL to the box in the corner and the {component} came back.",
+    "the {slug} tests pass locally and fail in CI, {component} again.",
+    "$ cargo test -p {slug} --test {component_slug}\n    Finished in 4.2s, 0 failed",
+    "reading through packages/{slug}/README.md, the {component} section is stale.",
+    "{ENV}_TIMEOUT_MS=5000 is too tight for the {component} on a cold start.",
+    "Noted. the {slug} migration needs a backfill before the {component} cutover.",
+    "grep -rn '{slug}' src/ turns up the {component} in four places.",
 ];
 
 // --- facts -----------------------------------------------------------------
@@ -506,6 +630,11 @@ impl<'p> Generator<'p> {
     }
 
     fn filler(&mut self, project: usize) -> String {
+        // The draw sits inside the register test so the prose corpora keep
+        // the stream they were generated with; see `fixtures_are_fresh`.
+        if self.profile.register == Register::Transcript && self.rng.chance(0.45) {
+            return self.dev_filler(project);
+        }
         let template = *self.rng.pick(FILLER);
         let person = *self.rng.pick(PEOPLE);
         let mut person2 = *self.rng.pick(PEOPLE);
@@ -527,6 +656,20 @@ impl<'p> Generator<'p> {
             .replace("{tool}", tool)
     }
 
+    /// [`DEV_FILLER`] with the world's words slugified into the shapes a
+    /// transcript carries them in: `edge cache` becomes `edge-cache` in a
+    /// path and `EDGE_CACHE` in an env var.
+    fn dev_filler(&mut self, project: usize) -> String {
+        let template = *self.rng.pick(DEV_FILLER);
+        let component = *self.rng.pick(COMPONENTS);
+        let slug = PROJECTS[project].to_lowercase();
+        template
+            .replace("{component_slug}", &component.replace(' ', "-"))
+            .replace("{component}", component)
+            .replace("{ENV}", &slug.to_uppercase())
+            .replace("{slug}", &slug)
+    }
+
     fn ack(&mut self, session_id: &str) {
         let ack = (*self.rng.pick(ACKS)).to_string();
         self.say(session_id, "assistant", ack);
@@ -541,6 +684,7 @@ impl<'p> Generator<'p> {
     fn say(&mut self, session_id: &str, speaker: &str, text: String) -> String {
         self.clock_ms += self.rng.range(15, 180) as i64 * 1_000;
         let uuid = self.uuid();
+        let text = self.profile.register.render(&text);
         self.turns.push(Turn {
             session_id: session_id.to_string(),
             speaker: speaker.to_string(),
@@ -616,7 +760,7 @@ impl<'p> Generator<'p> {
                     .to_string()
             }
         };
-        q.replace("{project}", project)
+        self.profile.register.render_question(&q.replace("{project}", project))
     }
 }
 
@@ -667,6 +811,54 @@ mod tests {
                 assert!(corpus.turns.iter().any(|t| t.session_id == q.latest_session_id));
             }
         }
+    }
+
+    #[test]
+    fn the_transcript_register_keeps_technical_tokens() {
+        let got = lowercase_prose(
+            "Maya Okafor moved it to server/src/engine/embed-worker.ts; See retrieve::hand_over. TODO: set ZEROMEM_EMBEDDING_URL, v2.1 costs $230k",
+            0,
+        );
+        assert_eq!(
+            got,
+            "maya okafor moved it to server/src/engine/embed-worker.ts; see retrieve::hand_over. TODO: set ZEROMEM_EMBEDDING_URL, v2.1 costs $230k"
+        );
+    }
+
+    #[test]
+    fn the_transcript_register_keeps_some_capitals_and_keeps_them_stably() {
+        let sentence = "Maya Okafor owns the billing service on Project Heron";
+        let mixed = lowercase_prose(sentence, KEEP_CAPITAL_IN);
+        assert_eq!(mixed, lowercase_prose(sentence, KEEP_CAPITAL_IN), "the coin has to be a function of the word");
+        let kept = mixed.split(' ').filter(|w| w.starts_with(char::is_uppercase)).count();
+        assert!(kept > 0 && kept < 7, "{mixed}");
+        assert_eq!(mixed.to_lowercase(), lowercase_prose(sentence, 0), "only the case may differ");
+    }
+
+    #[test]
+    fn the_transcript_corpus_is_mixed_case_and_asks_lowercase_questions() {
+        let corpus = generate(&TRANSCRIPT);
+        let (mut capitals, mut words) = (0usize, 0usize);
+        for turn in &corpus.turns {
+            for word in turn.text.split(' ') {
+                words += 1;
+                capitals += usize::from(word.starts_with(char::is_uppercase));
+            }
+        }
+        assert!(capitals * 5 < words, "capitalised words: {capitals}/{words}");
+        // Every question is typed the way a user types one, so a name the
+        // store learned from a capitalised mention is out of the shape
+        // rules' reach on the query side. That asymmetry is the corpus.
+        assert!(corpus.queries.iter().all(|q| q.query == q.query.to_lowercase()), "a question kept a capital");
+        // A name has to appear both ways, or there is nothing to resolve.
+        let both = |name: &str| {
+            corpus.turns.iter().any(|t| t.text.contains(name))
+                && corpus.turns.iter().any(|t| t.text.contains(&name.to_lowercase()))
+        };
+        assert!(both("Maya"), "maya okafor is only ever written one way");
+        // The prose corpora must not have moved.
+        assert_eq!(generate(&LARGE).turns, generate(&LARGE).turns);
+        assert!(generate(&LARGE).turns.iter().any(|t| t.text.contains("Project ")));
     }
 
     #[test]

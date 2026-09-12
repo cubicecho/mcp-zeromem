@@ -548,6 +548,10 @@ impl Store {
         }
         if entities_changed {
             store::rederive_entities(&tx)?;
+            // Every mention was rewritten, so a reader cannot keep its entity
+            // tables. `curation_seq` reloads the flag set alone; only
+            // `generation` tells the other processes to reload everything.
+            Store::bump_generation(&tx)?;
         } else {
             for session in &touched_sessions {
                 store::resegment(&tx, session)?;
@@ -636,8 +640,10 @@ impl Store {
                 store::resegment(&tx, session)?;
             }
         }
-        if deleted_notes {
-            // A deleted turn's id can be reused; readers must reload.
+        if entities_changed || deleted_notes {
+            // An alias or block undo rewrote every mention, and a deleted
+            // turn's id can be reused; either way readers must reload, not
+            // just take the flag set `curation_seq` carries.
             Store::bump_generation(&tx)?;
         }
         if !ids.is_empty() {

@@ -21,7 +21,7 @@ use zeromem_core::curation::{CurationAction, CurationOp, CuratorConfig};
 use zeromem_core::dense::remote::{RemoteSpec, DEFAULT_TIMEOUT_MS};
 use zeromem_core::dense::{self, EmbedderChoice};
 use zeromem_core::{Detail, OpenOptions, QueryOptions, ZeroMem};
-use zeromem_harness::corpus::{Profile, LARGE, SMALL};
+use zeromem_harness::corpus::{Profile, LARGE, SMALL, TRANSCRIPT};
 use zeromem_harness::eval::{self, Summary};
 
 struct Floor {
@@ -37,11 +37,23 @@ struct Floor {
 /// retrieval improves; never lower them without saying why in the commit.
 /// The ONNX rows run unless `ZEROMEM_SKIP_ONNX` is set (see
 /// `reference_vectors.rs` for where the model comes from).
+///
+/// `transcript` is the same facts written the way a real session is: mostly
+/// lowercase, paths and `::` symbols and env vars as typed, and each name
+/// capitalised only some of the time. So the store learns a key from the
+/// capitalised third of its mentions and the shape rules then find it in
+/// none of the questions — the asymmetry `retrieve::resolve_known_entities`
+/// exists to close, and the reason this profile is worth its fixtures. Its
+/// document side stays lossy either way (two mentions in three are missed),
+/// which is what an extractor change would have to fix and why these rows
+/// sit below `large`'s.
 const FLOORS: &[Floor] = &[
-    Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.85, mrr: 0.75, ndcg_at_5: 0.75 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.65, mrr: 0.80, ndcg_at_5: 0.60 },
-    Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.85, ndcg_at_5: 0.85 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.95, ndcg_at_5: 0.78 },
+    Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
+    Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.66 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.88, mrr: 0.95, ndcg_at_5: 0.80 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {

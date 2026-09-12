@@ -279,6 +279,34 @@ fn a_second_engine_follows_curation_without_reloading_vectors() {
 }
 
 #[test]
+fn an_alias_bumps_the_generation_so_a_second_engine_reloads_its_entities() {
+    let (dir, mut writer) = seeded();
+    let mut reader = reopen(&dir);
+    // The reader has to have loaded its entity tables before the alias lands.
+    assert!(!ranked(&mut reader, "who owns the billing service on Heron?", QueryOptions::default()).is_empty());
+    let generation = reader.stats().unwrap().generation;
+
+    let alias = act(CurationOp::Alias { alias: "maya".into(), canonical: "maya okafor".into() }, "same person");
+    writer.curate_apply("r", "test", &[alias], false).unwrap();
+    assert!(
+        writer.stats().unwrap().generation > generation,
+        "an alias re-derives every mention; that has to move the generation"
+    );
+    // `refresh` reads the stamp, so the reader picks the new mentions up
+    // without a restart — `curation_seq` alone would only reload the flags.
+    assert_eq!(reader.stats().unwrap().generation, writer.stats().unwrap().generation);
+    assert!(
+        reader.snapshot().unwrap().mentions.iter().all(|m| m.entity != "maya"),
+        "the reader is still serving the pre-alias mentions"
+    );
+
+    let undone = writer.curate_undo(&UndoTarget::Run("r".into()), "test").unwrap();
+    assert_eq!(undone.undone.len(), 1);
+    assert!(writer.stats().unwrap().generation > generation + 1, "undoing an alias re-derives them again");
+    assert_eq!(reader.stats().unwrap().generation, writer.stats().unwrap().generation);
+}
+
+#[test]
 fn the_limits_and_the_minimum_age_hold() {
     let (_dir, mut zm) = seeded();
     zm.ingest_turn(&TurnInput {

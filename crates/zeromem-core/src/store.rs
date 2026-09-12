@@ -652,6 +652,30 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// Which of `candidates` the store already holds as entity keys.
+    ///
+    /// Keys found in more than `max_turns` turns are discarded: one that
+    /// appears across most of the corpus does not narrow anything down, and
+    /// the junk the shape rules do produce (`see`, `todo`, `o`) is exactly
+    /// what sits up there. `entity_stats.entity` is the primary key, so this
+    /// is one indexed lookup however many candidates a question yields —
+    /// deliberately not `all_entity_stats`, which would put a full table
+    /// read on the recall path.
+    pub fn known_entities(&self, candidates: &[String], max_turns: u32) -> Result<Vec<String>> {
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = candidates.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT entity FROM entity_stats WHERE entity IN ({placeholders}) AND turns <= ?");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut args: Vec<rusqlite::types::Value> = candidates.iter().map(|c| c.clone().into()).collect();
+        args.push(i64::from(max_turns).into());
+        let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| r.get::<_, String>(0))?;
+        let found: std::collections::HashSet<String> = rows.collect::<rusqlite::Result<_>>()?;
+        // Back into the caller's order, which is longest n-gram first.
+        Ok(candidates.iter().filter(|c| found.contains(*c)).cloned().collect())
+    }
+
     /// Strongest co-occurring entities of `key`, most shared turns first.
     pub fn neighbours(&self, key: &str, limit: usize) -> Result<Vec<(String, u32)>> {
         let mut stmt = self.conn.prepare(
