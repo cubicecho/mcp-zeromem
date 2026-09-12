@@ -55,6 +55,11 @@ pub fn words(text: &str) -> Vec<Word<'_>> {
     out
 }
 
+/// `_` and `:` are deliberately not word characters. Paths, symbols and env
+/// vars are kept whole by `entities::technical` instead; joining `_` here
+/// was measured on the transcript corpus and cost hash-384 0.812/0.893/0.758
+/// -> 0.786/0.878/0.735 (recall@5 / MRR / nDCG@5), because the split lets
+/// `billing` in a question reach `billing_service` in a turn.
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '\'' | '-' | '.' | '$' | '%' | '#' | '/' | '+' | '’')
 }
