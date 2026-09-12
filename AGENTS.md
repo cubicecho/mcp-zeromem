@@ -130,14 +130,16 @@ and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is
 call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
 model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
 
-**Curation never deletes.** The curator (an outside agent; `docs/curator-playbook.md`, served as
-the `zeromem_curate` MCP prompt) hides, supersedes, aliases, blocks and writes notes, each an
-action in `curation_actions` with a reason, undone by replaying its inverse. Turns stay immutable;
-flags, aliases, the blocklist and note sources live beside them and cascade on turn delete. Payloads
-name turns by uuid, so the log survives a `rebuild`. Hide and supersede advance `meta.curation_seq`
-and `refresh()` reloads only the flag set, keeping the vector index; alias and block changes re-derive
-the entity tables and bump `generation`; a note is an ordinary turn (`kind = 'note'`) and undoing one
-deletes it and bumps `generation`. The settings (limits, token, exposure) are `meta.curator_config`,
+**Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
+verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,
+`_notes` and `_entities` one job each, and `server/src/gateway/prompts.ts` adds only a
+`## This run` section from the arguments and a read-only addendum) hides, supersedes, aliases,
+blocks and writes notes, each an action in `curation_actions` with a reason, undone by replaying
+its inverse. Turns stay immutable; flags, aliases, the blocklist and note sources live beside them
+and cascade on turn delete. Payloads name turns by uuid, so the log survives a `rebuild`. Hide and
+supersede advance `meta.curation_seq` and `refresh()` reloads only the flag set, keeping the vector
+index; alias and block changes re-derive the entity tables and bump `generation`; a note is an
+ordinary turn (`kind = 'note'`) and undoing one deletes it and bumps `generation`. The settings (limits, token, exposure) are `meta.curator_config`,
 changed on the Settings page; `MCP_ZEROMEM_CURATOR_TOKEN` overrides the stored token and the API only
 reports `token_source`. The curator token opens `/mcp` with the curator scope (the default tools
 plus the curator tools and prompt) and nothing under `/api`; `expose_to_all` (or `ZEROMEM_CURATOR`

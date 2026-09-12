@@ -99,7 +99,8 @@ COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/app/dist ./app/dist
 # The harness numbers per commit, for the Eval page.
 COPY docs/eval/history.jsonl ./docs/eval/history.jsonl
-COPY docs/curator-playbook.md ./docs/curator-playbook.md
+# The curator prompts are served from these docs, so they ship with the server.
+COPY docs/curator-*.md ./docs/
 
 ENV NODE_ENV=production
 # The store lives under /data. ZEROMEM_HOME is the same directory so `zm`

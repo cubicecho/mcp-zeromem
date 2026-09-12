@@ -3,7 +3,7 @@ import type { Config } from '../config.ts';
 import type { ZeroMemEngine } from '../engine/index.ts';
 import { errorChainMessage } from '../errors.ts';
 import { SERVER_VERSION } from '../version.ts';
-import { registerCuratorPrompt } from './prompts.ts';
+import { registerCuratorPrompts } from './prompts.ts';
 import type { ToolDefinition } from './tool.ts';
 import { curateTools } from './tools/curate.ts';
 import { forgetTools } from './tools/forget.ts';
@@ -15,7 +15,7 @@ import { statsTools } from './tools/stats.ts';
 export interface GatewayDeps {
   engine: ZeroMemEngine;
   config: Config;
-  /** Serve the curator tools and the `zeromem_curate` prompt: the curator token, or everyone when configured. */
+  /** Serve the curator tools and prompts: the curator token, or everyone when configured. */
   curator?: boolean;
 }
 
@@ -89,7 +89,7 @@ export function createGatewayServer(deps: GatewayDeps): McpServer {
   }
 
   if (deps.curator) {
-    registerCuratorPrompt(server);
+    registerCuratorPrompts(server, { readOnly: deps.config.readOnly });
   }
 
   return server;

@@ -303,11 +303,22 @@ reason and can be undone from the Curation page. Purging is left to a human
 | `zeromem_curate_apply` | `{run_id, actions[{op, …, reason}], dry_run?}`: applies a batch; each action is accepted or rejected on its own |
 | `zeromem_curate_undo` | `{action_id? \| run_id?}` |
 
-The `zeromem_curate` prompt carries the procedure
-([`docs/curator-playbook.md`](docs/curator-playbook.md)), so a client gets it from the
-server: orient, gather candidates since the cursor, judge (when unsure, skip), dry
-run, apply in batches, finish with `run_end`. Its optional `focus` argument limits a
-run to some kinds.
+### The curator prompts
+
+The procedures come from the server too, one MCP prompt per job, each served verbatim
+from a doc so the two cannot drift:
+
+| Prompt | Arguments | The run it describes |
+| --- | --- | --- |
+| `zeromem_curate` ([playbook](docs/curator-playbook.md)) | `focus?` — kinds to limit the run to | The full sweep: orient, gather candidates since the cursor, judge (when unsure, skip), dry run, apply in batches, finish with `run_end` |
+| `zeromem_curate_session` ([doc](docs/curator-session.md)) | `session_id` | One conversation once it has ended: read it whole, hide its noise and repeats, supersede what it settled later, note it if it is long |
+| `zeromem_curate_notes` ([doc](docs/curator-notes.md)) | `session_id?` | Consolidation on its own: find long old episodes, read them whole, write a paragraph that says only what the sources say, check it afterwards |
+| `zeromem_curate_entities` ([doc](docs/curator-entities.md)) | `entity?` | Entity hygiene: fold a name into the entity it belongs to, strike out a name that is not one, each judged from the turns that mention both |
+
+The three focused prompts hand the sweep's cursor back to `run_end` unchanged, so a
+session pass at midnight never moves the cursor past turns the nightly sweep has not
+read. Under `ZEROMEM_READ_ONLY` every prompt ends with the same addendum: the write
+tools are not there, so report the actions rather than applying them.
 
 ### Access and limits
 
@@ -351,7 +362,14 @@ points at the store:
 ```cron
 # Nightly at 03:30: run the playbook the server serves as its zeromem_curate prompt.
 30 3 * * * claude -p "/mcp__zeromem__zeromem_curate" --mcp-config /etc/zeromem/curator.json --allowedTools "mcp__zeromem__*"
+# Weekly: the jobs the sweep does least well. Both leave the nightly cursor where it was.
+0 4 * * 0 claude -p "/mcp__zeromem__zeromem_curate_notes" --mcp-config /etc/zeromem/curator.json --allowedTools "mcp__zeromem__*"
+30 4 * * 0 claude -p "/mcp__zeromem__zeromem_curate_entities" --mcp-config /etc/zeromem/curator.json --allowedTools "mcp__zeromem__*"
 ```
+
+`zeromem_curate_session` is the one to hand a session id, from the same hook that
+ingested the conversation — as long as the turns are older than `min_age_ms` by then,
+which for the default 24 h means a pass the next day, not at the end of the call.
 
 An Agent SDK script does the same from code: fetch the prompt, hand it to the agent
 as its task, and let it call the tools.
@@ -458,6 +476,7 @@ crates/zeromem-node/   napi-rs addon → @mcp-zeromem/native
 shared/src/            zod DTOs shared by server and app
 server/src/            Express 5: /api routes (viz/ for the charts), /mcp gateway, stdio bin, metrics.ts
 app/src/               React admin UI; routes/ is one file per page, components/viz/ the chart kit
+docs/curator-*.md      the curator procedures, served verbatim as the MCP prompts
 docs/eval/             history.jsonl, the recorded eval runs the Eval page reads
 scripts/               smoke-stdio.sh, rank.sh, record-eval.sh
 ```
