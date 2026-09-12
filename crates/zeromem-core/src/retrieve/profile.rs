@@ -38,6 +38,43 @@ const TEMPORAL_CUES: &[&str] = &[
     "as of",
 ];
 
+/// How many words a candidate key may span. `project heron rollout` is
+/// plausible; beyond that an n-gram is a sentence, not a name.
+pub const MAX_KEY_WORDS: usize = 4;
+
+/// The question's word n-grams, longest first, in `entities::name_key`
+/// space, as candidates to resolve against what the store already holds.
+///
+/// This is the query-side half of a problem the embedder has too: documents
+/// and questions have to produce keys in the same space or the view returns
+/// nothing. `entities::extract` is case-driven, so a lowercase question
+/// yields no keys at all and `route::plan` drops the entity view.
+///
+/// The lookup that follows is exact, so this recovers case and not more: a
+/// question saying `heron` still misses a store that only ever wrote
+/// `Project Heron`.
+///
+/// Pure, so it stays unit-testable; the caller does the lookup.
+pub fn candidate_keys(text: &str, max_words: usize) -> Vec<String> {
+    let ws: Vec<&str> = words(text).into_iter().map(|w| w.text).collect();
+    let mut out: Vec<String> = Vec::new();
+    for n in (1..=max_words.min(ws.len())).rev() {
+        for span in ws.windows(n) {
+            // All-stopword spans are noise; one content word is enough to
+            // make an n-gram worth asking about.
+            if span.iter().all(|w| is_stopword(&normalise(w))) {
+                continue;
+            }
+            let key = entities::name_key(&span.join(" "));
+            if key.chars().count() < 2 || out.contains(&key) {
+                continue;
+            }
+            out.push(key);
+        }
+    }
+    out
+}
+
 pub fn profile(query: &str) -> Profile {
     let text = query.split_whitespace().collect::<Vec<_>>().join(" ");
     let lower = text.to_lowercase();
@@ -101,6 +138,27 @@ mod tests {
         assert!(!p.temporal);
         assert!(!p.question);
         assert_eq!(p.entities, vec!["maya okafor"]);
+    }
+
+    #[test]
+    fn candidate_keys_are_longest_first_and_skip_all_stopword_spans() {
+        let keys = candidate_keys("who owns the billing service on project heron?", MAX_KEY_WORDS);
+        let at = |k: &str| keys.iter().position(|c| c == k).unwrap_or_else(|| panic!("missing {k}: {keys:?}"));
+        assert!(at("who owns the billing") < at("project heron"), "{keys:?}");
+        assert!(at("project heron") < at("heron"), "longer spans have to be offered first: {keys:?}");
+        assert!(!keys.iter().any(|k| k == "on the" || k == "the"), "an all-stopword span is noise: {keys:?}");
+        assert_eq!(keys.iter().filter(|k| *k == "heron").count(), 1, "no duplicates: {keys:?}");
+        assert!(keys.iter().all(|k| k.split(' ').count() <= MAX_KEY_WORDS), "{keys:?}");
+    }
+
+    #[test]
+    fn candidate_keys_are_in_the_same_space_as_a_mention() {
+        // `entities::name_key` strips the possessive and the `?`, so a
+        // question about `Sparrow's` resolves against the key a statement
+        // about `Sparrow` wrote.
+        let keys = candidate_keys("what date is Sparrow's code freeze?", MAX_KEY_WORDS);
+        assert!(keys.contains(&"sparrow".to_string()), "{keys:?}");
+        assert!(keys.iter().all(|k| k == &k.to_lowercase()), "{keys:?}");
     }
 
     #[test]

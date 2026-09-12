@@ -38,20 +38,22 @@ struct Floor {
 /// The ONNX rows run unless `ZEROMEM_SKIP_ONNX` is set (see
 /// `reference_vectors.rs` for where the model comes from).
 ///
-/// `transcript` is the same facts written the way a real session is —
-/// lowercase prose, paths, `::` symbols, env vars — so the shape rules in
-/// `entities` find nothing in its questions and the entity view never
-/// routes (`retrieve::route::plan` skips it on an empty key list). Its rows
-/// are therefore the reading for everything *except* that view, and they
-/// sit at or above `large`'s. Any extraction change that claims to raise
-/// recall has to move them, which is what the profile is for.
+/// `transcript` is the same facts written the way a real session is: mostly
+/// lowercase, paths and `::` symbols and env vars as typed, and each name
+/// capitalised only some of the time. So the store learns a key from the
+/// capitalised third of its mentions and the shape rules then find it in
+/// none of the questions — the asymmetry `retrieve::resolve_known_entities`
+/// exists to close, and the reason this profile is worth its fixtures. Its
+/// document side stays lossy either way (two mentions in three are missed),
+/// which is what an extractor change would have to fix and why these rows
+/// sit below `large`'s.
 const FLOORS: &[Floor] = &[
     Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.68, mrr: 0.86, ndcg_at_5: 0.64 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.93, ndcg_at_5: 0.77 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.66 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.88, mrr: 0.95, ndcg_at_5: 0.80 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {
