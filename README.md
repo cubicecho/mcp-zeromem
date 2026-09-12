@@ -3,12 +3,14 @@
 Conversational memory for agents that costs zero tokens to maintain, over MCP.
 
 Every turn an agent sees goes into one SQLite store. Recall over that store —
-entity graph, temporal hierarchy, lexical and dense search — runs with no LLM
-in the loop, so remembering is free and the only tokens spent are the ones the
-model spends reading what came back. The method follows the
-[zeromem paper](https://github.com/ptaranat/zeromem); the implementation here
-is a clean-room rewrite in Rust, loaded in-process by a Node MCP server, with
-persistent indexes so opening a large store does not mean rebuilding it.
+entity graph, lexical and dense search — runs with no LLM in the loop, so
+remembering is free and the only tokens spent are the ones the model spends
+reading what came back. The method follows the Zero-Mem paper,
+[arXiv:2607.29377](https://arxiv.org/abs/2607.29377), whose upstream
+implementation is [ptaranat/zeromem](https://github.com/ptaranat/zeromem); the
+implementation here is a clean-room rewrite in Rust, loaded in-process by a
+Node MCP server, with persistent indexes so opening a large store does not mean
+rebuilding it.
 
 **Status: Parts 1 and 2 complete.** The engine stores turns with their
 entity spans, tokens and embeddings in one transaction, keeps the entity
@@ -394,7 +396,19 @@ The entity co-occurrence graph and the temporal hierarchy (sessions → windows
 persisted next to them; appends update them incrementally, `forget` rebuilds
 the aggregates from the per-turn artifacts and bumps a `generation` stamp so
 every other process holding the store reloads. Opening a store is a read,
-never a recomputation.
+never a recomputation. The hierarchy feeds the Timeline page, `zeromem_stats`
+and the curator's consolidation finder; it is not yet a recall view.
+
+Recall returns turns, never facts distilled from them. The entity index is a
+posting list — which turns mention a key, and which keys occur together — not
+a table of assertions, so a hit is always something that was actually said.
+That is the paper's position: a generated record costs tokens to write, and a
+summary that drops a detail, merges two people or flattens an update loses the
+evidence a later question needs. A superseded value stays in the store and
+ranks below its replacement instead of being overwritten. The price is paid at
+read time, where a turn is longer than a fact would be; `top_k`, `context` and
+`max_chars` bound it, and a curator `note` is the way to condense a topic
+without giving up the sources.
 
 A query is profiled (tokens, entities, temporal cues, question form), routed
 to the views that can answer it, and each view's ranked candidates are fused
