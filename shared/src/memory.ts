@@ -154,6 +154,40 @@ export const storedTurnSchema = z.object({
 });
 export type StoredTurn = z.infer<typeof storedTurnSchema>;
 
+/** Most turns one window may carry; the engine clamps to the same number. */
+export const SESSION_WINDOW_MAX_TURNS = 200;
+
+/**
+ * What a client may ask of a session read: a whole session (`session_id`, paged
+ * by `limit`/`offset`), or a window centred on one turn (`around_turn`, with
+ * `before`/`after` turns either side). One or the other is required.
+ */
+export const sessionWindowOptionsSchema = z.object({
+  session_id: z.string().min(1).optional(),
+  /** Centre the window on this turn id; its session is used when `session_id` is absent. */
+  around_turn: z.number().int().optional(),
+  before: z.number().int().min(0).max(SESSION_WINDOW_MAX_TURNS).optional(),
+  after: z.number().int().min(0).max(SESSION_WINDOW_MAX_TURNS).optional(),
+  limit: z.number().int().min(1).max(SESSION_WINDOW_MAX_TURNS).optional(),
+  offset: z.number().int().min(0).optional(),
+});
+export type SessionWindowOptions = z.infer<typeof sessionWindowOptionsSchema>;
+
+/** One conversation in order, capped and reporting `total`/`truncated` like every other capped read. */
+export const sessionWindowSchema = z.object({
+  session_id: z.string(),
+  turns: z.array(storedTurnSchema),
+  /** The anchor, when `around_turn` asked for one. */
+  around_turn: z.number().int().optional(),
+  /** Turns in the whole session. */
+  total: count,
+  /** Where the first returned turn sits in the session, in time order. */
+  offset: count,
+  /** The answer is not the whole session; page on with `offset`. */
+  truncated: z.boolean(),
+});
+export type SessionWindow = z.infer<typeof sessionWindowSchema>;
+
 /** What curation says about one turn; every field is left out when empty. */
 export const turnCurationSchema = z.object({
   hidden: z.boolean().optional(),
@@ -202,6 +236,9 @@ export type Role = z.infer<typeof roleSchema>;
 export const detailSchema = z.enum(['compact', 'full']);
 export type Detail = z.infer<typeof detailSchema>;
 
+/** Most neighbours recall will attach per side, per hit; the engine clamps to the same number. */
+export const MAX_CONTEXT = 10;
+
 /** What a client may ask of recall; the same shape the CLI's `zm query` accepts. */
 export const recallOptionsSchema = z.object({
   top_k: z.number().int().min(1).max(50).optional(),
@@ -212,6 +249,12 @@ export const recallOptionsSchema = z.object({
   detail: detailSchema.optional(),
   /** Include turns curation hid; they come back flagged `hidden`. */
   include_hidden: z.boolean().optional(),
+  /**
+   * Attach this many same-session turns either side of each hit, as
+   * `before`/`after`. They are context, never candidates: the ranked evidence
+   * list is identical with and without them.
+   */
+  context: z.number().int().min(0).max(MAX_CONTEXT).optional(),
 });
 export type RecallOptions = z.infer<typeof recallOptionsSchema>;
 
@@ -250,6 +293,10 @@ export const evidenceSchema = z.object({
   hidden: z.boolean().optional(),
   /** For a note, the source turns collapsed under it. */
   covers: z.array(z.number().int()).optional(),
+  /** Same-session turns just before this one, oldest first; only under `context`. */
+  before: z.array(storedTurnSchema).optional(),
+  /** Same-session turns just after this one, oldest first; only under `context`. */
+  after: z.array(storedTurnSchema).optional(),
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 

@@ -64,12 +64,23 @@ pub struct QueryOptions {
     /// admin UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_hidden: Option<bool>,
+    /// Attach this many same-session turns either side of each hit, so an
+    /// answer arrives with the question that prompted it and the
+    /// continuation that finishes it. Default 0 — nothing attached; capped
+    /// at [`MAX_CONTEXT`]. Neighbours never join the ranked list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<u32>,
 }
 
 pub const DEFAULT_TOP_K: u32 = 5;
 pub const MAX_TOP_K: u32 = 50;
 /// How many candidates each view nominates.
 pub const VIEW_LIMIT: usize = 50;
+/// Most neighbours per side, per hit.
+pub const MAX_CONTEXT: u32 = 10;
+/// Most neighbour turns across one answer, filled in rank order, so a large
+/// `top_k` with a large `context` degrades instead of returning a megabyte.
+pub const MAX_CONTEXT_TURNS: usize = 40;
 /// What a superseded turn's fused score is multiplied by.
 pub const SUPERSEDED_FACTOR: f64 = 0.5;
 /// Collapsing frees places that calibration refills; bounded so a chain
@@ -100,6 +111,14 @@ pub struct Evidence {
     /// For a note, the turns it stands for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub covers: Vec<i64>,
+    /// Same-session turns just before this one, oldest first. Empty unless
+    /// `context` asked for them. Context for reading the hit, never part of
+    /// the answer: these are not ranked and not scored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub before: Vec<Turn>,
+    /// Same-session turns just after this one, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub after: Vec<Turn>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -250,7 +269,13 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
             role: item.role,
             sources,
             entities,
+            before: Vec::new(),
+            after: Vec::new(),
         });
+    }
+
+    if let Some(context) = opts.context {
+        attach_context(ctx.store, &mut evidence, context, &flags, include_hidden)?;
     }
 
     let _ = considered;
@@ -263,6 +288,70 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
         evidence,
         took_ms: started.elapsed().as_millis() as u64,
     })
+}
+
+/// Attach the turns either side of each hit, so an answer arrives with the
+/// question that prompted it and the continuation that finishes it.
+///
+/// Neighbours hang under a hit in `before`/`after` and never join the
+/// `evidence` list: the ranked list is what the eval floors and the goldens
+/// measure, and context must not be able to move it. A turn is claimed
+/// once, by the highest-ranked hit that reaches it, so two adjacent hits
+/// never repeat each other's text and a hit never restates its neighbour.
+/// Hidden turns are dropped rather than backfilled — a window that silently
+/// splices past one is not a window. `since`/`until` deliberately do not
+/// apply here: they bound what is *searched*, and the continuation of a
+/// cut-off answer is frequently just outside the bound, which is the bug
+/// this exists to fix.
+fn attach_context(
+    store: &Store,
+    evidence: &mut [Evidence],
+    context: u32,
+    flags: &Flags,
+    include_hidden: bool,
+) -> Result<()> {
+    let per_side = context.min(MAX_CONTEXT);
+    if per_side == 0 {
+        return Ok(());
+    }
+    let mut claimed: BTreeSet<i64> = evidence.iter().map(|e| e.turn.id).collect();
+    let mut budget = MAX_CONTEXT_TURNS;
+    for item in evidence.iter_mut() {
+        if budget == 0 {
+            break;
+        }
+        let (before, after) = store.session_neighbours(&item.turn, per_side, per_side)?;
+        // Nearest first on both sides, so a budget that runs out drops the
+        // turns furthest from the hit rather than the ones next to it.
+        let mut earlier = take_neighbours(before.into_iter().rev(), &mut claimed, flags, include_hidden, &mut budget);
+        earlier.reverse();
+        item.before = earlier;
+        item.after = take_neighbours(after.into_iter(), &mut claimed, flags, include_hidden, &mut budget);
+    }
+    Ok(())
+}
+
+/// The neighbours from one side that are still unclaimed and visible, in the
+/// order given, until `budget` runs out.
+fn take_neighbours(
+    turns: impl Iterator<Item = Turn>,
+    claimed: &mut BTreeSet<i64>,
+    flags: &Flags,
+    include_hidden: bool,
+    budget: &mut usize,
+) -> Vec<Turn> {
+    let mut out = Vec::new();
+    for t in turns {
+        if *budget == 0 {
+            break;
+        }
+        if (!include_hidden && flags.hidden.contains(&t.id)) || !claimed.insert(t.id) {
+            continue;
+        }
+        *budget -= 1;
+        out.push(t);
+    }
+    out
 }
 
 /// A superseded turn hands its score to the turn that replaced it: the

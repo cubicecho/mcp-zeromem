@@ -48,9 +48,12 @@ import {
   queryTraceSchema,
   type RecallOptions,
   type SessionSummary,
+  type SessionWindow,
+  type SessionWindowOptions,
   type Stats,
   type StoredTurn,
   sessionSummarySchema,
+  sessionWindowSchema,
   statsSchema,
   storedTurnSchema,
   type TurnInput,
@@ -165,6 +168,15 @@ export class ZeroMemEngine {
 
   sessionTurns(sessionId: string, page?: { limit?: number; offset?: number }): Promise<StoredTurn[]> {
     return check(storedTurnSchema.array(), this.native.sessionTurns(sessionId, page));
+  }
+
+  /**
+   * One conversation in order: a whole session, or a window centred on one
+   * turn. Capped on the Rust side, which reports `total`/`truncated` so a
+   * caller knows when it is holding part of a session.
+   */
+  sessionWindow(options: SessionWindowOptions = {}): Promise<SessionWindow> {
+    return check(sessionWindowSchema, this.native.sessionWindow(options));
   }
 
   /** Remove every turn of a session; resolves to the number removed. */

@@ -226,6 +226,10 @@ enum Command {
         /// Recall turns a curator hid, too.
         #[arg(long)]
         include_hidden: bool,
+        /// Attach this many same-session turns either side of each hit, so
+        /// an answer arrives with its question and its continuation.
+        #[arg(long, default_value_t = 0)]
+        context: u32,
     },
     /// Recompute every derived index from the turns. Embeddings are kept.
     Rebuild,
@@ -251,6 +255,26 @@ enum Command {
         limit: u32,
         #[arg(long, default_value_t = 0)]
         offset: u32,
+    },
+    /// Read one conversation in order: the whole session, or a window around
+    /// one turn (the `id` a recall hit carries).
+    Session {
+        /// The session to read; optional when --around-turn names a turn.
+        session_id: Option<String>,
+        /// Centre the window on this turn id.
+        #[arg(long)]
+        around_turn: Option<i64>,
+        /// With --around-turn: turns before it. Default 5.
+        #[arg(long)]
+        before: Option<u32>,
+        /// With --around-turn: turns after it. Default 5.
+        #[arg(long)]
+        after: Option<u32>,
+        /// Without --around-turn: how many turns. Default 50, capped at 200.
+        #[arg(long)]
+        limit: Option<u32>,
+        #[arg(long)]
+        offset: Option<u32>,
     },
     /// Delete every turn of one session.
     Forget { session_id: String },
@@ -299,7 +323,18 @@ fn run() -> Result<()> {
 
     match cli.command {
         Command::Stats => emit(&zm.stats()?)?,
-        Command::Query { query, top_k, exclude_session, session, since, until, full, trace, include_hidden } => {
+        Command::Query {
+            query,
+            top_k,
+            exclude_session,
+            session,
+            since,
+            until,
+            full,
+            trace,
+            include_hidden,
+            context,
+        } => {
             let opts = QueryOptions {
                 top_k: Some(top_k),
                 exclude_session,
@@ -308,6 +343,7 @@ fn run() -> Result<()> {
                 until,
                 detail: Some(if full || trace { Detail::Full } else { Detail::Compact }),
                 include_hidden: include_hidden.then_some(true),
+                context: (context > 0).then_some(context),
             };
             if trace {
                 emit(&zm.query_trace(&query, &opts)?)?;
@@ -343,6 +379,10 @@ fn run() -> Result<()> {
             emit(&zm.ingest_many(&turns)?)?;
         }
         Command::Sessions { limit, offset } => emit(&zm.list_sessions(limit, offset)?)?,
+        Command::Session { session_id, around_turn, before, after, limit, offset } => {
+            let opts = zeromem_core::SessionWindowOptions { session_id, around_turn, before, after, limit, offset };
+            emit(&zm.session_window(&opts)?)?;
+        }
         Command::Forget { session_id } => {
             let removed = zm.delete_session(&session_id)?;
             emit(&serde_json::json!({ "session_id": session_id, "removed": removed }))?;

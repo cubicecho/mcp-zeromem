@@ -103,6 +103,20 @@ export interface SessionSummary {
   last_ts: number;
 }
 
+/** One conversation in order: a whole session, or a window around one turn. */
+export interface SessionWindow {
+  session_id: string;
+  turns: StoredTurn[];
+  /** The anchor, when `around_turn` asked for one. */
+  around_turn?: number;
+  /** Turns in the whole session. */
+  total: number;
+  /** Where the first returned turn sits in the session, in time order. */
+  offset: number;
+  /** The answer is not the whole session; page on with `offset`. */
+  truncated: boolean;
+}
+
 export type TurnKind = 'turn' | 'note';
 
 export interface StoredTurn {
@@ -153,6 +167,10 @@ export interface Evidence {
   hidden?: boolean;
   /** For a note: the source turns collapsed under it. */
   covers?: number[];
+  /** Same-session turns just before this one, oldest first; only with `context`. */
+  before?: StoredTurn[];
+  /** Same-session turns just after this one, oldest first; only with `context`. */
+  after?: StoredTurn[];
 }
 
 export interface QueryResult {
