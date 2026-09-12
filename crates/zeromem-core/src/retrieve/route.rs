@@ -21,7 +21,16 @@ pub struct ViewPlan {
 }
 
 pub const LEXICAL_WEIGHT: f64 = 1.0;
-pub const ENTITY_WEIGHT: f64 = 1.0;
+/// Half of lexical, because the entity view is broad rather than precise: a
+/// question almost always names one entity, and `entity_view` then scores
+/// every turn mentioning it by the number of distinct keys matched — which
+/// is 1 for all of them. Its list is ordered only by the turn-id tiebreak,
+/// so its top slot earns RRF's full `1/(k+1)` on what is really just the
+/// most recent mention. Measured on the large corpus under hash: at 1.0
+/// recall@5 0.710 / MRR 0.895 / nDCG@5 0.670, at 0.5 0.748 / 0.914 / 0.688,
+/// and with the view off entirely 0.730 / 0.906 / 0.656. So the view earns
+/// its place — the weight was what did not.
+pub const ENTITY_WEIGHT: f64 = 0.5;
 pub const DENSE_WEIGHT: f64 = 0.8;
 /// The hash embedder is a crude stand-in; it still helps but is not trusted
 /// as much as the model.

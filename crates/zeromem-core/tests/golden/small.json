@@ -5,55 +5,11 @@
       {
         "confidence": 1.0,
         "entities": [
-          "06-19",
-          "quill"
-        ],
-        "role": "primary",
-        "score": 0.881889,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 16,
-          "session_id": "small-s0002",
-          "speaker": "user",
-          "text": "Heads up, Quill security review date is June 19.",
-          "ts": 1736256196000,
-          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
-        }
-      },
-      {
-        "confidence": 0.980569,
-        "entities": [
-          "01-11",
-          "quill"
-        ],
-        "role": "primary",
-        "score": 0.864753,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 6,
-          "session_id": "small-s0001",
-          "speaker": "user",
-          "text": "The Quill security review is on January 11.",
-          "ts": 1736154551000,
-          "uuid": "5fc5f2e0-0305-48bc-b3af-f883add980d0"
-        }
-      },
-      {
-        "confidence": 0.973681,
-        "entities": [
           "$230k",
           "quill"
         ],
         "role": "primary",
-        "score": 0.858679,
+        "score": 0.873106,
         "sources": [
           "lexical",
           "entity",
@@ -69,12 +25,34 @@
         }
       },
       {
-        "confidence": 0.932622,
+        "confidence": 0.99057,
+        "entities": [
+          "01-11",
+          "quill"
+        ],
+        "role": "primary",
+        "score": 0.864873,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 6,
+          "session_id": "small-s0001",
+          "speaker": "user",
+          "text": "The Quill security review is on January 11.",
+          "ts": 1736154551000,
+          "uuid": "5fc5f2e0-0305-48bc-b3af-f883add980d0"
+        }
+      },
+      {
+        "confidence": 0.989406,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.822469,
+        "score": 0.863856,
         "sources": [
           "lexical",
           "entity",
@@ -90,12 +68,34 @@
         }
       },
       {
-        "confidence": 0.915324,
+        "confidence": 0.968841,
+        "entities": [
+          "06-19",
+          "quill"
+        ],
+        "role": "primary",
+        "score": 0.845901,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 16,
+          "session_id": "small-s0002",
+          "speaker": "user",
+          "text": "Heads up, Quill security review date is June 19.",
+          "ts": 1736256196000,
+          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
+        }
+      },
+      {
+        "confidence": 0.941331,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.807214,
+        "score": 0.821882,
         "sources": [
           "lexical",
           "entity",
@@ -134,7 +134,7 @@
         {
           "candidates": 7,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -194,7 +194,7 @@
         {
           "candidates": 1,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 39,
@@ -215,7 +215,7 @@
           "quill"
         ],
         "role": "primary",
-        "score": 0.909593,
+        "score": 0.921514,
         "sources": [
           "lexical",
           "entity",
@@ -231,13 +231,13 @@
         }
       },
       {
-        "confidence": 0.983003,
+        "confidence": 0.958671,
         "entities": [
           "01-11",
           "quill"
         ],
         "role": "primary",
-        "score": 0.894133,
+        "score": 0.883429,
         "sources": [
           "lexical",
           "entity",
@@ -253,12 +253,12 @@
         }
       },
       {
-        "confidence": 0.922742,
+        "confidence": 0.948981,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.83932,
+        "score": 0.874499,
         "sources": [
           "lexical",
           "entity",
@@ -274,12 +274,12 @@
         }
       },
       {
-        "confidence": 0.922514,
+        "confidence": 0.920648,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.839112,
+        "score": 0.84839,
         "sources": [
           "lexical",
           "entity",
@@ -295,13 +295,13 @@
         }
       },
       {
-        "confidence": 0.918929,
+        "confidence": 0.854983,
         "entities": [
           "11-09",
           "quill"
         ],
         "role": "primary",
-        "score": 0.835851,
+        "score": 0.787879,
         "sources": [
           "lexical",
           "entity",
@@ -340,7 +340,7 @@
         {
           "candidates": 6,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 11,
@@ -361,7 +361,7 @@
           "ferrous"
         ],
         "role": "primary",
-        "score": 0.186069,
+        "score": 0.229928,
         "sources": [
           "dense"
         ],
@@ -375,13 +375,13 @@
         }
       },
       {
-        "confidence": 0.928559,
+        "confidence": 0.926294,
         "entities": [
           "beatriz moura",
           "melbourne"
         ],
         "role": "primary",
-        "score": 0.172776,
+        "score": 0.212981,
         "sources": [
           "dense"
         ],
@@ -395,12 +395,12 @@
         }
       },
       {
-        "confidence": 0.86541,
+        "confidence": 0.861739,
         "entities": [
           "i'll"
         ],
         "role": "primary",
-        "score": 0.161026,
+        "score": 0.198138,
         "sources": [
           "dense"
         ],
@@ -414,12 +414,12 @@
         }
       },
       {
-        "confidence": 0.808066,
+        "confidence": 0.803804,
         "entities": [
           "i'll"
         ],
         "role": "primary",
-        "score": 0.150356,
+        "score": 0.184817,
         "sources": [
           "dense"
         ],
@@ -433,12 +433,12 @@
         }
       },
       {
-        "confidence": 0.757955,
+        "confidence": 0.753262,
         "entities": [
           "i'll"
         ],
         "role": "primary",
-        "score": 0.141032,
+        "score": 0.173196,
         "sources": [
           "dense"
         ],
@@ -475,7 +475,7 @@
         {
           "candidates": 0,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 25,
@@ -492,34 +492,11 @@
       {
         "confidence": 1.0,
         "entities": [
-          "06-19",
-          "quill"
-        ],
-        "role": "primary",
-        "score": 1.069676,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense",
-          "recent"
-        ],
-        "turn": {
-          "id": 16,
-          "session_id": "small-s0002",
-          "speaker": "user",
-          "text": "Heads up, Quill security review date is June 19.",
-          "ts": 1736256196000,
-          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
-        }
-      },
-      {
-        "confidence": 0.998612,
-        "entities": [
           "01-11",
           "quill"
         ],
         "role": "primary",
-        "score": 1.068191,
+        "score": 1.056268,
         "sources": [
           "lexical",
           "entity",
@@ -536,13 +513,57 @@
         }
       },
       {
-        "confidence": 0.954838,
+        "confidence": 0.969287,
+        "entities": [
+          "quill"
+        ],
+        "role": "primary",
+        "score": 1.023827,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 1,
+          "session_id": "small-s0001",
+          "speaker": "user",
+          "text": "Some notes from the Quill review.",
+          "ts": 1736154150000,
+          "uuid": "eb08b95f-117f-448b-ad3f-c759d04ee628"
+        }
+      },
+      {
+        "confidence": 0.965372,
+        "entities": [
+          "06-19",
+          "quill"
+        ],
+        "role": "primary",
+        "score": 1.019692,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense",
+          "recent"
+        ],
+        "turn": {
+          "id": 16,
+          "session_id": "small-s0002",
+          "speaker": "user",
+          "text": "Heads up, Quill security review date is June 19.",
+          "ts": 1736256196000,
+          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
+        }
+      },
+      {
+        "confidence": 0.958743,
         "entities": [
           "$230k",
           "quill"
         ],
         "role": "primary",
-        "score": 1.021367,
+        "score": 1.01269,
         "sources": [
           "lexical",
           "entity",
@@ -559,12 +580,12 @@
         }
       },
       {
-        "confidence": 0.941921,
+        "confidence": 0.954349,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 1.00755,
+        "score": 1.008048,
         "sources": [
           "lexical",
           "entity",
@@ -578,27 +599,6 @@
           "text": "Spent the afternoon reading through Quill tickets.",
           "ts": 1736154695000,
           "uuid": "f4aea578-a183-4a8f-bb09-9b5265e12f10"
-        }
-      },
-      {
-        "confidence": 0.938317,
-        "entities": [
-          "quill"
-        ],
-        "role": "primary",
-        "score": 1.003695,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 1,
-          "session_id": "small-s0001",
-          "speaker": "user",
-          "text": "Some notes from the Quill review.",
-          "ts": 1736154150000,
-          "uuid": "eb08b95f-117f-448b-ad3f-c759d04ee628"
         }
       }
     ],
@@ -626,7 +626,7 @@
         {
           "candidates": 7,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -648,20 +648,20 @@
       {
         "confidence": 1.0,
         "role": "primary",
-        "score": 0.881889,
+        "score": 0.873106,
         "turn": {
-          "id": 16,
-          "session_id": "small-s0002",
+          "id": 4,
+          "session_id": "small-s0001",
           "speaker": "user",
-          "text": "Heads up, Quill security review date is June 19.",
-          "ts": 1736256196000,
-          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
+          "text": "Finance approved $230k for Quill.",
+          "ts": 1736154355000,
+          "uuid": "0381564c-6fa4-41aa-96d3-ad3e984266b0"
         }
       },
       {
-        "confidence": 0.980569,
+        "confidence": 0.99057,
         "role": "primary",
-        "score": 0.864753,
+        "score": 0.864873,
         "turn": {
           "id": 6,
           "session_id": "small-s0001",
@@ -681,33 +681,11 @@
       {
         "confidence": 1.0,
         "entities": [
-          "06-19",
-          "quill"
-        ],
-        "role": "primary",
-        "score": 0.881889,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 16,
-          "session_id": "small-s0002",
-          "speaker": "user",
-          "text": "Heads up, Quill security review date is June 19.",
-          "ts": 1736256196000,
-          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
-        }
-      },
-      {
-        "confidence": 0.986554,
-        "entities": [
           "$230k",
           "quill"
         ],
         "role": "primary",
-        "score": 0.870031,
+        "score": 0.887446,
         "sources": [
           "lexical",
           "entity",
@@ -723,13 +701,13 @@
         }
       },
       {
-        "confidence": 0.980569,
+        "confidence": 0.974564,
         "entities": [
           "01-11",
           "quill"
         ],
         "role": "primary",
-        "score": 0.864753,
+        "score": 0.864873,
         "sources": [
           "lexical",
           "entity",
@@ -745,12 +723,12 @@
         }
       },
       {
-        "confidence": 0.932622,
+        "confidence": 0.973418,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.822469,
+        "score": 0.863856,
         "sources": [
           "lexical",
           "entity",
@@ -766,12 +744,34 @@
         }
       },
       {
-        "confidence": 0.915324,
+        "confidence": 0.953186,
+        "entities": [
+          "06-19",
+          "quill"
+        ],
+        "role": "primary",
+        "score": 0.845901,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 16,
+          "session_id": "small-s0002",
+          "speaker": "user",
+          "text": "Heads up, Quill security review date is June 19.",
+          "ts": 1736256196000,
+          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
+        }
+      },
+      {
+        "confidence": 0.926121,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.807214,
+        "score": 0.821882,
         "sources": [
           "lexical",
           "entity",
@@ -810,7 +810,7 @@
         {
           "candidates": 7,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 26,
@@ -847,13 +847,13 @@
         }
       },
       {
-        "confidence": 0.888858,
+        "confidence": 0.899485,
         "entities": [
           "01-11",
           "quill"
         ],
         "role": "primary",
-        "score": 0.905427,
+        "score": 0.916252,
         "sources": [
           "lexical",
           "entity",
@@ -869,13 +869,13 @@
         }
       },
       {
-        "confidence": 0.877323,
+        "confidence": 0.866696,
         "entities": [
           "11-09",
           "quill"
         ],
         "role": "primary",
-        "score": 0.893677,
+        "score": 0.882852,
         "sources": [
           "lexical",
           "entity",
@@ -891,12 +891,12 @@
         }
       },
       {
-        "confidence": 0.716357,
+        "confidence": 0.733024,
         "entities": [
           "quill"
         ],
         "role": "primary",
-        "score": 0.729711,
+        "score": 0.746688,
         "sources": [
           "lexical",
           "entity",
@@ -912,13 +912,13 @@
         }
       },
       {
-        "confidence": 0.663865,
+        "confidence": 0.630896,
         "entities": [
           "$230k",
           "quill"
         ],
         "role": "supporting",
-        "score": 0.67624,
+        "score": 0.642657,
         "sources": [
           "lexical",
           "entity",
@@ -959,7 +959,7 @@
         {
           "candidates": 7,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -994,27 +994,6 @@
           "ts": 1736256107000,
           "uuid": "6969df37-f178-47aa-8b58-ee7a3a28855c"
         }
-      },
-      {
-        "confidence": 0.429199,
-        "entities": [
-          "beatriz moura",
-          "melbourne"
-        ],
-        "role": "supporting",
-        "score": 0.437199,
-        "sources": [
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 49,
-          "session_id": "small-s0005",
-          "speaker": "user",
-          "text": "Beatriz Moura's home office is in Melbourne.",
-          "ts": 1736519069000,
-          "uuid": "29cec22e-f855-4585-82bc-e0ae58b5e679"
-        }
       }
     ],
     "query": "Which city does Mateo Quiroga work from?",
@@ -1042,7 +1021,7 @@
         {
           "candidates": 2,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1080,35 +1059,13 @@
         }
       },
       {
-        "confidence": 0.744425,
+        "confidence": 0.712665,
         "entities": [
           "$670k",
           "basalt"
         ],
         "role": "primary",
-        "score": 0.758425,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 51,
-          "session_id": "small-s0005",
-          "speaker": "user",
-          "text": "Still the case: Basalt has $670k to spend this quarter.",
-          "ts": 1736519232000,
-          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
-        }
-      },
-      {
-        "confidence": 0.728951,
-        "entities": [
-          "$670k",
-          "basalt"
-        ],
-        "role": "primary",
-        "score": 0.74266,
+        "score": 0.726067,
         "sources": [
           "lexical",
           "entity",
@@ -1124,12 +1081,34 @@
         }
       },
       {
-        "confidence": 0.686651,
+        "confidence": 0.698386,
+        "entities": [
+          "$670k",
+          "basalt"
+        ],
+        "role": "supporting",
+        "score": 0.71152,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 51,
+          "session_id": "small-s0005",
+          "speaker": "user",
+          "text": "Still the case: Basalt has $670k to spend this quarter.",
+          "ts": 1736519232000,
+          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
+        }
+      },
+      {
+        "confidence": 0.684911,
         "entities": [
           "basalt"
         ],
         "role": "supporting",
-        "score": 0.699564,
+        "score": 0.697791,
         "sources": [
           "lexical",
           "entity",
@@ -1145,25 +1124,24 @@
         }
       },
       {
-        "confidence": 0.652244,
+        "confidence": 0.667444,
         "entities": [
-          "basalt",
-          "redis"
+          "10-20",
+          "ferrous"
         ],
         "role": "supporting",
-        "score": 0.66451,
+        "score": 0.679996,
         "sources": [
           "lexical",
-          "entity",
           "dense"
         ],
         "turn": {
-          "id": 25,
-          "session_id": "small-s0003",
+          "id": 36,
+          "session_id": "small-s0004",
           "speaker": "user",
-          "text": "Basalt does scheduling with Redis.",
-          "ts": 1736289451000,
-          "uuid": "b23a7921-a9ad-44bc-94d6-88b4c8583242"
+          "text": "Still the case: Ferrous launch date is October 20.",
+          "ts": 1736405874000,
+          "uuid": "e27f8c34-79c5-40b7-b548-15299172ae38"
         }
       }
     ],
@@ -1192,7 +1170,7 @@
         {
           "candidates": 8,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1229,13 +1207,13 @@
         }
       },
       {
-        "confidence": 0.44772,
+        "confidence": 0.560726,
         "entities": [
           "mateo quiroga",
           "melbourne"
         ],
         "role": "supporting",
-        "score": 0.45614,
+        "score": 0.571272,
         "sources": [
           "lexical",
           "dense"
@@ -1275,7 +1253,7 @@
         {
           "candidates": 1,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1296,7 +1274,7 @@
           "redis"
         ],
         "role": "primary",
-        "score": 0.907696,
+        "score": 0.948632,
         "sources": [
           "lexical",
           "entity",
@@ -1312,13 +1290,13 @@
         }
       },
       {
-        "confidence": 0.938138,
+        "confidence": 0.91037,
         "entities": [
           "$670k",
           "basalt"
         ],
         "role": "primary",
-        "score": 0.851544,
+        "score": 0.863606,
         "sources": [
           "lexical",
           "entity",
@@ -1334,12 +1312,12 @@
         }
       },
       {
-        "confidence": 0.893036,
+        "confidence": 0.883432,
         "entities": [
           "basalt"
         ],
         "role": "primary",
-        "score": 0.810605,
+        "score": 0.838052,
         "sources": [
           "lexical",
           "entity",
@@ -1355,13 +1333,13 @@
         }
       },
       {
-        "confidence": 0.891654,
+        "confidence": 0.817859,
         "entities": [
           "$670k",
           "basalt"
         ],
         "role": "primary",
-        "score": 0.809351,
+        "score": 0.775847,
         "sources": [
           "lexical",
           "entity",
@@ -1377,26 +1355,25 @@
         }
       },
       {
-        "confidence": 0.832747,
+        "confidence": 0.758407,
         "entities": [
-          "08-23",
           "basalt",
-          "we've"
+          "beatriz moura"
         ],
         "role": "primary",
-        "score": 0.755881,
+        "score": 0.719449,
         "sources": [
           "lexical",
           "entity",
           "dense"
         ],
         "turn": {
-          "id": 21,
-          "session_id": "small-s0003",
+          "id": 47,
+          "session_id": "small-s0005",
           "speaker": "user",
-          "text": "We've set Basalt's code freeze for August 23.",
-          "ts": 1736289112000,
-          "uuid": "264974e2-8c87-43ce-9b95-e64cd0972982"
+          "text": "Had a good conversation with Beatriz Moura about Basalt this morning.",
+          "ts": 1736518857000,
+          "uuid": "b0e0bee6-6b39-49b8-a561-832893b1fdca"
         }
       }
     ],
@@ -1425,7 +1402,7 @@
         {
           "candidates": 8,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1442,34 +1419,11 @@
       {
         "confidence": 1.0,
         "entities": [
-          "08-23",
-          "basalt",
-          "we've"
-        ],
-        "role": "primary",
-        "score": 0.874708,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 21,
-          "session_id": "small-s0003",
-          "speaker": "user",
-          "text": "We've set Basalt's code freeze for August 23.",
-          "ts": 1736289112000,
-          "uuid": "264974e2-8c87-43ce-9b95-e64cd0972982"
-        }
-      },
-      {
-        "confidence": 0.995015,
-        "entities": [
           "$670k",
           "basalt"
         ],
         "role": "primary",
-        "score": 0.870348,
+        "score": 0.887357,
         "sources": [
           "lexical",
           "entity",
@@ -1485,35 +1439,57 @@
         }
       },
       {
-        "confidence": 0.870486,
+        "confidence": 0.943012,
         "entities": [
-          "$670k",
-          "basalt"
+          "08-23",
+          "basalt",
+          "we've"
         ],
         "role": "primary",
-        "score": 0.761421,
+        "score": 0.836788,
         "sources": [
           "lexical",
           "entity",
           "dense"
         ],
         "turn": {
-          "id": 51,
-          "session_id": "small-s0005",
+          "id": 21,
+          "session_id": "small-s0003",
           "speaker": "user",
-          "text": "Still the case: Basalt has $670k to spend this quarter.",
-          "ts": 1736519232000,
-          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
+          "text": "We've set Basalt's code freeze for August 23.",
+          "ts": 1736289112000,
+          "uuid": "264974e2-8c87-43ce-9b95-e64cd0972982"
         }
       },
       {
-        "confidence": 0.854502,
+        "confidence": 0.851575,
+        "entities": [
+          "chidi anyanwu",
+          "project basalt"
+        ],
+        "role": "primary",
+        "score": 0.755651,
+        "sources": [
+          "lexical",
+          "dense"
+        ],
+        "turn": {
+          "id": 27,
+          "session_id": "small-s0003",
+          "speaker": "user",
+          "text": "Chidi Anyanwu owns the data warehouse on Project Basalt.",
+          "ts": 1736289709000,
+          "uuid": "ab2f8fb8-2bea-49e0-8f4b-c583eedf047c"
+        }
+      },
+      {
+        "confidence": 0.840928,
         "entities": [
           "basalt",
           "redis"
         ],
         "role": "primary",
-        "score": 0.74744,
+        "score": 0.746203,
         "sources": [
           "lexical",
           "entity",
@@ -1529,12 +1505,12 @@
         }
       },
       {
-        "confidence": 0.82806,
+        "confidence": 0.821596,
         "entities": [
           "basalt"
         ],
         "role": "primary",
-        "score": 0.724311,
+        "score": 0.729049,
         "sources": [
           "lexical",
           "entity",
@@ -1575,7 +1551,7 @@
         {
           "candidates": 8,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1593,33 +1569,10 @@
         "confidence": 1.0,
         "entities": [
           "10-20",
-          "ferrous",
-          "we've"
-        ],
-        "role": "primary",
-        "score": 0.970789,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 32,
-          "session_id": "small-s0004",
-          "speaker": "user",
-          "text": "We've set Ferrous's launch for October 20.",
-          "ts": 1736405419000,
-          "uuid": "3ec3c029-8124-4ddb-b82a-7a24bc15c968"
-        }
-      },
-      {
-        "confidence": 0.984045,
-        "entities": [
-          "10-20",
           "ferrous"
         ],
         "role": "primary",
-        "score": 0.9553,
+        "score": 0.978916,
         "sources": [
           "lexical",
           "entity",
@@ -1635,13 +1588,36 @@
         }
       },
       {
-        "confidence": 0.922475,
+        "confidence": 0.978629,
+        "entities": [
+          "10-20",
+          "ferrous",
+          "we've"
+        ],
+        "role": "primary",
+        "score": 0.957996,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 32,
+          "session_id": "small-s0004",
+          "speaker": "user",
+          "text": "We've set Ferrous's launch for October 20.",
+          "ts": 1736405419000,
+          "uuid": "3ec3c029-8124-4ddb-b82a-7a24bc15c968"
+        }
+      },
+      {
+        "confidence": 0.90376,
         "entities": [
           "10-20",
           "ferrous"
         ],
         "role": "primary",
-        "score": 0.895529,
+        "score": 0.884705,
         "sources": [
           "lexical",
           "entity",
@@ -1657,12 +1633,12 @@
         }
       },
       {
-        "confidence": 0.751689,
+        "confidence": 0.725184,
         "entities": [
           "ferrous"
         ],
         "role": "primary",
-        "score": 0.729731,
+        "score": 0.709894,
         "sources": [
           "lexical",
           "entity",
@@ -1678,13 +1654,13 @@
         }
       },
       {
-        "confidence": 0.491326,
+        "confidence": 0.610459,
         "entities": [
           "06-19",
           "quill"
         ],
         "role": "supporting",
-        "score": 0.476974,
+        "score": 0.597588,
         "sources": [
           "lexical",
           "dense"
@@ -1723,7 +1699,7 @@
         {
           "candidates": 5,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1740,33 +1716,11 @@
       {
         "confidence": 1.0,
         "entities": [
-          "$670k",
-          "basalt"
-        ],
-        "role": "primary",
-        "score": 0.848525,
-        "sources": [
-          "lexical",
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 51,
-          "session_id": "small-s0005",
-          "speaker": "user",
-          "text": "Still the case: Basalt has $670k to spend this quarter.",
-          "ts": 1736519232000,
-          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
-        }
-      },
-      {
-        "confidence": 0.986724,
-        "entities": [
           "basalt",
           "redis"
         ],
         "role": "primary",
-        "score": 0.83726,
+        "score": 0.859659,
         "sources": [
           "lexical",
           "entity",
@@ -1782,13 +1736,13 @@
         }
       },
       {
-        "confidence": 0.98046,
+        "confidence": 0.975793,
         "entities": [
           "$670k",
           "basalt"
         ],
         "role": "primary",
-        "score": 0.831945,
+        "score": 0.838849,
         "sources": [
           "lexical",
           "entity",
@@ -1804,12 +1758,34 @@
         }
       },
       {
-        "confidence": 0.910297,
+        "confidence": 0.960067,
+        "entities": [
+          "$670k",
+          "basalt"
+        ],
+        "role": "primary",
+        "score": 0.82533,
+        "sources": [
+          "lexical",
+          "entity",
+          "dense"
+        ],
+        "turn": {
+          "id": 51,
+          "session_id": "small-s0005",
+          "speaker": "user",
+          "text": "Still the case: Basalt has $670k to spend this quarter.",
+          "ts": 1736519232000,
+          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
+        }
+      },
+      {
+        "confidence": 0.918745,
         "entities": [
           "basalt"
         ],
         "role": "primary",
-        "score": 0.77241,
+        "score": 0.789807,
         "sources": [
           "lexical",
           "entity",
@@ -1825,26 +1801,25 @@
         }
       },
       {
-        "confidence": 0.89009,
+        "confidence": 0.820221,
         "entities": [
-          "08-23",
           "basalt",
-          "we've"
+          "beatriz moura"
         ],
         "role": "primary",
-        "score": 0.755264,
+        "score": 0.70511,
         "sources": [
           "lexical",
           "entity",
           "dense"
         ],
         "turn": {
-          "id": 21,
-          "session_id": "small-s0003",
+          "id": 47,
+          "session_id": "small-s0005",
           "speaker": "user",
-          "text": "We've set Basalt's code freeze for August 23.",
-          "ts": 1736289112000,
-          "uuid": "264974e2-8c87-43ce-9b95-e64cd0972982"
+          "text": "Had a good conversation with Beatriz Moura about Basalt this morning.",
+          "ts": 1736518857000,
+          "uuid": "b0e0bee6-6b39-49b8-a561-832893b1fdca"
         }
       }
     ],
@@ -1871,7 +1846,7 @@
         {
           "candidates": 8,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,
@@ -1908,13 +1883,13 @@
         }
       },
       {
-        "confidence": 0.906778,
+        "confidence": 0.903746,
         "entities": [
           "basalt",
           "beatriz moura"
         ],
         "role": "primary",
-        "score": 0.924912,
+        "score": 0.921819,
         "sources": [
           "lexical",
           "entity",
@@ -1930,13 +1905,13 @@
         }
       },
       {
-        "confidence": 0.477596,
+        "confidence": 0.379813,
         "entities": [
           "$670k",
           "basalt"
         ],
         "role": "supporting",
-        "score": 0.487147,
+        "score": 0.387408,
         "sources": [
           "entity",
           "dense"
@@ -1948,47 +1923,6 @@
           "text": "Still the case: Basalt has $670k to spend this quarter.",
           "ts": 1736519232000,
           "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
-        }
-      },
-      {
-        "confidence": 0.411143,
-        "entities": [
-          "basalt"
-        ],
-        "role": "supporting",
-        "score": 0.419365,
-        "sources": [
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 19,
-          "session_id": "small-s0003",
-          "speaker": "user",
-          "text": "Picking up where we left off on Basalt.",
-          "ts": 1736288917000,
-          "uuid": "d910b2f4-c676-4eaf-b87e-a988112733c8"
-        }
-      },
-      {
-        "confidence": 0.399703,
-        "entities": [
-          "basalt",
-          "redis"
-        ],
-        "role": "supporting",
-        "score": 0.407696,
-        "sources": [
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 25,
-          "session_id": "small-s0003",
-          "speaker": "user",
-          "text": "Basalt does scheduling with Redis.",
-          "ts": 1736289451000,
-          "uuid": "b23a7921-a9ad-44bc-94d6-88b4c8583242"
         }
       }
     ],
@@ -2016,7 +1950,7 @@
         {
           "candidates": 8,
           "view": "entity",
-          "weight": 1.0
+          "weight": 0.5
         },
         {
           "candidates": 50,

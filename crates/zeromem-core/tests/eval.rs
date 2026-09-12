@@ -41,17 +41,15 @@ struct Floor {
 /// `transcript` is the same facts written the way a real session is —
 /// lowercase prose, paths, `::` symbols, env vars — so the shape rules in
 /// `entities` find nothing in its questions and the entity view never
-/// routes (`retrieve::route::plan` skips it on an empty key list). It still
-/// scores at or above `large`, which is the measurement, not an accident:
-/// on a single-entity question the entity view nominates a flat
-/// `VIEW_LIMIT` list ordered by turn id, so at `ENTITY_WEIGHT` it is not
-/// currently paying for its weight. Read these rows against `large`'s
-/// before trusting an extraction change that claims to raise recall.
+/// routes (`retrieve::route::plan` skips it on an empty key list). Its rows
+/// are therefore the reading for everything *except* that view, and they
+/// sit at or above `large`'s. Any extraction change that claims to raise
+/// recall has to move them, which is what the profile is for.
 const FLOORS: &[Floor] = &[
-    Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.85, mrr: 0.75, ndcg_at_5: 0.75 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.65, mrr: 0.80, ndcg_at_5: 0.60 },
-    Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.85, ndcg_at_5: 0.85 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.95, ndcg_at_5: 0.78 },
+    Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
+    Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
     Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.68, mrr: 0.86, ndcg_at_5: 0.64 },
     Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.93, ndcg_at_5: 0.77 },
 ];
