@@ -71,34 +71,69 @@ pub enum Register {
 }
 
 impl Register {
-    /// Applied to every turn and every question as it is emitted. Pure, so
-    /// it adds no draw to the generator's stream.
+    /// Applied to every turn as it is emitted. Pure, so it adds no draw to
+    /// the generator's stream.
     fn render(self, text: &str) -> String {
         match self {
             Register::Prose => text.to_string(),
-            Register::Transcript => lowercase_prose(text),
+            Register::Transcript => lowercase_prose(text, KEEP_CAPITAL_IN),
+        }
+    }
+
+    /// Applied to every question. A user types their question lowercase even
+    /// when the same user capitalised the name while stating the fact, and
+    /// that asymmetry is the whole point of the transcript corpus.
+    fn render_question(self, text: &str) -> String {
+        match self {
+            Register::Prose => text.to_string(),
+            Register::Transcript => lowercase_prose(text, 0),
         }
     }
 }
+
+/// One in this many capitalised words keeps its capital in the transcript
+/// register. Not zero, because a real session is not uniformly lowercase: a
+/// name is typed `Maya` sometimes and `maya` the rest of the time, so the
+/// store learns the key from the capitalised mentions and is then blind to
+/// the lowercase ones. Not one, because that is just prose. Three leaves
+/// roughly a third of each entity's mentions within reach of the shape
+/// rules, which is the asymmetry the query side has to close.
+const KEEP_CAPITAL_IN: u64 = 3;
 
 /// Lowercase the prose and leave the technical tokens as written: anything
 /// holding a `/`, `_` or `:`, and anything with an inner capital or a digit,
 /// is how it was typed. So `Maya Okafor` flattens to `maya okafor` while
 /// `server/src/engine/embed-worker.ts`, `ZEROMEM_EMBEDDING_URL`,
 /// `retrieve::hand_over`, `TODO:` and `$230k` survive intact.
-fn lowercase_prose(text: &str) -> String {
-    text.split(' ')
-        .map(|word| {
-            let technical =
-                word.contains(['/', '_', ':']) || word.chars().skip(1).any(|c| c.is_uppercase() || c.is_ascii_digit());
-            if technical {
-                word.to_string()
-            } else {
-                word.to_lowercase()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn lowercase_prose(text: &str, keep_capital_in: u64) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for (i, word) in text.split(' ').enumerate() {
+        let technical =
+            word.contains(['/', '_', ':']) || word.chars().skip(1).any(|c| c.is_uppercase() || c.is_ascii_digit());
+        let capitalised = word.starts_with(char::is_uppercase);
+        if technical || (capitalised && keeps_capital(word, i, keep_capital_in)) {
+            out.push(word.to_string());
+        } else {
+            out.push(word.to_lowercase());
+        }
+    }
+    out.join(" ")
+}
+
+/// A pure, stable coin: the same word in the same position of a turn is
+/// always cased the same way, so the corpus stays a function of the seed
+/// alone and this takes no draw from the generator's stream. FNV-1a over
+/// the lowercased word and its position.
+fn keeps_capital(word: &str, position: usize, keep_capital_in: u64) -> bool {
+    if keep_capital_in == 0 {
+        return false;
+    }
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in word.to_lowercase().bytes().chain(position.to_le_bytes()) {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h % keep_capital_in == 0
 }
 
 /// What to generate. Three are committed; see [`SMALL`], [`LARGE`] and
@@ -725,7 +760,7 @@ impl<'p> Generator<'p> {
                     .to_string()
             }
         };
-        self.profile.register.render(&q.replace("{project}", project))
+        self.profile.register.render_question(&q.replace("{project}", project))
     }
 }
 
@@ -782,6 +817,7 @@ mod tests {
     fn the_transcript_register_keeps_technical_tokens() {
         let got = lowercase_prose(
             "Maya Okafor moved it to server/src/engine/embed-worker.ts; See retrieve::hand_over. TODO: set ZEROMEM_EMBEDDING_URL, v2.1 costs $230k",
+            0,
         );
         assert_eq!(
             got,
@@ -790,15 +826,36 @@ mod tests {
     }
 
     #[test]
-    fn the_transcript_corpus_is_mostly_lowercase_and_asks_lowercase_questions() {
+    fn the_transcript_register_keeps_some_capitals_and_keeps_them_stably() {
+        let sentence = "Maya Okafor owns the billing service on Project Heron";
+        let mixed = lowercase_prose(sentence, KEEP_CAPITAL_IN);
+        assert_eq!(mixed, lowercase_prose(sentence, KEEP_CAPITAL_IN), "the coin has to be a function of the word");
+        let kept = mixed.split(' ').filter(|w| w.starts_with(char::is_uppercase)).count();
+        assert!(kept > 0 && kept < 7, "{mixed}");
+        assert_eq!(mixed.to_lowercase(), lowercase_prose(sentence, 0), "only the case may differ");
+    }
+
+    #[test]
+    fn the_transcript_corpus_is_mixed_case_and_asks_lowercase_questions() {
         let corpus = generate(&TRANSCRIPT);
-        let capitalised =
-            corpus.turns.iter().filter(|t| t.text.split(' ').any(|w| w.starts_with(char::is_uppercase))).count();
-        // Some capitals survive on purpose — `TODO:` and env vars are
-        // sentence-initial capitals that are not names, which is what the
-        // extractor's shape rules have to cope with.
-        assert!(capitalised * 4 < corpus.turns.len(), "capitalised turns: {capitalised}/{}", corpus.turns.len());
+        let (mut capitals, mut words) = (0usize, 0usize);
+        for turn in &corpus.turns {
+            for word in turn.text.split(' ') {
+                words += 1;
+                capitals += usize::from(word.starts_with(char::is_uppercase));
+            }
+        }
+        assert!(capitals * 5 < words, "capitalised words: {capitals}/{words}");
+        // Every question is typed the way a user types one, so a name the
+        // store learned from a capitalised mention is out of the shape
+        // rules' reach on the query side. That asymmetry is the corpus.
         assert!(corpus.queries.iter().all(|q| q.query == q.query.to_lowercase()), "a question kept a capital");
+        // A name has to appear both ways, or there is nothing to resolve.
+        let both = |name: &str| {
+            corpus.turns.iter().any(|t| t.text.contains(name))
+                && corpus.turns.iter().any(|t| t.text.contains(&name.to_lowercase()))
+        };
+        assert!(both("Maya"), "maya okafor is only ever written one way");
         // The prose corpora must not have moved.
         assert_eq!(generate(&LARGE).turns, generate(&LARGE).turns);
         assert!(generate(&LARGE).turns.iter().any(|t| t.text.contains("Project ")));
