@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       port: 4000,
       authToken: 'secret',
       readOnly: false,
+      recallTextLimit: 2000,
       embedder: 'auto',
       allowEmbedderSwitch: false,
       remoteEmbedder: null,
@@ -18,6 +19,13 @@ describe('loadConfig', () => {
       curatorToken: null,
       curator: false,
     });
+  });
+
+  it('reads the recall text limit and names the variable when it is nonsense', () => {
+    const env = { DATA_DIR: '/tmp/zm', SECURE_LOCAL_NET: '1' };
+    expect(loadConfig({ ...env, ZEROMEM_RECALL_TEXT_LIMIT: '8000' }).recallTextLimit).toBe(8000);
+    expect(() => loadConfig({ ...env, ZEROMEM_RECALL_TEXT_LIMIT: 'lots' })).toThrow(/ZEROMEM_RECALL_TEXT_LIMIT/);
+    expect(() => loadConfig({ ...env, ZEROMEM_RECALL_TEXT_LIMIT: '10' })).toThrow(/ZEROMEM_RECALL_TEXT_LIMIT/);
   });
 
   it('reads the remote embedder endpoint and requires it for openai', () => {

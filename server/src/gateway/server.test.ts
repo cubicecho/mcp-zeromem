@@ -137,7 +137,7 @@ describe('gateway server', () => {
     });
     expect(recalled.isError).toBeFalsy();
     expect(textOf(recalled).split('\n')[0]).toBe(
-      '[primary] 2026-09-10 user (session a): Maya Okafor owns the billing service on Heron.',
+      '[primary] 2026-09-10 user (session a, turn 1): Maya Okafor owns the billing service on Heron.',
     );
 
     const empty = await client.callTool({
@@ -146,6 +146,28 @@ describe('gateway server', () => {
     });
     expect(empty.isError).toBeFalsy();
     expect(textOf(empty)).toBe('');
+  });
+
+  it('attaches the turns either side of a hit with `context`', async () => {
+    await rig.engine.ingestMany([
+      { session_id: 'a', speaker: 'user', text: 'Can you remind me what we settled on?', ts: 1000 },
+      { session_id: 'a', speaker: 'assistant', text: 'Maya Okafor owns the billing service on Heron.', ts: 2000 },
+      { session_id: 'a', speaker: 'assistant', text: 'She is away until Tuesday.', ts: 3000 },
+    ]);
+    const client = await connectedClient();
+    const args = { query: 'who owns the billing service on Heron?', context: 1 };
+
+    const text = textOf(await client.callTool({ name: 'zeromem_recall', arguments: { ...args, format: 'text' } }));
+    expect(text).toContain('[before] user (turn 1): Can you remind me what we settled on?');
+    expect(text).toContain('[after] assistant (turn 3): She is away until Tuesday.');
+
+    // `max_chars` is the gateway's own; the engine must never be handed it.
+    const json = await client.callTool({ name: 'zeromem_recall', arguments: { ...args, max_chars: 500 } });
+    expect(json.isError).toBeFalsy();
+    const result = queryResultSchema.parse(JSON.parse(textOf(json)));
+    const hit = result.evidence.find((e) => e.turn.id === 2);
+    expect(hit?.before?.map((t) => t.id)).toEqual([1]);
+    expect(hit?.after?.map((t) => t.id)).toEqual([3]);
   });
 
   it('ingests JSONL, reporting the bad lines, and refuses a path outside the data dir', async () => {

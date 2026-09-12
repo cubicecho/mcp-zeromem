@@ -30,6 +30,11 @@
           "isRequired": false
         },
         {
+          "name": "ZEROMEM_RECALL_TEXT_LIMIT",
+          "description": "Characters per turn before zeromem_recall's text format clips and marks the cut (default 2000). The JSON format is never clipped.",
+          "isRequired": false
+        },
+        {
           "name": "ZEROMEM_EMBEDDER",
           "description": "auto (default), onnx, hash or none. auto downloads bge-small-en-v1.5 on first use and falls back to hashing, loudly, if it cannot.",
           "isRequired": false
