@@ -57,7 +57,12 @@ describe('curator scope', () => {
     expect(tools).toEqual(expect.arrayContaining(CURATOR_TOOLS));
     expect(tools).toHaveLength(11);
     const { prompts } = await curator.listPrompts();
-    expect(prompts.map((p) => p.name)).toEqual(['zeromem_curate']);
+    expect(prompts.map((p) => p.name).sort()).toEqual([
+      'zeromem_curate',
+      'zeromem_curate_entities',
+      'zeromem_curate_notes',
+      'zeromem_curate_session',
+    ]);
   });
 
   it('keeps only the read tools under read-only', async () => {
@@ -82,6 +87,36 @@ describe('curator scope', () => {
 
     const focused = await client.getPrompt({ name: 'zeromem_curate', arguments: { focus: 'noise' } });
     expect(promptText(focused)).toMatch(/Work only on these kinds: noise\.$/);
+  });
+
+  it('serves a procedure per focused job, each naming what this run is about', async () => {
+    const client = await connectedClient(true);
+
+    const session = await client.getPrompt({
+      name: 'zeromem_curate_session',
+      arguments: { session_id: 'b' },
+    });
+    const sessionText = promptText(session);
+    expect(sessionText).toMatch(/^# Curating one session/);
+    // The focused runs hand the sweep's cursor back, so they never skip turns nobody has read.
+    expect(sessionText).toContain('cursor: <the cursor from step 1>');
+    expect(sessionText).toMatch(/Curate session `b`, and no other\. Nothing outside it is yours this run\.$/);
+
+    const notes = await client.getPrompt({ name: 'zeromem_curate_notes', arguments: {} });
+    expect(promptText(notes)).toMatch(/^# Writing curator notes/);
+
+    const entities = await client.getPrompt({ name: 'zeromem_curate_entities', arguments: { entity: 'Maya' } });
+    expect(promptText(entities)).toMatch(/Settle `Maya` and the names that appear beside it/);
+  });
+
+  it('tells a read-only curator to report the actions instead of applying them', async () => {
+    const client = await connectedClient(true, true);
+    const text = promptText(await client.getPrompt({ name: 'zeromem_curate', arguments: {} }));
+    expect(text).toMatch(/## This server is read-only/);
+    expect(text).toMatch(/reply\s+with the actions you would have applied/);
+
+    const writable = await connectedClient(true);
+    expect(promptText(await writable.getPrompt({ name: 'zeromem_curate', arguments: {} }))).not.toContain('read-only');
   });
 });
 

@@ -242,7 +242,6 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     for v in &mut views {
         v.candidates.retain(|c| turns.contains_key(&c.0));
     }
-    let considered = turns.len();
 
     // Fuse and calibrate.
     let recency_weight = route::recency_weight(&profile);
@@ -285,7 +284,6 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
         attach_context(ctx.store, &mut evidence, context, &flags, include_hidden)?;
     }
 
-    let _ = considered;
     Ok(QueryTrace {
         query: query.to_string(),
         profile,
