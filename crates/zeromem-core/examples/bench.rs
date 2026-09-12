@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use zeromem_core::dense::EmbedderChoice;
 use zeromem_core::{OpenOptions, QueryOptions, TurnInput, ZeroMem};
-use zeromem_harness::corpus::{self, Profile};
+use zeromem_harness::corpus::{self, Profile, Register};
 
 #[derive(Serialize)]
 struct Report {
@@ -74,8 +74,15 @@ fn main() -> anyhow::Result<()> {
 fn run(target_turns: usize) -> anyhow::Result<Report> {
     // The large fixture averages ~15 turns per session; size the profile to land near the target.
     let sessions = (target_turns / 15).max(1);
-    let profile =
-        Profile { name: "bench", seed: 0xBE7C_0000 + target_turns as u64, sessions, facts_per_session: (3, 7) };
+    let profile = Profile {
+        name: "bench",
+        seed: 0xBE7C_0000 + target_turns as u64,
+        sessions,
+        facts_per_session: (3, 7),
+        // The bench measures latency, not ranking, so it keeps the
+        // prose register the numbers in README were taken with.
+        register: Register::Prose,
+    };
     let generated = corpus::generate(&profile);
     let turns: Vec<TurnInput> = generated
         .turns

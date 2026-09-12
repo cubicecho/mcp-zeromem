@@ -21,7 +21,7 @@ use zeromem_core::curation::{CurationAction, CurationOp, CuratorConfig};
 use zeromem_core::dense::remote::{RemoteSpec, DEFAULT_TIMEOUT_MS};
 use zeromem_core::dense::{self, EmbedderChoice};
 use zeromem_core::{Detail, OpenOptions, QueryOptions, ZeroMem};
-use zeromem_harness::corpus::{Profile, LARGE, SMALL};
+use zeromem_harness::corpus::{Profile, LARGE, SMALL, TRANSCRIPT};
 use zeromem_harness::eval::{self, Summary};
 
 struct Floor {
@@ -37,11 +37,23 @@ struct Floor {
 /// retrieval improves; never lower them without saying why in the commit.
 /// The ONNX rows run unless `ZEROMEM_SKIP_ONNX` is set (see
 /// `reference_vectors.rs` for where the model comes from).
+///
+/// `transcript` is the same facts written the way a real session is —
+/// lowercase prose, paths, `::` symbols, env vars — so the shape rules in
+/// `entities` find nothing in its questions and the entity view never
+/// routes (`retrieve::route::plan` skips it on an empty key list). It still
+/// scores at or above `large`, which is the measurement, not an accident:
+/// on a single-entity question the entity view nominates a flat
+/// `VIEW_LIMIT` list ordered by turn id, so at `ENTITY_WEIGHT` it is not
+/// currently paying for its weight. Read these rows against `large`'s
+/// before trusting an extraction change that claims to raise recall.
 const FLOORS: &[Floor] = &[
     Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.85, mrr: 0.75, ndcg_at_5: 0.75 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.65, mrr: 0.80, ndcg_at_5: 0.60 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.85, ndcg_at_5: 0.85 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.95, ndcg_at_5: 0.78 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.68, mrr: 0.86, ndcg_at_5: 0.64 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.85, mrr: 0.93, ndcg_at_5: 0.77 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {
