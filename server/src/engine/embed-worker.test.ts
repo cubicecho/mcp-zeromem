@@ -36,6 +36,18 @@ describe('EmbedWorker', () => {
     expect(lines.at(-1)).toMatch(/drained: 7 turns/);
   });
 
+  it('stops at once when the loop has not reached its first sleep', async () => {
+    // The kick from stop() lands while the loop is still on its first backlog
+    // read, so there is no sleep to wake. The sleep it starts a moment later
+    // must not hold the worker — and stop()'s caller — for the idle interval.
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
+    const started = performance.now();
+    worker.start();
+    await worker.stop();
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(worker.status()).toMatchObject({ running: false, embedded: 0 });
+  });
+
   it('backs off when the endpoint fails and resumes when it recovers', async () => {
     const endpoint = await mockEmbeddingsServer();
     try {

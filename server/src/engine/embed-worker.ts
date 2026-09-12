@@ -45,9 +45,12 @@ export class EmbedWorker {
   private loop: Promise<void> | null = null;
   private wake: (() => void) | null = null;
   private timer: NodeJS.Timeout | null = null;
+  /** A kick that arrived while the loop was working, for the next sleep. */
+  private kicked = false;
   private embedded = 0;
   private lastError: string | null = null;
   private draining = false;
+  private waiters: (() => void)[] = [];
 
   constructor(engine: ZeroMemEngine, options: EmbedWorkerOptions = {}) {
     this.engine = engine;
@@ -68,7 +71,13 @@ export class EmbedWorker {
 
   /** Wake the loop now, e.g. right after the embedder was switched. */
   kick(): void {
-    this.wake?.();
+    if (this.wake) {
+      this.wake();
+      return;
+    }
+    // The loop is between batches, or has not reached its first sleep yet:
+    // remember the kick, or the sleep it is about to start swallows it.
+    this.kicked = true;
   }
 
   /** Stop after the batch in flight; resolves when the loop has exited. */
@@ -83,10 +92,37 @@ export class EmbedWorker {
     return { running: !this.stopped && this.draining, embedded: this.embedded, last_error: this.lastError };
   }
 
-  /** Resolves once the backlog is empty or the worker has stopped; for tests and graceful shutdown. */
+  /**
+   * Resolves once the backlog is empty or the worker has stopped; for tests and
+   * graceful shutdown. A failing embedder only delays it: the waiter sleeps
+   * through the backoff with the loop and is released when a later pass empties
+   * the backlog.
+   *
+   * The loop signals each time it finishes a pass; the waiter never polls. A
+   * spin on `embeddingBacklog()` queues a read on the engine mutex between
+   * every batch, so on a loaded machine the waiter can starve the very loop it
+   * is waiting for.
+   */
   async drained(): Promise<void> {
-    while (!this.stopped && (this.draining || (await this.engine.embeddingBacklog()) > 0)) {
-      await new Promise((resolve) => setImmediate(resolve));
+    while (!this.stopped) {
+      // Register before reading the backlog: the batch in flight may finish
+      // while that read is queued behind it on the engine mutex.
+      const settled = new Promise<void>((resolve) => {
+        this.waiters.push(resolve);
+      });
+      if (!this.draining && (await this.engine.embeddingBacklog()) === 0) {
+        return;
+      }
+      await settled;
+    }
+  }
+
+  /** The loop has stopped working: release everyone waiting on it. */
+  private settle(): void {
+    const waiters = this.waiters;
+    this.waiters = [];
+    for (const resolve of waiters) {
+      resolve();
     }
   }
 
@@ -96,6 +132,7 @@ export class EmbedWorker {
       const startedAt = this.embedded;
       let announced = false;
       let left = 0;
+      let stalled = 0;
       try {
         let before = await this.engine.embeddingBacklog();
         while (!this.stopped && before > 0) {
@@ -106,6 +143,16 @@ export class EmbedWorker {
           this.draining = true;
           left = await this.engine.embedBacklog(this.batch);
           this.embedded += Math.max(0, before - left);
+          // The engine reports a store that moved under the batch — a switch
+          // or a clear mid-call — as no progress rather than as an error, and
+          // a backlog that never falls would spin this loop hot. A backlog
+          // that grew because turns arrived is not a stall, so only give up
+          // after three readings in a row that did not fall.
+          stalled = left < before ? 0 : stalled + 1;
+          if (stalled === 3) {
+            this.log(`Embedding backlog stalled at ${left} turns; leaving it for the next pass`);
+            break;
+          }
           before = left;
           this.lastError = null;
           // Let queued requests take the engine between batches.
@@ -117,6 +164,7 @@ export class EmbedWorker {
           const seconds = (performance.now() - started) / 1000;
           this.log(`Embedding backlog drained: ${done} turns in ${seconds.toFixed(1)}s`);
         }
+        this.settle();
         await this.sleep(this.idleMs);
       } catch (err) {
         this.draining = false;
@@ -125,12 +173,18 @@ export class EmbedWorker {
           this.log(`Embedding backlog paused: ${message} (retrying in ${Math.round(this.retryMs / 1000)}s)`);
         }
         this.lastError = message;
+        this.settle();
         await this.sleep(this.retryMs);
       }
     }
+    this.settle();
   }
 
   private sleep(ms: number): Promise<void> {
+    if (this.stopped || this.kicked) {
+      this.kicked = false;
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
       const finish = () => {
         if (this.timer) {
