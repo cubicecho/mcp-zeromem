@@ -45,6 +45,8 @@ export class EmbedWorker {
   private loop: Promise<void> | null = null;
   private wake: (() => void) | null = null;
   private timer: NodeJS.Timeout | null = null;
+  /** A kick that arrived while the loop was working, for the next sleep. */
+  private kicked = false;
   private embedded = 0;
   private lastError: string | null = null;
   private draining = false;
@@ -69,7 +71,13 @@ export class EmbedWorker {
 
   /** Wake the loop now, e.g. right after the embedder was switched. */
   kick(): void {
-    this.wake?.();
+    if (this.wake) {
+      this.wake();
+      return;
+    }
+    // The loop is between batches, or has not reached its first sleep yet:
+    // remember the kick, or the sleep it is about to start swallows it.
+    this.kicked = true;
   }
 
   /** Stop after the batch in flight; resolves when the loop has exited. */
@@ -124,6 +132,7 @@ export class EmbedWorker {
       const startedAt = this.embedded;
       let announced = false;
       let left = 0;
+      let stalled = 0;
       try {
         let before = await this.engine.embeddingBacklog();
         while (!this.stopped && before > 0) {
@@ -133,8 +142,17 @@ export class EmbedWorker {
           }
           this.draining = true;
           left = await this.engine.embedBacklog(this.batch);
-          this.log(`[debug] batch: ${before} -> ${left}`);
           this.embedded += Math.max(0, before - left);
+          // The engine reports a store that moved under the batch — a switch
+          // or a clear mid-call — as no progress rather than as an error, and
+          // a backlog that never falls would spin this loop hot. A backlog
+          // that grew because turns arrived is not a stall, so only give up
+          // after three readings in a row that did not fall.
+          stalled = left < before ? 0 : stalled + 1;
+          if (stalled === 3) {
+            this.log(`Embedding backlog stalled at ${left} turns; leaving it for the next pass`);
+            break;
+          }
           before = left;
           this.lastError = null;
           // Let queued requests take the engine between batches.
@@ -163,6 +181,10 @@ export class EmbedWorker {
   }
 
   private sleep(ms: number): Promise<void> {
+    if (this.stopped || this.kicked) {
+      this.kicked = false;
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
       const finish = () => {
         if (this.timer) {

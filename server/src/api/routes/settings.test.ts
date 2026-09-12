@@ -34,12 +34,6 @@ function app(overrides: Parameters<typeof testConfig>[0] = {}, worker?: EmbedWor
   });
 }
 
-// Temporary: CI times these tests out at 5s with no output. Print where they got to.
-function marker() {
-  const t0 = performance.now();
-  return (step: string) => console.log(`[mark] ${step} @${Math.round(performance.now() - t0)}ms`);
-}
-
 const remote = (url: string) => ({ kind: 'openai', url, model: 'mock-embed', api_key: 'sk-secret' });
 
 describe('/api/settings/embedder', () => {
@@ -102,7 +96,7 @@ describe('/api/settings/embedder', () => {
     );
     expect((await rig.engine.stats()).embeddings).toBe(5);
 
-    const worker = new EmbedWorker(rig.engine, { batch: 2, retryMs: 50, log: (line) => console.log(line) });
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
     const switched = await request(app({}, worker))
       .put('/api/settings/embedder')
       .set(auth)
@@ -173,29 +167,20 @@ const turns = (session: string, n: number) =>
 
 describe('POST /api/settings/embedder/reembed', () => {
   it('re-makes every vector with the store embedder and lets the worker drain them', async () => {
-    const mark = marker();
     await rig.engine.ingestMany(turns('s1', 5));
-    mark('ingested');
     const generation = (await rig.engine.stats()).generation;
-    mark('stats');
-    const worker = new EmbedWorker(rig.engine, { batch: 2, retryMs: 50, log: (line) => console.log(line) });
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
 
     expect((await request(app()).post('/api/settings/embedder/reembed')).status).toBe(401);
-    mark('401');
     const res = await request(app({}, worker)).post('/api/settings/embedder/reembed').set(auth);
-    mark('reembed');
     expect(res.status).toBe(200);
     expect(embedderSwitchSchema.parse(res.body)).toMatchObject({ embedder: 'hash-384', vectors_kept: false });
     expect((await rig.engine.stats()).generation).toBe(generation + 1);
-    mark(`generation, backlog ${await rig.engine.embeddingBacklog()}`);
 
     worker.start();
     await worker.drained();
-    mark('drained');
     await worker.stop();
-    mark('stopped');
     expect(await rig.engine.stats()).toMatchObject({ embeddings: 5, embedding_backlog: 0 });
-    mark('asserted');
   });
 
   it('keeps the vectors when the embedder fails, and refuses under read-only', async () => {
@@ -223,12 +208,9 @@ describe('POST /api/settings/embedder/reembed', () => {
 
 describe('POST /api/settings/clear', () => {
   it('clears the vectors and keeps the turns for the worker', async () => {
-    const mark = marker();
     await rig.engine.ingestMany(turns('s1', 4));
-    mark('ingested');
-    const worker = new EmbedWorker(rig.engine, { batch: 2, retryMs: 50, log: (line) => console.log(line) });
+    const worker = new EmbedWorker(rig.engine, { batch: 2, log: () => {} });
     const res = await request(app({}, worker)).post('/api/settings/clear').set(auth).send({ scope: 'embeddings' });
-    mark('cleared');
     expect(res.status).toBe(200);
     expect(clearReportSchema.parse(res.body)).toMatchObject({
       vectors_removed: 4,
@@ -236,15 +218,11 @@ describe('POST /api/settings/clear', () => {
       sessions_removed: 0,
     });
     expect((await rig.engine.stats()).turns).toBe(4);
-    mark(`stats, backlog ${await rig.engine.embeddingBacklog()}`);
 
     worker.start();
     await worker.drained();
-    mark('drained');
     await worker.stop();
-    mark('stopped');
     expect(await rig.engine.stats()).toMatchObject({ turns: 4, embeddings: 4, embedding_backlog: 0 });
-    mark('asserted');
   });
 
   it('clears every turn and session and keeps the embedder', async () => {
