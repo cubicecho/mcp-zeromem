@@ -133,6 +133,7 @@ export class EmbedWorker {
           }
           this.draining = true;
           left = await this.engine.embedBacklog(this.batch);
+          this.log(`[debug] batch: ${before} -> ${left}`);
           this.embedded += Math.max(0, before - left);
           before = left;
           this.lastError = null;
