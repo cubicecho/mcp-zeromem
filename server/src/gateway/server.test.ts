@@ -46,11 +46,12 @@ describe('gateway server', () => {
     expect(statsSchema.parse(JSON.parse(textOf(result)))).toMatchObject({ turns: 1, sessions: 1 });
   });
 
-  it('lists the five tools, and only the read tools when read-only', async () => {
+  it('lists the six tools, and only the read tools when read-only', async () => {
     const all = await (await connectedClient()).listTools();
     expect(all.tools.map((t) => t.name).sort()).toEqual([
       'zeromem_forget_session',
       'zeromem_ingest',
+      'zeromem_read_session',
       'zeromem_recall',
       'zeromem_remember',
       'zeromem_stats',
@@ -59,7 +60,11 @@ describe('gateway server', () => {
     expect(forget?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
 
     const readOnly = await (await connectedClient(true)).listTools();
-    expect(readOnly.tools.map((t) => t.name).sort()).toEqual(['zeromem_recall', 'zeromem_stats']);
+    expect(readOnly.tools.map((t) => t.name).sort()).toEqual([
+      'zeromem_read_session',
+      'zeromem_recall',
+      'zeromem_stats',
+    ]);
   });
 
   it('remembers, recalls and forgets', async () => {
@@ -168,6 +173,45 @@ describe('gateway server', () => {
     const hit = result.evidence.find((e) => e.turn.id === 2);
     expect(hit?.before?.map((t) => t.id)).toEqual([1]);
     expect(hit?.after?.map((t) => t.id)).toEqual([3]);
+  });
+
+  it('reads a session around a turn, and says what it needs when given neither', async () => {
+    await rig.engine.ingestMany([
+      { session_id: 'a', speaker: 'user', text: 'first', ts: 1000 },
+      { session_id: 'a', speaker: 'assistant', text: 'second', ts: 2000 },
+      { session_id: 'b', speaker: 'user', text: 'elsewhere', ts: 3000 },
+    ]);
+    const client = await connectedClient();
+
+    const whole = await client.callTool({
+      name: 'zeromem_read_session',
+      arguments: { session_id: 'a', format: 'text' },
+    });
+    expect(whole.isError).toBeFalsy();
+    expect(textOf(whole).split('\n')).toEqual([
+      'session a: turns 1–2 of 2',
+      '[turn 1] 1970-01-01 user: first',
+      '[turn 2] 1970-01-01 assistant: second',
+    ]);
+
+    // The call a clipped recall hit points at: the session comes from the turn.
+    const around = await client.callTool({
+      name: 'zeromem_read_session',
+      arguments: { around_turn: 2, before: 1, after: 0 },
+    });
+    expect(around.isError).toBeFalsy();
+    expect(JSON.parse(textOf(around))).toMatchObject({
+      session_id: 'a',
+      around_turn: 2,
+      total: 2,
+      offset: 0,
+      truncated: false,
+    });
+    expect(JSON.parse(textOf(around)).turns.map((t: { id: number }) => t.id)).toEqual([1, 2]);
+
+    const neither = await client.callTool({ name: 'zeromem_read_session', arguments: {} });
+    expect(neither.isError).toBeTruthy();
+    expect(textOf(neither)).toMatch(/session_id|around_turn/);
   });
 
   it('ingests JSONL, reporting the bad lines, and refuses a path outside the data dir', async () => {

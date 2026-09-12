@@ -120,6 +120,16 @@ the reference-vector and eval tests.
 **Write tools are gated, not stubbed.** Under `ZEROMEM_READ_ONLY` the write tools are dropped from
 the listing entirely — an agent should never see a tool it cannot call.
 
+**A hit is a turn, not the answer; recall never hands back a fragment silently.** `context: N`
+attaches up to `MAX_CONTEXT` same-session turns either side of a hit as `before`/`after`, and
+`zeromem_read_session` (`session_window` in the engine) reads a session in conversation order for
+any agent, not just the curator. Neighbours are *attached to* evidence, never ranked *with* it —
+`evidence` must be byte-identical with and without `context`, or the eval floors in `tests/eval.rs`
+and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is the tripwire.
+`format: text` keeps line breaks and clips only past `ZEROMEM_RECALL_TEXT_LIMIT` (`max_chars` per
+call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
+model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
+
 **Curation never deletes.** The curator (an outside agent; `docs/curator-playbook.md`, served as
 the `zeromem_curate` MCP prompt) hides, supersedes, aliases, blocks and writes notes, each an
 action in `curation_actions` with a reason, undone by replaying its inverse. Turns stay immutable;
