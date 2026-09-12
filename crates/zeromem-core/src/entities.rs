@@ -132,20 +132,25 @@ fn parse_date(ws: &[Word<'_>]) -> Option<(String, usize)> {
     None
 }
 
-/// `$230k`, `€1,200`, `12%`, `v2.1`, `3.5x`, `250ms`, `16GB`.
+/// `$230k`, `€1,200`, `12%`, `v2.1`, `3.5x`, `250ms`, `16GB`, `-5%`.
+///
+/// A unit suffix alone is not enough: the token has to *start* like a
+/// number, so `embed-gemma-300m`, `k8s-1m` and `h264x` stay out. Those are
+/// names that happen to end in a digit and a unit letter, and kinding them as
+/// quantities put model and package names on the quantity axis.
 fn quantity(word: &str) -> Option<String> {
     let w = word.to_lowercase().replace(',', "");
     let starts_money = w.starts_with(['$', '€', '£']);
-    let has_digit = w.chars().any(|c| c.is_ascii_digit());
-    if !has_digit {
+    if !w.chars().any(|c| c.is_ascii_digit()) {
         return None;
     }
     let is_version = w.starts_with('v') && w[1..].chars().next().is_some_and(|c| c.is_ascii_digit()) && w.contains('.');
+    let unsigned = w.strip_prefix(['-', '+']).unwrap_or(&w);
+    let starts_numeric = unsigned.starts_with(|c: char| c.is_ascii_digit());
     let ends_unit =
         w.ends_with('%') || w.ends_with(['k', 'm', 'x']) || w.ends_with("ms") || w.ends_with("gb") || w.ends_with("mb");
-    let all_digits = w.chars().all(|c| c.is_ascii_digit() || c == '.');
-    if starts_money || is_version || (ends_unit && !all_digits && w.chars().filter(|c| c.is_ascii_digit()).count() >= 1)
-    {
+    let all_digits = unsigned.chars().all(|c| c.is_ascii_digit() || c == '.');
+    if starts_money || is_version || (starts_numeric && ends_unit && !all_digits) {
         return Some(w);
     }
     None
@@ -274,6 +279,16 @@ mod tests {
 
     fn keys(text: &str) -> Vec<(String, EntityKind)> {
         extract(text).into_iter().map(|m| (m.key, m.kind)).collect()
+    }
+
+    #[test]
+    fn a_quantity_starts_like_a_number() {
+        for q in ["$230k", "12%", "-5%", "v2.1", "3.5x", "250ms", "16GB", "300m"] {
+            assert_eq!(quantity(q).as_deref(), Some(q.to_lowercase().as_str()), "{q}");
+        }
+        for not in ["embed-gemma-300m", "k8s-1m", "h264x", "o", "2025", "abc%"] {
+            assert_eq!(quantity(not), None, "{not}");
+        }
     }
 
     #[test]
