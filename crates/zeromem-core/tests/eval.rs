@@ -47,13 +47,20 @@ struct Floor {
 /// document side stays lossy either way (two mentions in three are missed),
 /// which is what an extractor change would have to fix and why these rows
 /// sit below `large`'s.
+///
+/// A third of its questions name a technical token (`what is
+/// HERON_BILLING_SERVICE_URL set to?`), which the path, symbol and env kinds
+/// in `entities` route through the entity view whole. What they still cost
+/// is the owner questions: the lexical index splits
+/// `heron::billing_service::flush` into the very words `who owns the billing
+/// service on heron?` asks with.
 const FLOORS: &[Floor] = &[
     Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
     Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.66 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.88, mrr: 0.95, ndcg_at_5: 0.80 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.79, mrr: 0.87, ndcg_at_5: 0.74 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.91, ndcg_at_5: 0.80 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {

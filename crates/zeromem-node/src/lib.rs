@@ -191,7 +191,7 @@ pub struct GraphOptions {
     pub focus: Option<String>,
     /// Default 1, capped at 3.
     pub hops: Option<u32>,
-    /// Only entities of this kind (`name`, `date`, `quantity`).
+    /// Only entities of this kind (`name`, `date`, `quantity`, `path`, `symbol`, `env`).
     pub kind: Option<String>,
 }
 

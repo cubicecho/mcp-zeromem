@@ -281,6 +281,21 @@ const PURPOSES: &[&str] =
 
 const MILESTONES: &[&str] = &["launch", "code freeze", "beta", "security review", "migration cutover", "retro"];
 
+/// Where an env var in the transcript corpus points. Shaped like what gets
+/// pasted into a session: hosts, ports, the odd bare IP.
+const ENDPOINTS: &[&str] = &[
+    "db-primary.internal:5432",
+    "10.0.4.17:6379",
+    "queue-2.internal:9092",
+    "ledger-west.internal:8443",
+    "10.0.9.3:4317",
+    "cache-a.internal:11211",
+    "search-1.internal:9200",
+    "10.0.12.40:8080",
+    "vault.internal:8200",
+    "metrics-gw.internal:9091",
+];
+
 const MONTHS: &[&str] = &[
     "January",
     "February",
@@ -365,10 +380,24 @@ enum Kind {
     Location,
     Tool,
     Budget,
+    /// Transcript only: which endpoint `HERON_BILLING_SERVICE_URL` points at.
+    Env,
+    /// Transcript only: who last changed `src/heron/billing_service.rs`. Not
+    /// "owns" — that would be a confuser for [`Kind::Owner`] and bury the
+    /// signal this family exists to carry.
+    File,
+    /// Transcript only: what `heron::billing_service::flush` writes to.
+    Symbol,
 }
 
 impl Kind {
     const ALL: [Kind; 5] = [Kind::Owner, Kind::Date, Kind::Location, Kind::Tool, Kind::Budget];
+    /// The prose families plus three whose *question* names a technical
+    /// token — the only way a path, env var or symbol extractor can show up
+    /// in the metrics, since a question about a person or a project reaches
+    /// its answer through a name either way.
+    const TRANSCRIPT: [Kind; 8] =
+        [Kind::Owner, Kind::Date, Kind::Location, Kind::Tool, Kind::Budget, Kind::Env, Kind::File, Kind::Symbol];
 
     fn name(self) -> &'static str {
         match self {
@@ -377,6 +406,9 @@ impl Kind {
             Kind::Location => "location",
             Kind::Tool => "tool",
             Kind::Budget => "budget",
+            Kind::Env => "env",
+            Kind::File => "file",
+            Kind::Symbol => "symbol",
         }
     }
 }
@@ -400,9 +432,24 @@ struct Fact {
 }
 
 impl Key {
+    /// The technical token a transcript-only fact is about, derived from the
+    /// key alone so the statement and the question always agree on it.
+    fn subject(self) -> String {
+        let project = PROJECTS[self.a].to_lowercase();
+        let component = COMPONENTS[self.b].replace(' ', "_");
+        match self.kind {
+            Kind::Env => format!("{}_{}_URL", project.to_uppercase(), component.to_uppercase()),
+            Kind::File => format!("src/{project}/{component}.rs"),
+            Kind::Symbol => format!("{project}::{component}::flush"),
+            _ => unreachable!("only the transcript families have a technical subject"),
+        }
+    }
+
     fn subject_project(self) -> Option<usize> {
         match self.kind {
-            Kind::Owner | Kind::Date | Kind::Tool | Kind::Budget => Some(self.a),
+            Kind::Owner | Kind::Date | Kind::Tool | Kind::Budget | Kind::Env | Kind::File | Kind::Symbol => {
+                Some(self.a)
+            }
             Kind::Location => None,
         }
     }
@@ -531,13 +578,18 @@ impl<'p> Generator<'p> {
     }
 
     fn fresh_key(&mut self, project: usize) -> Key {
-        let kind = *self.rng.pick(&Kind::ALL);
+        // Same slice length for the prose corpora, so the same draw.
+        let kinds: &[Kind] = if self.profile.register == Register::Transcript { &Kind::TRANSCRIPT } else { &Kind::ALL };
+        let kind = *self.rng.pick(kinds);
         match kind {
             Kind::Owner => Key { kind, a: project, b: self.rng.below(COMPONENTS.len() as u64) as usize },
             Kind::Date => Key { kind, a: project, b: self.rng.below(MILESTONES.len() as u64) as usize },
             Kind::Location => Key { kind, a: self.rng.below(PEOPLE.len() as u64) as usize, b: 0 },
             Kind::Tool => Key { kind, a: project, b: self.rng.below(PURPOSES.len() as u64) as usize },
             Kind::Budget => Key { kind, a: project, b: 0 },
+            Kind::Env | Kind::File | Kind::Symbol => {
+                Key { kind, a: project, b: self.rng.below(COMPONENTS.len() as u64) as usize }
+            }
         }
     }
 
@@ -556,6 +608,9 @@ impl<'p> Generator<'p> {
                 Kind::Location => (*self.rng.pick(CITIES)).to_string(),
                 Kind::Tool => (*self.rng.pick(TOOLS)).to_string(),
                 Kind::Budget => format!("${}k", self.rng.range(4, 90) * 10),
+                Kind::Env => (*self.rng.pick(ENDPOINTS)).to_string(),
+                Kind::File => (*self.rng.pick(PEOPLE)).to_string(),
+                Kind::Symbol => (*self.rng.pick(TOOLS)).to_string(),
             };
             let taken = match previous {
                 None => false,
@@ -621,8 +676,29 @@ impl<'p> Generator<'p> {
                 "finance approved {value} for {project}.",
             ]))
             .to_string(),
+            Kind::Env => (*self.rng.pick(&[
+                "on {project}, {subject} points at {value}.",
+                "we set {subject} to {value} for {project}.",
+                "the {project} deploy reads {subject}, which is {value}.",
+            ]))
+            .to_string(),
+            Kind::File => (*self.rng.pick(&[
+                "{value} was the last one in {subject}.",
+                "blame on {subject} says {value} rewrote it.",
+                "the last change to {subject} came from {value}.",
+            ]))
+            .to_string(),
+            Kind::Symbol => (*self.rng.pick(&[
+                "on {project}, {subject} writes to {value}.",
+                "we pointed {subject} at {value}.",
+                "the {project} batch calls {subject}, which lands in {value}.",
+            ]))
+            .to_string(),
         };
         let mut sentence = body.replace("{project}", project).replace("{value}", value);
+        if matches!(key.kind, Kind::Env | Kind::File | Kind::Symbol) {
+            sentence = sentence.replace("{subject}", &key.subject());
+        }
         if prefix.is_empty() {
             capitalise(&mut sentence);
         }
@@ -755,6 +831,18 @@ impl<'p> Generator<'p> {
                 .rng
                 .pick(&["What does {project} use for {purpose}?", "Which tool handles {purpose} on {project}?"])
                 .replace("{purpose}", PURPOSES[key.b]),
+            Kind::Env => self
+                .rng
+                .pick(&["What is {subject} set to?", "Where does {subject} point?"])
+                .replace("{subject}", &key.subject()),
+            Kind::File => self
+                .rng
+                .pick(&["Who last changed {subject}?", "Who touched {subject} last?"])
+                .replace("{subject}", &key.subject()),
+            Kind::Symbol => self
+                .rng
+                .pick(&["What does {subject} write to?", "Where does {subject} land its output?"])
+                .replace("{subject}", &key.subject()),
             Kind::Budget => {
                 (*self.rng.pick(&["What is the {project} budget?", "How much can {project} spend this quarter?"]))
                     .to_string()
@@ -849,7 +937,13 @@ mod tests {
         // Every question is typed the way a user types one, so a name the
         // store learned from a capitalised mention is out of the shape
         // rules' reach on the query side. That asymmetry is the corpus.
-        assert!(corpus.queries.iter().all(|q| q.query == q.query.to_lowercase()), "a question kept a capital");
+        // Technical tokens (an env var) keep their case, as they would.
+        assert!(
+            corpus.queries.iter().all(|q| q.query == lowercase_prose(&q.query, 0)),
+            "a question kept a prose capital"
+        );
+        assert!(corpus.queries.iter().any(|q| q.query.contains("_URL")), "no question names an env var");
+        assert!(corpus.queries.iter().any(|q| q.query.contains("::")), "no question names a symbol");
         // A name has to appear both ways, or there is nothing to resolve.
         let both = |name: &str| {
             corpus.turns.iter().any(|t| t.text.contains(name))

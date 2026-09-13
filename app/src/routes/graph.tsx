@@ -1,4 +1,4 @@
-import type { EntityKind, GraphOptions } from '@mcp-zeromem/shared';
+import { type EntityKind, entityKindSchema, type GraphOptions } from '@mcp-zeromem/shared';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { CrosshairIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
@@ -20,7 +20,7 @@ import { entityKindColor } from '@/lib/viz';
 const searchSchema = z.object({
   focus: z.string().trim().min(1).optional().catch(undefined),
   hops: z.number().int().min(0).max(3).optional().catch(undefined),
-  kind: z.enum(['name', 'date', 'quantity']).optional().catch(undefined),
+  kind: z.enum(entityKindSchema.options).optional().catch(undefined),
   limit: z.number().int().min(1).max(2000).optional().catch(undefined),
   min_weight: z.number().int().min(1).optional().catch(undefined),
 });
@@ -30,11 +30,20 @@ export const Route = createFileRoute('/graph')({
   validateSearch: searchSchema,
 });
 
-const KIND_LEGEND = [
-  { key: 'name', label: 'Names', color: entityKindColor('name') },
-  { key: 'date', label: 'Dates', color: entityKindColor('date') },
-  { key: 'quantity', label: 'Quantities', color: entityKindColor('quantity') },
-];
+const KIND_LABEL: Record<EntityKind, string> = {
+  name: 'Names',
+  date: 'Dates',
+  quantity: 'Quantities',
+  path: 'Paths',
+  symbol: 'Symbols',
+  env: 'Env vars',
+};
+
+const KIND_LEGEND = entityKindSchema.options.map((kind) => ({
+  key: kind,
+  label: KIND_LABEL[kind],
+  color: entityKindColor(kind),
+}));
 
 function GraphPage() {
   const search = Route.useSearch();
@@ -137,9 +146,11 @@ export function GraphExplorer({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All kinds</SelectItem>
-              <SelectItem value="name">Names</SelectItem>
-              <SelectItem value="date">Dates</SelectItem>
-              <SelectItem value="quantity">Quantities</SelectItem>
+              {entityKindSchema.options.map((kind) => (
+                <SelectItem key={kind} value={kind}>
+                  {KIND_LABEL[kind]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

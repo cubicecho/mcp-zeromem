@@ -15,7 +15,7 @@ export function seriesColor(slot: number): string {
 export const OTHER_COLOR = 'var(--viz-other)';
 
 /** Entity kinds have a fixed slot each, so a name is the same hue on every page. */
-export const ENTITY_KIND_SLOT = { name: 1, date: 2, quantity: 3 } as const;
+export const ENTITY_KIND_SLOT = { name: 1, date: 2, quantity: 3, path: 4, symbol: 5, env: 6 } as const;
 
 export function entityKindColor(kind: keyof typeof ENTITY_KIND_SLOT): string {
   return seriesColor(ENTITY_KIND_SLOT[kind]);

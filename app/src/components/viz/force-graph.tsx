@@ -1,4 +1,4 @@
-import type { GraphSnapshot } from '@mcp-zeromem/shared';
+import type { EntityKind, GraphSnapshot } from '@mcp-zeromem/shared';
 import {
   forceCenter,
   forceCollide,
@@ -17,7 +17,7 @@ import { useSize } from './use-size';
 
 interface Node extends SimulationNodeDatum {
   id: string;
-  kind: 'name' | 'date' | 'quantity';
+  kind: EntityKind;
   turns: number;
   degree: number;
   first_ts: number;
@@ -114,6 +114,9 @@ export function ForceGraph({
         name: resolveColor(entityKindColor('name')),
         date: resolveColor(entityKindColor('date')),
         quantity: resolveColor(entityKindColor('quantity')),
+        path: resolveColor(entityKindColor('path')),
+        symbol: resolveColor(entityKindColor('symbol')),
+        env: resolveColor(entityKindColor('env')),
       };
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);

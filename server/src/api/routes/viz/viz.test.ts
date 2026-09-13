@@ -116,6 +116,31 @@ describe('/api/viz', () => {
     expect((await request(app).get('/api/viz/sessions/nope/turns').set(auth)).status).toBe(404);
   });
 
+  it('kinds paths, symbols and env vars, and filters the graph by them', async () => {
+    await rig.engine.ingestMany([
+      {
+        session_id: 'gamma',
+        speaker: 'user',
+        text: 'Maya moved HERON_LEDGER_URL into src/heron/ledger.rs, next to heron::ledger::flush.',
+        ts: 3 * DAY,
+      },
+    ]);
+    const turns = sessionTurnsWithEntitiesResponseSchema.parse(
+      (await request(app).get('/api/viz/sessions/gamma/turns').set(auth)).body,
+    );
+    const mentions = turns.turns[0]?.entities.map((m) => [m.key, m.kind]);
+    expect(mentions).toEqual(
+      expect.arrayContaining([
+        ['heron_ledger_url', 'env'],
+        ['src/heron/ledger.rs', 'path'],
+        ['heron::ledger::flush', 'symbol'],
+      ]),
+    );
+
+    const paths = graphSnapshotSchema.parse((await request(app).get('/api/viz/graph?kind=path').set(auth)).body);
+    expect(paths.nodes.map((n) => [n.entity, n.kind])).toEqual([['src/heron/ledger.rs', 'path']]);
+  });
+
   it('projects the vectors and overlays a query', async () => {
     const plain = projectionSchema.parse((await request(app).get('/api/viz/projection').set(auth)).body);
     expect(plain.points).toHaveLength(5);

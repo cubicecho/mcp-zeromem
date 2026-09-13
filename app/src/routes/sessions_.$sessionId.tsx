@@ -1,3 +1,4 @@
+import type { EntityKind } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -36,7 +37,7 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
   );
 
   const entities = useMemo(() => {
-    const counts = new Map<string, { key: string; kind: 'name' | 'date' | 'quantity'; mentions: number }>();
+    const counts = new Map<string, { key: string; kind: EntityKind; mentions: number }>();
     for (const turn of turns.data?.turns ?? []) {
       for (const mention of turn.entities) {
         const entry = counts.get(mention.key) ?? { key: mention.key, kind: mention.kind, mentions: 0 };
