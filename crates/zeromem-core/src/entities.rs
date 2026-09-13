@@ -279,6 +279,11 @@ fn path(token: &str) -> Option<&str> {
 /// `words()` sees the text: `words()` splits on `_` and `:` (and must, since
 /// it also feeds the hash embedder), so a symbol would otherwise arrive in
 /// pieces and an env var as a run of acronyms.
+/// Byte spans of the paths, symbols and env vars in `text`.
+pub fn technical_spans(text: &str) -> Vec<(usize, usize)> {
+    technical(text).into_iter().map(|m| (m.start, m.end)).collect()
+}
+
 fn technical(text: &str) -> Vec<Mention> {
     let mut out = Vec::new();
     let mut offset = 0;

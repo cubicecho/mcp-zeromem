@@ -64,17 +64,23 @@ pub fn evaluate<F>(queries: &[Query], k: usize, mut run: F) -> Summary
 where
     F: FnMut(&Query) -> Vec<String>,
 {
+    let scores: Vec<QueryScore> = queries.iter().map(|q| score(&run(q), &q.relevant, k)).collect();
+    summarise(k, &scores)
+}
+
+/// Average already-scored queries, so a caller can split one run by fact
+/// family without ranking it twice.
+pub fn summarise(k: usize, scores: &[QueryScore]) -> Summary {
     let mut sum = QueryScore { recall: 0.0, reciprocal_rank: 0.0, ndcg: 0.0 };
-    for q in queries {
-        let s = score(&run(q), &q.relevant, k);
+    for s in scores {
         sum.recall += s.recall;
         sum.reciprocal_rank += s.reciprocal_rank;
         sum.ndcg += s.ndcg;
     }
-    let n = queries.len().max(1) as f64;
+    let n = scores.len().max(1) as f64;
     Summary {
         k,
-        queries: queries.len(),
+        queries: scores.len(),
         recall_at_k: sum.recall / n,
         mrr: sum.reciprocal_rank / n,
         ndcg_at_k: sum.ndcg / n,
