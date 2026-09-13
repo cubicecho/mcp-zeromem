@@ -12,7 +12,7 @@
 
 mod common;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -22,7 +22,7 @@ use zeromem_core::dense::remote::{RemoteSpec, DEFAULT_TIMEOUT_MS};
 use zeromem_core::dense::{self, EmbedderChoice};
 use zeromem_core::{Detail, OpenOptions, QueryOptions, ZeroMem};
 use zeromem_harness::corpus::{Profile, LARGE, SMALL, TRANSCRIPT};
-use zeromem_harness::eval::{self, Summary};
+use zeromem_harness::eval::{self, QueryScore, Summary};
 
 struct Floor {
     profile: &'static Profile,
@@ -87,13 +87,16 @@ fn remote_from_env() -> Option<(RemoteSpec, Option<String>)> {
     Some((spec, env("ZEROMEM_EMBEDDING_API_KEY")))
 }
 
+/// One query's id, fact family and scores.
+type Scored = (String, String, QueryScore);
+
 /// Runs the labeled queries under one embedder; returns the metrics, the
-/// per-query reciprocal ranks and the embedder's name as the store records it.
+/// per-query scores and the embedder's name as the store records it.
 fn run(
     profile: &Profile,
     embedder: EmbedderChoice,
     remote: Option<(RemoteSpec, Option<String>)>,
-) -> (Summary, Vec<(String, f64)>, String) {
+) -> (Summary, Vec<Scored>, String) {
     let corpus = corpus(profile);
     let dir = tempfile::tempdir().unwrap();
     let (remote, api_key) = remote.map(|(s, k)| (Some(s), k)).unwrap_or((None, None));
@@ -110,20 +113,32 @@ fn run(
         let result = zm.query(&q.query, &opts).unwrap();
         let ranked: Vec<String> = result.evidence.iter().map(|e| e.turn.uuid.clone()).collect();
         let s = eval::score(&ranked, &q.relevant, 5);
-        per_query.push((q.id.clone(), s.reciprocal_rank));
+        per_query.push((q.id.clone(), q.kind.clone(), s));
         ranked
     });
     (summary, per_query, name)
 }
 
-fn write_results(profile: &Profile, embedder: &str, summary: &Summary, per_query: &[(String, f64)]) {
+/// The metrics split by fact family, so a family that falls behind shows
+/// even when the mean holds.
+fn by_kind(per_query: &[Scored]) -> BTreeMap<String, Summary> {
+    let mut groups: BTreeMap<String, Vec<QueryScore>> = BTreeMap::new();
+    for (_, kind, s) in per_query {
+        groups.entry(kind.clone()).or_default().push(*s);
+    }
+    groups.into_iter().map(|(kind, scores)| (kind, eval::summarise(5, &scores))).collect()
+}
+
+fn write_results(profile: &Profile, embedder: &str, summary: &Summary, per_query: &[Scored]) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/eval");
     fs::create_dir_all(&dir).unwrap();
-    let misses: Vec<&str> = per_query.iter().filter(|(_, rr)| *rr == 0.0).map(|(id, _)| id.as_str()).collect();
+    let misses: Vec<&str> =
+        per_query.iter().filter(|(_, _, s)| s.reciprocal_rank == 0.0).map(|(id, _, _)| id.as_str()).collect();
     let body = serde_json::json!({
         "profile": profile.name,
         "embedder": embedder,
         "summary": summary,
+        "by_kind": by_kind(per_query),
         "missed": misses,
     });
     let file = dir.join(format!("{}-{}.json", profile.name, embedder));
@@ -152,6 +167,12 @@ fn retrieval_clears_the_floors() {
             "{label}: recall@5 {:.3} mrr {:.3} ndcg@5 {:.3} over {} queries",
             summary.recall_at_k, summary.mrr, summary.ndcg_at_k, summary.queries
         );
+        for (kind, s) in by_kind(&per_query) {
+            eprintln!(
+                "  {kind:>8}: recall@5 {:.3} mrr {:.3} ndcg@5 {:.3} over {}",
+                s.recall_at_k, s.mrr, s.ndcg_at_k, s.queries
+            );
+        }
         assert!(summary.recall_at_k >= floor.recall_at_5, "{label}: recall@5 {:.3}", summary.recall_at_k);
         assert!(summary.mrr >= floor.mrr, "{label}: mrr {:.3}", summary.mrr);
         assert!(summary.ndcg_at_k >= floor.ndcg_at_5, "{label}: ndcg@5 {:.3}", summary.ndcg_at_k);
@@ -190,7 +211,7 @@ fn an_oracle_curator_does_not_hurt_recall() {
             let opts = QueryOptions { top_k: Some(5), detail: Some(Detail::Compact), ..Default::default() };
             let ranked: Vec<String> =
                 zm.query(&q.query, &opts).unwrap().evidence.into_iter().map(|e| e.turn.uuid).collect();
-            per_query.push((q.id.clone(), eval::score(&ranked, &q.relevant, 5).reciprocal_rank));
+            per_query.push((q.id.clone(), q.kind.clone(), eval::score(&ranked, &q.relevant, 5)));
             ranked
         });
         (summary, per_query)
