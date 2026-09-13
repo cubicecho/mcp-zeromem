@@ -91,3 +91,16 @@ fn a_turn_with_every_word_beats_one_repeating_a_rare_word() {
     let ranked = lexical(&mut zm, "what does the edge cache on sparrow use, fastly?");
     assert_eq!(ranked.first().map(String::as_str), Some("all"), "{ranked:?}");
 }
+
+#[test]
+fn a_relation_word_is_answered_by_another_word_for_the_same_relation() {
+    let (_dir, mut zm) = open_temp();
+    zm.ingest_many(&filler(10_000)).unwrap();
+    zm.ingest_many(&[
+        turn("answer", 1_000, "since the reorg kenji morimoto is the point person for sparrow's data warehouse."),
+        turn("other", 2_000, "maya owns the data warehouse on juniper."),
+    ])
+    .unwrap();
+    let ranked = lexical(&mut zm, "who owns the data warehouse on sparrow?");
+    assert_eq!(ranked.first().map(String::as_str), Some("answer"), "{ranked:?}");
+}

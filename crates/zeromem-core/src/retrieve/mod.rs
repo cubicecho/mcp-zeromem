@@ -525,29 +525,54 @@ fn nominate(
 /// contains, then by BM25. BM25 alone lets one repeated or rare word beat a
 /// turn that has all of them.
 ///
+/// A word that names a relation (`owns`) is satisfied by any member of its
+/// family in `profile::PREDICATE_FAMILIES` (`responsibility`, `point
+/// person`), and the members are searched for too.
+///
 /// When the question names no path, symbol or env var, words inside a
 /// turn's technical tokens do not count: `heron::billing_service::flush`
 /// holds every content word of `who owns the billing service on heron?` and
 /// answers none of it. A question that does name one keeps them, or asking
 /// for `HERON_BILLING_SERVICE_URL` would discount its own answer.
 fn lexical_view(store: &Store, profile: &Profile, include_hidden: bool) -> Result<Vec<(i64, f64)>> {
-    let mut hits = store.lexical_search(&profile.tokens, VIEW_LIMIT, include_hidden)?;
-    let wanted: Vec<String> = profile.tokens.iter().map(|t| text::stem(t)).collect();
+    // One slot per question word; each slot is its alternatives, each a
+    // run of stems.
+    let mut terms = profile.tokens.clone();
+    let slots: Vec<Vec<Vec<String>>> = profile
+        .tokens
+        .iter()
+        .map(|t| match profile::predicate_family(t) {
+            Some(family) => family
+                .iter()
+                .map(|m| {
+                    if !terms.iter().any(|x| x == m) {
+                        terms.push((*m).to_string());
+                    }
+                    m.split(' ').map(text::stem).collect()
+                })
+                .collect(),
+            None => vec![vec![text::stem(t)]],
+        })
+        .collect();
+    let mut hits = store.lexical_search(&terms, VIEW_LIMIT, include_hidden)?;
     let mask = entities::technical_spans(&profile.text).is_empty();
     let turns = store.turns_by_ids(&hits.iter().map(|h| h.0).collect::<Vec<_>>())?;
     let covered: HashMap<i64, usize> = turns
         .iter()
         .map(|(&id, turn)| {
             let spans = if mask { entities::technical_spans(&turn.text) } else { Vec::new() };
-            let found: BTreeSet<usize> = text::words(&turn.text)
+            let stems: Vec<String> = text::words(&turn.text)
                 .into_iter()
                 .filter(|w| !spans.iter().any(|&(start, end)| w.start >= start && w.end <= end))
-                .filter_map(|w| {
-                    let stem = text::stem(w.text);
-                    wanted.iter().position(|x| *x == stem)
-                })
+                .map(|w| text::stem(w.text))
                 .collect();
-            (id, found.len())
+            let found = slots
+                .iter()
+                .filter(|alternatives| {
+                    alternatives.iter().any(|run| stems.windows(run.len()).any(|window| window == run.as_slice()))
+                })
+                .count();
+            (id, found)
         })
         .collect();
     let coverage = |id: i64| covered.get(&id).copied().unwrap_or(0);

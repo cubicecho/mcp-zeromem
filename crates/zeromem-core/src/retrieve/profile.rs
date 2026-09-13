@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::entities;
-use crate::text::{is_stopword, normalise, words};
+use crate::text::{is_stopword, normalise, stem, words};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Profile {
@@ -37,6 +37,33 @@ const TEMPORAL_CUES: &[&str] = &[
     "at the moment",
     "as of",
 ];
+
+/// Words that ask about the same relation, so a question's word matches a
+/// turn stating the relation another way: `who owns the billing service?`
+/// is answered by `the billing service is maya's responsibility now`. Each
+/// family counts as one question word, however many of its members a turn
+/// holds. A member may be a phrase.
+pub const PREDICATE_FAMILIES: &[&[&str]] = &[&[
+    "own",
+    "owns",
+    "owned",
+    "owner",
+    "ownership",
+    "responsible",
+    "responsibility",
+    "point person",
+    "in charge",
+    "maintainer",
+    "maintains",
+    "accountable",
+]];
+
+/// The family `word` belongs to, if any, matched on its stem. Only
+/// single-word members can open a family; `person` alone is not a cue.
+pub fn predicate_family(word: &str) -> Option<&'static [&'static str]> {
+    let stem = stem(word);
+    PREDICATE_FAMILIES.iter().copied().find(|family| family.iter().any(|m| !m.contains(' ') && self::stem(m) == stem))
+}
 
 /// How many words a candidate key may span. `project heron rollout` is
 /// plausible; beyond that an n-gram is a sentence, not a name.
@@ -166,5 +193,14 @@ mod tests {
         assert!(!profile("the lastly known ballast").temporal);
         assert!(profile("as of today").temporal);
         assert!(!profile("nowhere near").temporal);
+    }
+
+    #[test]
+    fn relation_words_open_their_family_and_a_bare_phrase_part_does_not() {
+        let owns = predicate_family("owns").expect("owns is a cue");
+        assert!(owns.contains(&"point person"));
+        assert_eq!(predicate_family("Responsible"), Some(owns));
+        assert_eq!(predicate_family("person"), None);
+        assert_eq!(predicate_family("billing"), None);
     }
 }
