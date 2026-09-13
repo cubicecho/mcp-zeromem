@@ -50,17 +50,19 @@ struct Floor {
 ///
 /// A third of its questions name a technical token (`what is
 /// HERON_BILLING_SERVICE_URL set to?`), which the path, symbol and env kinds
-/// in `entities` route through the entity view whole. What they still cost
-/// is the owner questions: the lexical index splits
-/// `heron::billing_service::flush` into the very words `who owns the billing
-/// service on heron?` asks with.
+/// in `entities` route through the entity view whole. The lexical index
+/// still splits `heron::billing_service::flush` into the very words `who
+/// owns the billing service on heron?` asks with, which is why the lexical
+/// view discounts technical tokens for a question that names none. Owner
+/// questions remain the weakest family here; `by_kind` in
+/// `target/eval/*.json` tracks them.
 const FLOORS: &[Floor] = &[
     Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.70, mrr: 0.88, ndcg_at_5: 0.65 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.77, mrr: 0.91, ndcg_at_5: 0.70 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.95, ndcg_at_5: 0.78 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.79, mrr: 0.87, ndcg_at_5: 0.74 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.87, mrr: 0.91, ndcg_at_5: 0.80 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.90, mrr: 0.95, ndcg_at_5: 0.81 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.84, mrr: 0.91, ndcg_at_5: 0.78 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.92, mrr: 0.96, ndcg_at_5: 0.86 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {

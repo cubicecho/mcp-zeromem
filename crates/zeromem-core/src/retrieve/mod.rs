@@ -21,14 +21,16 @@ pub mod fuse;
 pub mod profile;
 pub mod route;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
 use crate::curation::Flags;
 use crate::dense::{Embedder, VectorIndex};
+use crate::entities;
 use crate::error::Result;
 use crate::store::Store;
+use crate::text;
 use crate::types::Turn;
 
 pub use calibrate::{Calibrated, Role, DROP_BELOW, PRIMARY_AT};
@@ -494,7 +496,7 @@ fn nominate(
     flags: &Flags,
 ) -> Result<Vec<(i64, f64)>> {
     Ok(match view.kind {
-        ViewKind::Lexical => ctx.store.lexical_search(&profile.tokens, VIEW_LIMIT, include_hidden)?,
+        ViewKind::Lexical => lexical_view(ctx.store, profile, include_hidden)?,
         ViewKind::Entity => entity_view(ctx.store, &profile.entities, include_hidden)?,
         ViewKind::Dense => match ctx.embedder.as_deref_mut() {
             // A failing embedder (a remote box that is down) empties this
@@ -517,6 +519,41 @@ fn nominate(
             ctx.store.recent_turn_ids(VIEW_LIMIT, include_hidden)?.into_iter().map(|id| (id, 1.0)).collect()
         }
     })
+}
+
+/// BM25 candidates, reordered by how many of the question's words each turn
+/// contains, then by BM25. BM25 alone lets one repeated or rare word beat a
+/// turn that has all of them.
+///
+/// When the question names no path, symbol or env var, words inside a
+/// turn's technical tokens do not count: `heron::billing_service::flush`
+/// holds every content word of `who owns the billing service on heron?` and
+/// answers none of it. A question that does name one keeps them, or asking
+/// for `HERON_BILLING_SERVICE_URL` would discount its own answer.
+fn lexical_view(store: &Store, profile: &Profile, include_hidden: bool) -> Result<Vec<(i64, f64)>> {
+    let mut hits = store.lexical_search(&profile.tokens, VIEW_LIMIT, include_hidden)?;
+    let wanted: Vec<String> = profile.tokens.iter().map(|t| text::stem(t)).collect();
+    let mask = entities::technical_spans(&profile.text).is_empty();
+    let turns = store.turns_by_ids(&hits.iter().map(|h| h.0).collect::<Vec<_>>())?;
+    let covered: HashMap<i64, usize> = turns
+        .iter()
+        .map(|(&id, turn)| {
+            let spans = if mask { entities::technical_spans(&turn.text) } else { Vec::new() };
+            let found: BTreeSet<usize> = text::words(&turn.text)
+                .into_iter()
+                .filter(|w| !spans.iter().any(|&(start, end)| w.start >= start && w.end <= end))
+                .filter_map(|w| {
+                    let stem = text::stem(w.text);
+                    wanted.iter().position(|x| *x == stem)
+                })
+                .collect();
+            (id, found.len())
+        })
+        .collect();
+    let coverage = |id: i64| covered.get(&id).copied().unwrap_or(0);
+    hits.sort_by(|a, b| coverage(b.0).cmp(&coverage(a.0)).then(b.1.total_cmp(&a.1)).then(b.0.cmp(&a.0)));
+    hits.truncate(VIEW_LIMIT);
+    Ok(hits)
 }
 
 /// Add the entity keys the store already holds that the question's shape
