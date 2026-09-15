@@ -2,6 +2,10 @@ import type { EntityKind } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ActionButton } from '@/components/action-button';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
+import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -53,24 +57,26 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/sessions">
-            <ArrowLeftIcon /> Sessions
-          </Link>
-        </Button>
-        <div>
-          <h1 className="font-mono text-xl font-semibold">{sessionId}</h1>
-          {turns.data && first && last && (
-            <p className="text-sm text-muted-foreground">
-              {formatCount(turns.data.turns.length)} turns · {formatDateTime(first.ts)} → {formatDateTime(last.ts)}
-            </p>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        breadcrumbs={
+          <Button variant="ghost" size="sm" asChild className="-ml-3">
+            <Link to="/sessions">
+              <ArrowLeftIcon /> Sessions
+            </Link>
+          </Button>
+        }
+        title={sessionId}
+        titleClassName="font-mono"
+        description={
+          turns.data && first && last
+            ? `${formatCount(turns.data.turns.length)} turns · ${formatDateTime(first.ts)} → ${formatDateTime(last.ts)}`
+            : undefined
+        }
+      />
 
       {turns.isPending && <Skeleton className="h-40 w-full" />}
-      {turns.error && <p className="text-sm text-destructive">{turns.error.message}</p>}
+      {turns.error && <QueryError what="the session" error={turns.error} onRetry={() => turns.refetch()} />}
 
       {turns.data && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -89,41 +95,47 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
               onEntityClick={(key) => setHighlight(key === highlight ? null : key)}
             />
           </div>
-          <aside className="flex flex-col gap-3">
-            <h2 className="text-sm font-medium">Entities in this session</h2>
-            {entities.length === 0 && <p className="text-sm text-muted-foreground">None recognised.</p>}
-            <ul className="flex flex-col gap-1">
-              {entities.map((entity) => (
-                <li key={entity.key} className="flex items-center gap-2 text-sm">
-                  <button
-                    type="button"
-                    className={
-                      entity.key === highlight
-                        ? 'flex min-w-0 flex-1 items-center gap-2 rounded-md bg-accent px-2 py-1 text-left'
-                        : 'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent'
-                    }
-                    onClick={() => setHighlight(entity.key === highlight ? null : entity.key)}
-                    aria-pressed={entity.key === highlight}
-                  >
-                    <span
-                      aria-hidden
-                      className="size-2.5 shrink-0 rounded-[2px]"
-                      style={{ background: entityKindColor(entity.kind) }}
-                    />
-                    <span className="truncate">{entity.key}</span>
-                    <Badge variant="outline" className="ml-auto tabular-nums">
-                      {entity.mentions}
-                    </Badge>
-                  </button>
-                  <Button variant="ghost" size="icon-sm" asChild aria-label={`Show ${entity.key} in the graph`}>
-                    <Link to="/graph" search={{ focus: entity.key }}>
-                      <WaypointsIcon />
-                    </Link>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </aside>
+          <Section
+            className="self-start"
+            title="Entities in this session"
+            content={
+              entities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">None recognised.</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {entities.map((entity) => (
+                    <li key={entity.key} className="flex items-center gap-2 text-sm">
+                      <button
+                        type="button"
+                        className={
+                          entity.key === highlight
+                            ? 'flex min-w-0 flex-1 items-center gap-2 rounded-md bg-accent px-2 py-1 text-left'
+                            : 'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent'
+                        }
+                        onClick={() => setHighlight(entity.key === highlight ? null : entity.key)}
+                        aria-pressed={entity.key === highlight}
+                      >
+                        <span
+                          aria-hidden
+                          className="size-2.5 shrink-0 rounded-[2px]"
+                          style={{ background: entityKindColor(entity.kind) }}
+                        />
+                        <span className="truncate">{entity.key}</span>
+                        <Badge variant="outline" className="ml-auto tabular-nums">
+                          {entity.mentions}
+                        </Badge>
+                      </button>
+                      <ActionButton variant="ghost" size="icon-sm" asChild label={`Show ${entity.key} in the graph`}>
+                        <Link to="/graph" search={{ focus: entity.key }}>
+                          <WaypointsIcon />
+                        </Link>
+                      </ActionButton>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          />
         </div>
       )}
     </div>

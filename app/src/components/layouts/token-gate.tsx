@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { KeyRoundIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
+import { CardLayout } from '@/components/card-layout';
+import { FormField } from '@/components/form-field';
+import { PasswordInput } from '@/components/password-input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { setToken, useNeedsAuth } from '@/lib/auth';
 
 /**
@@ -34,34 +34,37 @@ export function TokenGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <KeyRoundIcon className="size-4" /> Authentication required
-          </CardTitle>
-          <CardDescription>
+      <CardLayout
+        className="w-full max-w-sm"
+        icon={<KeyRoundIcon />}
+        title="Authentication required"
+        description={
+          <>
             Enter the server token (from <code>MCP_ZEROMEM_TOKEN</code>).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </>
+        }
+        content={
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="token">Token</Label>
-              <Input
-                id="token"
-                type="password"
-                autoFocus
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                placeholder="Bearer token"
-              />
-            </div>
+            <FormField
+              label="Token"
+              control={
+                <PasswordInput
+                  showLabel="Show token"
+                  hideLabel="Hide token"
+                  autoFocus
+                  autoComplete="current-password"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  placeholder="Bearer token"
+                />
+              }
+            />
             <Button type="submit" disabled={!value.trim()}>
               Unlock
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        }
+      />
     </div>
   );
 }

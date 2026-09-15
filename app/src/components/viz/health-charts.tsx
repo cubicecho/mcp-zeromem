@@ -1,5 +1,6 @@
 import type { Health } from '@mcp-zeromem/shared';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardLayout } from '@/components/card-layout';
+import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ColumnChart } from '@/components/viz/column-chart';
@@ -17,18 +18,20 @@ function ms(value: number | null): string {
 
 function Stat({ label, value, hint, spark }: { label: string; value: string; hint?: string; spark?: React.ReactNode }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex items-end justify-between gap-2">
-        <div>
-          <p className="text-2xl font-semibold tabular-nums">{value}</p>
-          {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-        </div>
-        {spark}
-      </CardContent>
-    </Card>
+    <CardLayout
+      title={label}
+      headerClassName="text-sm text-muted-foreground"
+      contentClassName="flex items-end justify-between gap-2"
+      content={
+        <>
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{value}</p>
+            {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+          </div>
+          {spark}
+        </>
+      }
+    />
   );
 }
 
@@ -43,7 +46,7 @@ export function HealthCharts() {
     return <Skeleton className="h-64 w-full" />;
   }
   if (health.error) {
-    return <p className="text-sm text-destructive">Failed to load health series: {health.error.message}</p>;
+    return <QueryError what="the health series" error={health.error} onRetry={() => health.refetch()} />;
   }
   const data: Health = health.data;
   const series = data.series;

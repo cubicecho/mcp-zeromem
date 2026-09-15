@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { OptionSelect } from '@/components/option-select';
+import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ColumnChart } from '@/components/viz/column-chart';
@@ -13,6 +14,8 @@ const RANGES = [
   { key: '365', label: 'Last year', days: 365 },
   { key: 'all', label: 'All time', days: null },
 ] as const;
+
+const RANGE_OPTIONS = RANGES.map((r) => ({ value: r.key, label: r.label }));
 
 const DAY_MS = 86_400_000;
 
@@ -43,18 +46,13 @@ export function GrowthCharts() {
 
   const rows = growth.data?.days ?? [];
   const control = (
-    <Select value={range} onValueChange={(v) => setRange(v as typeof range)}>
-      <SelectTrigger className="h-8 w-36 text-xs" aria-label="Growth range">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {RANGES.map((r) => (
-          <SelectItem key={r.key} value={r.key}>
-            {r.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <OptionSelect
+      aria-label="Growth range"
+      className="h-8 w-36 text-xs"
+      options={RANGE_OPTIONS}
+      value={range}
+      onValueChange={(v) => setRange(v as typeof range)}
+    />
   );
   const columns = [
     { key: 'day', header: 'Day', render: (d: (typeof rows)[number]) => d.day },
@@ -87,7 +85,7 @@ export function GrowthCharts() {
     );
   }
   if (growth.error) {
-    return <p className="text-sm text-destructive">Failed to load growth: {growth.error.message}</p>;
+    return <QueryError what="the growth series" error={growth.error} onRetry={() => growth.refetch()} />;
   }
   const x = rows.map((d) => d.day);
   return (

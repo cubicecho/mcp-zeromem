@@ -1,8 +1,8 @@
 import { TableIcon, TrendingUpIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { ActionButton } from '@/components/action-button';
+import { CardLayout } from '@/components/card-layout';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export interface TableColumn<Row> {
@@ -42,64 +42,65 @@ export function ChartCard<Row>({
 }) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-2">
-        <div>
-          <CardTitle>{title}</CardTitle>
-          {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        </div>
+    <CardLayout
+      title={title}
+      description={description}
+      action={
         <div className="flex items-center gap-1">
           {controls}
-          <Button
+          <ActionButton
             variant="ghost"
             size="icon-sm"
-            aria-label={view === 'chart' ? 'Show as table' : 'Show as chart'}
+            label={view === 'chart' ? 'Show as table' : 'Show as chart'}
             aria-pressed={view === 'table'}
             onClick={() => setView(view === 'chart' ? 'table' : 'chart')}
           >
             {view === 'chart' ? <TableIcon /> : <TrendingUpIcon />}
-          </Button>
+          </ActionButton>
         </div>
-      </CardHeader>
-      <CardContent className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'} aria-busy={loading}>
-        {rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">{empty ?? 'Nothing to chart yet.'}</p>
-        ) : view === 'chart' ? (
-          children
-        ) : (
-          <StickyHeaderContentFooter
-            className="h-auto max-h-80"
-            contentClassName="overflow-x-auto rounded-md border"
-            content={
-              <Table sticky>
-                <TableHeader>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableHead key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
-                        {column.header}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={rowKey(row)}>
+      }
+      contentClassName={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}
+      content={
+        <div aria-busy={loading}>
+          {rows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{empty ?? 'Nothing to chart yet.'}</p>
+          ) : view === 'chart' ? (
+            children
+          ) : (
+            <StickyHeaderContentFooter
+              className="h-auto max-h-80"
+              contentClassName="overflow-x-auto rounded-md border"
+              content={
+                <Table sticky>
+                  <TableHeader>
+                    <TableRow>
                       {columns.map((column) => (
-                        <TableCell
-                          key={column.key}
-                          className={column.align === 'right' ? 'text-right tabular-nums' : undefined}
-                        >
-                          {column.render(row)}
-                        </TableCell>
+                        <TableHead key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
+                          {column.header}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            }
-          />
-        )}
-      </CardContent>
-    </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={rowKey(row)}>
+                        {columns.map((column) => (
+                          <TableCell
+                            key={column.key}
+                            className={column.align === 'right' ? 'text-right tabular-nums' : undefined}
+                          >
+                            {column.render(row)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              }
+            />
+          )}
+        </div>
+      }
+    />
   );
 }

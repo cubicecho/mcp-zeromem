@@ -20,6 +20,16 @@ import {
 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
+import { ActionButton } from '@/components/action-button';
+import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
+import { CardLayout } from '@/components/card-layout';
+import { ConfirmButton } from '@/components/confirm-button';
+import { FormField } from '@/components/form-field';
+import { OptionSelect } from '@/components/option-select';
+import { PageHeader } from '@/components/page-header';
+import { PasswordInput } from '@/components/password-input';
+import { QueryError } from '@/components/query-state';
+import { Section } from '@/components/section';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,12 +42,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
 import { ApiRequestError } from '@/lib/api';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import {
@@ -77,38 +83,37 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          What the store is embedded with, and what it holds. A change here is recorded in the store itself, so every
-          process that opens it follows.
-        </p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Settings"
+        description="What the store is embedded with, and what it holds. A change here is recorded in the store itself, so every process that opens it follows."
+      />
 
       {settings.isPending && <Skeleton className="h-64 w-full" />}
       {settings.error && (
-        <p className="text-sm text-destructive">Failed to load the embedder settings: {settings.error.message}</p>
+        <QueryError what="the embedder settings" error={settings.error} onRetry={() => settings.refetch()} />
       )}
       {settings.data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Embedder</CardTitle>
-            <CardDescription>The model behind the dense view, and how to reach it.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6">
-            <CurrentEmbedder settings={settings.data} status={status.data} />
-            {!readOnly && settings.data.embedder !== null && (
-              <ReembedAction settings={settings.data} status={status.data} />
-            )}
-            {readOnly ? (
-              <p className="text-sm text-muted-foreground">
-                This server is read-only (ZEROMEM_READ_ONLY), so the embedder cannot be changed from here.
-              </p>
-            ) : (
-              <EmbedderForm key={settings.data.embedder ?? 'none'} settings={settings.data} status={status.data} />
-            )}
-          </CardContent>
-        </Card>
+        <CardLayout
+          title="Embedder"
+          description="The model behind the dense view, and how to reach it."
+          contentClassName="flex flex-col gap-6"
+          content={
+            <>
+              <CurrentEmbedder settings={settings.data} status={status.data} />
+              {!readOnly && settings.data.embedder !== null && (
+                <ReembedAction settings={settings.data} status={status.data} />
+              )}
+              {readOnly ? (
+                <p className="text-sm text-muted-foreground">
+                  This server is read-only (ZEROMEM_READ_ONLY), so the embedder cannot be changed from here.
+                </p>
+              ) : (
+                <EmbedderForm key={settings.data.embedder ?? 'none'} settings={settings.data} status={status.data} />
+              )}
+            </>
+          }
+        />
       )}
 
       <Curator readOnly={readOnly} />
@@ -124,7 +129,6 @@ export function SettingsPage() {
  * server probes the embedder first; if it still fails, nothing is dropped.
  */
 function ReembedAction({ settings, status }: { settings: EmbedderSettings; status: ServerStatus | undefined }) {
-  const [confirming, setConfirming] = useState(false);
   const reembed = useReembed();
   const vectors = status?.engine.embeddings ?? 0;
   const turns = status?.engine.turns ?? 0;
@@ -136,7 +140,6 @@ function ReembedAction({ settings, status }: { settings: EmbedderSettings; statu
         toast.success(`Re-embedding with ${report.embedder}; ${formatCount(report.turns_to_embed)} turns queued.`);
       },
       onError: toastApiError,
-      onSettled: () => setConfirming(false),
     });
   };
 
@@ -146,39 +149,19 @@ function ReembedAction({ settings, status }: { settings: EmbedderSettings; statu
         Vectors missing or stale? Re-embed every turn with <span className="font-mono">{name}</span>. It is tested
         first, so an embedder that still fails leaves the vectors alone.
       </p>
-      <Button
-        type="button"
+      <ConfirmButton
         variant="outline"
         className="shrink-0"
+        label="Re-embed all turns"
         disabled={reembed.isPending || turns === 0}
-        onClick={() => setConfirming(true)}
+        title={`Re-embed every turn with ${name}?`}
+        description={`This drops ${formatCount(vectors)} vectors and re-embeds ${formatCount(turns)} turns in the background. Recall uses the lexical and entity views for turns not yet re-embedded.`}
+        confirmLabel="Re-embed"
+        onConfirm={confirm}
       >
         <RefreshCwIcon aria-hidden />
         {reembed.isPending ? 'Re-embedding…' : 'Re-embed all turns'}
-      </Button>
-      <AlertDialog open={confirming} onOpenChange={(open) => !open && setConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Re-embed every turn with {name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This drops {formatCount(vectors)} vectors and re-embeds {formatCount(turns)} turns in the background.
-              Recall uses the lexical and entity views for turns not yet re-embedded.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={reembed.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                confirm();
-              }}
-              disabled={reembed.isPending}
-            >
-              {reembed.isPending ? 'Re-embedding…' : 'Re-embed'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ConfirmButton>
     </div>
   );
 }
@@ -192,44 +175,43 @@ const CLEAR_WORD = 'clear';
  * settings survive both.
  */
 function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: boolean }) {
-  const [confirming, setConfirming] = useState<'embeddings' | 'memory' | null>(null);
+  const [confirmingMemory, setConfirmingMemory] = useState(false);
   const [typed, setTyped] = useState('');
   const clear = useClearStore();
   const { turns, sessions, embeddings, entities } = status.engine;
 
   const close = () => {
-    setConfirming(null);
+    setConfirmingMemory(false);
     setTyped('');
   };
-  const confirm = () => {
-    if (!confirming) {
-      return;
-    }
-    clear.mutate(confirming, {
+  const clearVectors = () =>
+    clear.mutate('embeddings', {
       onSuccess: (report) => {
         toast.success(
-          confirming === 'embeddings'
-            ? `Cleared ${formatCount(report.vectors_removed)} vectors; ${formatCount(report.turns_to_embed)} turns queued for re-embedding.`
-            : `Cleared ${formatCount(report.turns_removed)} turns from ${formatCount(report.sessions_removed)} sessions.`,
+          `Cleared ${formatCount(report.vectors_removed)} vectors; ${formatCount(report.turns_to_embed)} turns queued for re-embedding.`,
+        );
+      },
+      onError: toastApiError,
+    });
+  const clearMemory = () =>
+    clear.mutate('memory', {
+      onSuccess: (report) => {
+        toast.success(
+          `Cleared ${formatCount(report.turns_removed)} turns from ${formatCount(report.sessions_removed)} sessions.`,
         );
       },
       onError: toastApiError,
       onSettled: close,
     });
-  };
-  const memoryLocked = confirming === 'memory' && typed.trim().toLowerCase() !== CLEAR_WORD;
+  const memoryLocked = typed.trim().toLowerCase() !== CLEAR_WORD;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Stored data</CardTitle>
-        <CardDescription>
-          {formatCount(turns)} turns in {formatCount(sessions)} sessions, {formatCount(entities)} entities and{' '}
-          {formatCount(embeddings)} vectors.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {readOnly ? (
+    <CardLayout
+      title="Stored data"
+      description={`${formatCount(turns)} turns in ${formatCount(sessions)} sessions, ${formatCount(entities)} entities and ${formatCount(embeddings)} vectors.`}
+      contentClassName="flex flex-col gap-4"
+      content={
+        readOnly ? (
           <p className="text-sm text-muted-foreground">
             This server is read-only (ZEROMEM_READ_ONLY), so nothing can be cleared from here.
           </p>
@@ -240,16 +222,19 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
                 Drop every vector and keep the turns. The server re-embeds them in the background with the current
                 embedder, which is not tested first.
               </p>
-              <Button
-                type="button"
+              <ConfirmButton
                 variant="outline"
                 className="shrink-0"
+                label="Clear vectors"
                 disabled={clear.isPending || embeddings === 0}
-                onClick={() => setConfirming('embeddings')}
+                title={`Clear ${formatCount(embeddings)} vectors?`}
+                description={`The ${formatCount(turns)} turns stay and are re-embedded in the background. Recall uses the lexical and entity views until they are.`}
+                confirmLabel="Clear vectors"
+                onConfirm={clearVectors}
               >
                 <EraserIcon aria-hidden />
                 Clear vectors
-              </Button>
+              </ConfirmButton>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
@@ -261,58 +246,56 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
                 variant="destructive"
                 className="shrink-0"
                 disabled={clear.isPending || turns === 0}
-                onClick={() => setConfirming('memory')}
+                onClick={() => setConfirmingMemory(true)}
               >
                 <Trash2Icon aria-hidden />
                 Clear all memory
               </Button>
             </div>
+            {/* Not a ConfirmButton: the confirm stays locked until the word is typed. */}
+            <AlertDialog open={confirmingMemory} onOpenChange={(open) => !open && close()}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear all memory?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This deletes {formatCount(turns)} turns from {formatCount(sessions)} sessions, with their entities,
+                    summaries and vectors, for every process using this store. It cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <FormField
+                  label={
+                    <>
+                      Type <span className="font-mono">{CLEAR_WORD}</span> to confirm
+                    </>
+                  }
+                  control={
+                    <Input
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={typed}
+                      onChange={(event) => setTyped(event.target.value)}
+                    />
+                  }
+                />
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={clear.isPending}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      clearMemory();
+                    }}
+                    disabled={clear.isPending || memoryLocked}
+                  >
+                    {clear.isPending ? 'Clearing…' : 'Clear memory'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
-        )}
-      </CardContent>
-
-      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && close()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirming === 'memory' ? 'Clear all memory?' : `Clear ${formatCount(embeddings)} vectors?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirming === 'memory'
-                ? `This deletes ${formatCount(turns)} turns from ${formatCount(sessions)} sessions, with their entities, summaries and vectors, for every process using this store. It cannot be undone.`
-                : `The ${formatCount(turns)} turns stay and are re-embedded in the background. Recall uses the lexical and entity views until they are.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {confirming === 'memory' && (
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="clear-confirm">
-                Type <span className="font-mono">{CLEAR_WORD}</span> to confirm
-              </Label>
-              <Input
-                id="clear-confirm"
-                autoComplete="off"
-                spellCheck={false}
-                value={typed}
-                onChange={(event) => setTyped(event.target.value)}
-              />
-            </div>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={clear.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant={confirming === 'memory' ? 'destructive' : 'default'}
-              onClick={(event) => {
-                event.preventDefault();
-                confirm();
-              }}
-              disabled={clear.isPending || memoryLocked}
-            >
-              {clear.isPending ? 'Clearing…' : confirming === 'memory' ? 'Clear memory' : 'Clear vectors'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+        )
+      }
+    />
   );
 }
 
@@ -414,7 +397,6 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
   const [form, setForm] = useState<FormState>(() => fromSpec(settings.spec));
   const [probe, setProbe] = useState<EmbedderProbe | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
   const test = useTestEmbedder();
   const apply = useSetEmbedder();
   const update = (patch: Partial<FormState>) => {
@@ -451,7 +433,6 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
         );
       },
       onError: toastApiError,
-      onSettled: () => setConfirming(false),
     });
   };
 
@@ -459,113 +440,127 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
   const turns = status?.engine.turns ?? 0;
   const spec = toSpec(form);
   const sameModel = settings.spec !== null && sameEmbedder(settings.spec, spec);
+  // OptionSelect has no disabled option, so a build without ONNX leaves it out unless the store already uses it.
+  const kindOptions = (['onnx', 'hash', 'openai'] as const)
+    .filter((kind) => kind !== 'onnx' || settings.onnx_available || form.kind === 'onnx')
+    .map((kind) => ({
+      value: kind,
+      label:
+        kind === 'onnx' && !settings.onnx_available ? `${KIND_LABELS.onnx} — not in this build` : KIND_LABELS[kind],
+    }));
 
   return (
     <form onSubmit={runTest} autoComplete="off" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="embedder-kind">Kind</Label>
-        <Select value={form.kind} onValueChange={(kind) => update({ kind: kind as EmbedderKind })}>
-          <SelectTrigger id="embedder-kind" className="w-full max-w-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="onnx" disabled={!settings.onnx_available}>
-              {KIND_LABELS.onnx}
-              {settings.onnx_available ? '' : ' — not in this build'}
-            </SelectItem>
-            <SelectItem value="hash">{KIND_LABELS.hash}</SelectItem>
-            <SelectItem value="openai">{KIND_LABELS.openai}</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {form.kind === 'onnx' && 'BGE-small-en-v1.5 running in the server; downloaded once into the model cache.'}
-          {form.kind === 'hash' && 'Deterministic word hashing. Word overlap, not meaning; for tests and CI.'}
-          {form.kind === 'openai' &&
-            'Any server speaking POST /v1/embeddings: Ollama, llama.cpp, vLLM, an NPU box, or the hosted API.'}
-        </p>
-      </div>
+      <FormField
+        className="max-w-sm"
+        label="Kind"
+        description={
+          form.kind === 'onnx'
+            ? 'BGE-small-en-v1.5 running in the server; downloaded once into the model cache.'
+            : form.kind === 'hash'
+              ? 'Deterministic word hashing. Word overlap, not meaning; for tests and CI.'
+              : 'Any server speaking POST /v1/embeddings: Ollama, llama.cpp, vLLM, an NPU box, or the hosted API.'
+        }
+        control={(props) => (
+          <OptionSelect
+            {...props}
+            options={kindOptions}
+            value={form.kind}
+            onValueChange={(kind) => update({ kind: kind as EmbedderKind })}
+          />
+        )}
+      />
 
       {remote && (
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-url">Base URL</Label>
-            <Input
-              id="embedder-url"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="http://localhost:11434/v1"
-              value={form.url}
-              onChange={(event) => update({ url: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-model">Model</Label>
-            <Input
-              id="embedder-model"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="nomic-embed-text"
-              value={form.model}
-              onChange={(event) => update({ model: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-key">API key</Label>
-            <Input
-              id="embedder-key"
-              type="password"
-              // A text field followed by a password field looks like a login
-              // form to browsers, which then fill the model as a username and
-              // ignore autocomplete="off". `new-password` is the one value
-              // they honour; the data-* attributes tell password managers to
-              // stay out too.
-              autoComplete="new-password"
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore
-              spellCheck={false}
-              placeholder={settings.spec?.kind === 'openai' && settings.api_key_source !== 'none' ? '(unchanged)' : ''}
-              value={form.apiKey}
-              onChange={(event) => update({ apiKey: event.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              {settings.api_key_source === 'env'
+          <FormField
+            label="Base URL"
+            control={
+              <Input
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="http://localhost:11434/v1"
+                value={form.url}
+                onChange={(event) => update({ url: event.target.value })}
+              />
+            }
+          />
+          <FormField
+            label="Model"
+            control={
+              <Input
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="nomic-embed-text"
+                value={form.model}
+                onChange={(event) => update({ model: event.target.value })}
+              />
+            }
+          />
+          <FormField
+            label="API key"
+            description={
+              settings.api_key_source === 'env'
                 ? 'The key from ZEROMEM_EMBEDDING_API_KEY is in use and overrides whatever is saved here.'
-                : 'Saved in the store as entered. Leave blank to keep the stored key.'}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-timeout">Timeout (ms)</Label>
-            <Input
-              id="embedder-timeout"
-              type="number"
-              min={1}
-              value={form.timeoutMs}
-              onChange={(event) => update({ timeoutMs: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-query-prefix">Query prefix</Label>
-            <Input
-              id="embedder-query-prefix"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="query: "
-              value={form.queryPrefix}
-              onChange={(event) => update({ queryPrefix: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="embedder-document-prefix">Document prefix</Label>
-            <Input
-              id="embedder-document-prefix"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="passage: "
-              value={form.documentPrefix}
-              onChange={(event) => update({ documentPrefix: event.target.value })}
-            />
-          </div>
+                : 'Saved in the store as entered. Leave blank to keep the stored key.'
+            }
+            control={
+              <PasswordInput
+                showLabel="Show API key"
+                hideLabel="Hide API key"
+                // A text field followed by a password field looks like a login
+                // form to browsers, which then fill the model as a username and
+                // ignore autocomplete="off". `new-password` is the one value
+                // they honour; the data-* attributes tell password managers to
+                // stay out too.
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
+                spellCheck={false}
+                placeholder={
+                  settings.spec?.kind === 'openai' && settings.api_key_source !== 'none' ? '(unchanged)' : ''
+                }
+                value={form.apiKey}
+                onChange={(event) => update({ apiKey: event.target.value })}
+              />
+            }
+          />
+          <FormField
+            label="Timeout (ms)"
+            control={
+              <Input
+                type="number"
+                min={1}
+                value={form.timeoutMs}
+                onChange={(event) => update({ timeoutMs: event.target.value })}
+              />
+            }
+          />
+          <FormField
+            label="Query prefix"
+            control={
+              <Input
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="query: "
+                value={form.queryPrefix}
+                onChange={(event) => update({ queryPrefix: event.target.value })}
+              />
+            }
+          />
+          <FormField
+            label="Document prefix"
+            control={
+              <Input
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="passage: "
+                value={form.documentPrefix}
+                onChange={(event) => update({ documentPrefix: event.target.value })}
+              />
+            }
+          />
         </div>
       )}
 
@@ -574,9 +569,21 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           <PlugZapIcon aria-hidden />
           {test.isPending ? 'Testing…' : 'Test connection'}
         </Button>
-        <Button type="button" disabled={incomplete || apply.isPending} onClick={() => setConfirming(true)}>
+        <ConfirmButton
+          label="Apply"
+          tooltip={false}
+          disabled={incomplete || apply.isPending}
+          title={sameModel ? 'Save embedder settings?' : `Switch the embedder to ${describe(spec)}?`}
+          description={
+            sameModel
+              ? 'The model is unchanged, so the vectors are kept; only the endpoint settings are updated.'
+              : `This drops ${formatCount(vectors)} vectors and re-embeds ${formatCount(turns)} turns with ${describe(spec)}. Recall uses the lexical and entity views for turns not yet re-embedded.`
+          }
+          confirmLabel={sameModel ? 'Save' : 'Switch'}
+          onConfirm={confirmApply}
+        >
           {apply.isPending ? 'Applying…' : 'Apply'}
-        </Button>
+        </ConfirmButton>
         {probe && (
           <p role="status" className="flex items-center gap-1 text-sm">
             <CheckIcon className="size-4 text-[var(--viz-good)]" aria-hidden />
@@ -589,33 +596,6 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           </p>
         )}
       </div>
-
-      <AlertDialog open={confirming} onOpenChange={(open) => !open && setConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {sameModel ? 'Save embedder settings?' : `Switch the embedder to ${describe(spec)}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {sameModel
-                ? 'The model is unchanged, so the vectors are kept; only the endpoint settings are updated.'
-                : `This drops ${formatCount(vectors)} vectors and re-embeds ${formatCount(turns)} turns with ${describe(spec)}. Recall uses the lexical and entity views for turns not yet re-embedded.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={apply.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                confirmApply();
-              }}
-              disabled={apply.isPending}
-            >
-              {apply.isPending ? 'Applying…' : sameModel ? 'Save' : 'Switch'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </form>
   );
 }
@@ -642,46 +622,49 @@ const HOUR_MS = 3_600_000;
 function Curator({ readOnly }: { readOnly: boolean }) {
   const settings = useCuratorSettings();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Curator</CardTitle>
-        <CardDescription>
+    <CardLayout
+      title="Curator"
+      description={
+        <>
           An agent that hides duplicates and noise, marks superseded facts, merges entity names and writes notes, on a
           schedule. It reaches the store over /mcp with the curator token and the{' '}
           <span className="font-mono">zeromem_curate</span> prompt; every action it takes can be undone on the Curation
           page.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        {settings.isPending && <Skeleton className="h-40 w-full" />}
-        {settings.error && (
-          <p className="text-sm text-destructive">Failed to load the curator settings: {settings.error.message}</p>
-        )}
-        {settings.data && (
-          <>
-            <p className="text-sm text-muted-foreground">
-              {settings.data.last_run_at === null ? (
-                'No run yet.'
-              ) : (
-                <>
-                  Last run ended{' '}
-                  <span title={formatDateTime(settings.data.last_run_at)}>
-                    {formatRelativeTime(settings.data.last_run_at)}
-                  </span>
-                  ; the next one starts after turn <span className="font-mono">#{settings.data.cursor}</span>.
-                </>
-              )}
-            </p>
-            <CuratorToken settings={settings.data} readOnly={readOnly} />
-            <CuratorLimits
-              key={`${settings.data.max_per_call}-${settings.data.max_per_run}-${settings.data.min_age_ms}-${settings.data.expose_to_all}`}
-              settings={settings.data}
-              readOnly={readOnly}
-            />
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      }
+      contentClassName="flex flex-col gap-6"
+      content={
+        <>
+          {settings.isPending && <Skeleton className="h-40 w-full" />}
+          {settings.error && (
+            <QueryError what="the curator settings" error={settings.error} onRetry={() => settings.refetch()} />
+          )}
+          {settings.data && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {settings.data.last_run_at === null ? (
+                  'No run yet.'
+                ) : (
+                  <>
+                    Last run ended{' '}
+                    <span title={formatDateTime(settings.data.last_run_at)}>
+                      {formatRelativeTime(settings.data.last_run_at)}
+                    </span>
+                    ; the next one starts after turn <span className="font-mono">#{settings.data.cursor}</span>.
+                  </>
+                )}
+              </p>
+              <CuratorToken settings={settings.data} readOnly={readOnly} />
+              <CuratorLimits
+                key={`${settings.data.max_per_call}-${settings.data.max_per_run}-${settings.data.min_age_ms}-${settings.data.expose_to_all}`}
+                settings={settings.data}
+                readOnly={readOnly}
+              />
+            </>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -721,19 +704,21 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">Token</h3>
-        {settings.token_set ? (
-          <Badge variant="outline">{fromEnv ? 'set by MCP_ZEROMEM_CURATOR_TOKEN' : 'set'}</Badge>
-        ) : (
-          <Badge variant="secondary">not set</Badge>
-        )}
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {fromEnv
-          ? 'The environment sets the token, which overrides one stored here; change it there.'
-          : 'A bearer token for /mcp that adds the curator tools and prompt. It opens nothing under /api. The token is shown once, when it is generated.'}
-      </p>
+      <Section
+        title="Token"
+        action={
+          settings.token_set ? (
+            <Badge variant="outline">{fromEnv ? 'set by MCP_ZEROMEM_CURATOR_TOKEN' : 'set'}</Badge>
+          ) : (
+            <Badge variant="secondary">not set</Badge>
+          )
+        }
+        description={
+          fromEnv
+            ? 'The environment sets the token, which overrides one stored here; change it there.'
+            : 'A bearer token for /mcp that adds the curator tools and prompt. It opens nothing under /api. The token is shown once, when it is generated.'
+        }
+      />
       {!readOnly && !fromEnv && (
         <>
           <div className="flex flex-wrap gap-2">
@@ -748,18 +733,21 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
             )}
           </div>
           <form className="flex flex-col gap-1 sm:flex-row sm:items-end sm:gap-2" onSubmit={onSave}>
-            <div className="flex flex-1 flex-col gap-1">
-              <Label htmlFor="curator-token">Or use your own</Label>
-              <Input
-                id="curator-token"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={`At least ${CURATOR_LIMITS.tokenMinLength} characters`}
-                value={custom}
-                onChange={(event) => setCustom(event.target.value)}
-              />
-            </div>
+            <FormField
+              className="flex-1"
+              label="Or use your own"
+              control={
+                <PasswordInput
+                  showLabel="Show token"
+                  hideLabel="Hide token"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={`At least ${CURATOR_LIMITS.tokenMinLength} characters`}
+                  value={custom}
+                  onChange={(event) => setCustom(event.target.value)}
+                />
+              }
+            />
             <Button
               type="submit"
               variant="outline"
@@ -782,17 +770,16 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
           </AlertDialogHeader>
           <div className="flex gap-2">
             <Input readOnly value={shown ?? ''} className="font-mono" aria-label="Curator token" />
-            <Button
-              type="button"
+            <ActionButton
               variant="outline"
               size="icon"
-              aria-label="Copy the token"
+              label="Copy the token"
               onClick={() => {
                 void navigator.clipboard?.writeText(shown ?? '').then(() => toast.success('Copied.'));
               }}
             >
               <CopyIcon />
-            </Button>
+            </ActionButton>
           </div>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShown(null)}>Done</AlertDialogAction>
@@ -803,120 +790,116 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
   );
 }
 
+interface LimitValues {
+  perCall: number | null;
+  perRun: number | null;
+  minAgeHours: number | null;
+  exposeToAll: boolean;
+}
+
+function inRange(max: number) {
+  return ({ value }: { value: number | null }) =>
+    value === null || !Number.isInteger(value) || value < 1 || value > max
+      ? `A whole number from 1 to ${formatCount(max)}.`
+      : undefined;
+}
+
 function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; readOnly: boolean }) {
   const update = useUpdateCuratorSettings();
-  const [perCall, setPerCall] = useState(String(settings.max_per_call));
-  const [perRun, setPerRun] = useState(String(settings.max_per_run));
-  const [minAgeHours, setMinAgeHours] = useState(String(settings.min_age_ms / HOUR_MS));
-  const [exposeToAll, setExposeToAll] = useState(settings.expose_to_all);
-
-  const perCallN = Number(perCall);
-  const perRunN = Number(perRun);
-  const minAgeN = Number(minAgeHours);
-  const valid =
-    Number.isInteger(perCallN) &&
-    perCallN >= 1 &&
-    perCallN <= CURATOR_LIMITS.maxPerCall &&
-    Number.isInteger(perRunN) &&
-    perRunN >= 1 &&
-    perRunN <= CURATOR_LIMITS.maxPerRun &&
-    Number.isFinite(minAgeN) &&
-    minAgeN >= 0;
-  const dirty =
-    perCallN !== settings.max_per_call ||
-    perRunN !== settings.max_per_run ||
-    Math.round(minAgeN * HOUR_MS) !== settings.min_age_ms ||
-    exposeToAll !== settings.expose_to_all;
-
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    update.mutate(
-      {
-        max_per_call: perCallN,
-        max_per_run: perRunN,
-        min_age_ms: Math.round(minAgeN * HOUR_MS),
-        expose_to_all: exposeToAll,
-      },
-      { onSuccess: () => toast.success('Curator settings saved.'), onError: toastApiError },
-    );
+  const defaultValues: LimitValues = {
+    perCall: settings.max_per_call,
+    perRun: settings.max_per_run,
+    minAgeHours: settings.min_age_ms / HOUR_MS,
+    exposeToAll: settings.expose_to_all,
   };
+  const form = useAppForm({
+    defaultValues,
+    onSubmit: ({ value }) =>
+      update
+        .mutateAsync(
+          {
+            max_per_call: value.perCall ?? settings.max_per_call,
+            max_per_run: value.perRun ?? settings.max_per_run,
+            min_age_ms: Math.round((value.minAgeHours ?? 0) * HOUR_MS),
+            expose_to_all: value.exposeToAll,
+          },
+          { onSuccess: () => toast.success('Curator settings saved.'), onError: toastApiError },
+        )
+        .catch(() => {}),
+  });
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-      <h3 className="text-sm font-medium">Limits</h3>
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
+    >
+      <Section
+        title="Limits"
+        description="The minimum age keeps a live conversation from being curated under the person having it. Actions beyond a limit are refused and reported to the curator."
+      />
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="curator-per-call">Actions per call</Label>
-          <Input
-            id="curator-per-call"
-            type="number"
-            min={1}
-            max={CURATOR_LIMITS.maxPerCall}
-            disabled={readOnly}
-            value={perCall}
-            onChange={(event) => setPerCall(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="curator-per-run">Actions per run</Label>
-          <Input
-            id="curator-per-run"
-            type="number"
-            min={1}
-            max={CURATOR_LIMITS.maxPerRun}
-            disabled={readOnly}
-            value={perRun}
-            onChange={(event) => setPerRun(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="curator-min-age">Minimum turn age (hours)</Label>
-          <Input
-            id="curator-min-age"
-            type="number"
-            min={0}
-            step="any"
-            disabled={readOnly}
-            value={minAgeHours}
-            onChange={(event) => setMinAgeHours(event.target.value)}
-          />
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        The minimum age keeps a live conversation from being curated under the person having it. Actions beyond a limit
-        are refused and reported to the curator.
-      </p>
-      <div className="flex items-start gap-3">
-        <Switch
-          id="curator-expose"
-          checked={exposeToAll}
+        <NumberField
+          form={form}
+          name="perCall"
+          label="Actions per call"
+          min={1}
+          max={CURATOR_LIMITS.maxPerCall}
           disabled={readOnly}
-          onCheckedChange={setExposeToAll}
-          className="mt-0.5"
+          validators={{ onChange: inRange(CURATOR_LIMITS.maxPerCall) }}
         />
-        <div className="flex flex-col gap-0.5">
-          <Label htmlFor="curator-expose">Serve the curator tools to every client</Label>
-          <p className="text-xs text-muted-foreground">
-            Every client that can reach /mcp gets the curator tools and prompt, not only the curator token. The stdio
-            server follows this too. Use it when a single trusted agent both remembers and curates.
-          </p>
-        </div>
+        <NumberField
+          form={form}
+          name="perRun"
+          label="Actions per run"
+          min={1}
+          max={CURATOR_LIMITS.maxPerRun}
+          disabled={readOnly}
+          validators={{ onChange: inRange(CURATOR_LIMITS.maxPerRun) }}
+        />
+        <NumberField
+          form={form}
+          name="minAgeHours"
+          label="Minimum turn age (hours)"
+          min={0}
+          step="any"
+          disabled={readOnly}
+          validators={{
+            onChange: ({ value }) => (value === null || value < 0 ? 'Zero or more hours.' : undefined),
+          }}
+        />
       </div>
-      {exposeToAll && !settings.expose_to_all && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
-          Every agent will see five more tools, and can hide or supersede turns.
-        </p>
-      )}
+      <SwitchField
+        form={form}
+        name="exposeToAll"
+        label="Serve the curator tools to every client"
+        description="Every client that can reach /mcp gets the curator tools and prompt, not only the curator token. The stdio server follows this too. Use it when a single trusted agent both remembers and curates."
+        disabled={readOnly}
+      />
+      <form.Subscribe selector={(state) => state.values.exposeToAll}>
+        {(exposeToAll) =>
+          exposeToAll &&
+          !settings.expose_to_all && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
+              Every agent will see five more tools, and can hide or supersede turns.
+            </p>
+          )
+        }
+      </form.Subscribe>
       {readOnly ? (
         <p className="text-sm text-muted-foreground">
           This server is read-only (ZEROMEM_READ_ONLY), so the curator settings cannot be changed from here.
         </p>
       ) : (
         <div>
-          <Button type="submit" disabled={!valid || !dirty || update.isPending}>
-            {update.isPending ? 'Saving…' : 'Save'}
-          </Button>
+          <form.AppForm>
+            <form.Subscribe selector={(state) => state.isDefaultValue}>
+              {(unchanged) => <form.SubmitButton disabled={unchanged || update.isPending} />}
+            </form.Subscribe>
+          </form.AppForm>
         </div>
       )}
     </form>

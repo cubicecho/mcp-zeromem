@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { CardLayout } from '@/components/card-layout';
 import { EmbedderBanner } from '@/components/memory/embedder-banner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GrowthCharts } from '@/components/viz/growth-charts';
 import { formatCount, formatUptime } from '@/lib/format';
@@ -12,27 +14,26 @@ export const Route = createFileRoute('/')({
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-3xl font-semibold tabular-nums">{value}</p>
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
+    <CardLayout
+      title={label}
+      headerClassName="text-sm text-muted-foreground"
+      content={
+        <>
+          <p className="text-3xl font-semibold tabular-nums">{value}</p>
+          {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+        </>
+      }
+    />
   );
 }
 
 export function OverviewPage() {
-  const { data, isPending, error } = useServerStatus();
+  const status = useServerStatus();
+  const { data, isPending, error } = status;
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Overview</h1>
-        <p className="text-sm text-muted-foreground">What the memory store holds right now.</p>
-      </div>
+      <PageHeader className="px-0 pt-0" title="Overview" description="What the memory store holds right now." />
 
       {isPending && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -43,7 +44,7 @@ export function OverviewPage() {
         </div>
       )}
 
-      {error && <p className="text-sm text-destructive">Failed to load status: {error.message}</p>}
+      {error && <QueryError what="the server status" error={error} onRetry={() => status.refetch()} />}
 
       {data && <EmbedderBanner stats={data.engine} />}
 

@@ -3,10 +3,14 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
+import { ActionButton } from '@/components/action-button';
+import { FormField } from '@/components/form-field';
+import { OptionSelect } from '@/components/option-select';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
+import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { Legend } from '@/components/viz/legend';
@@ -21,6 +25,8 @@ const searchSchema = z.object({
   query: z.string().trim().min(1).optional().catch(undefined),
 });
 type Search = z.infer<typeof searchSchema>;
+
+const POINT_OPTIONS = [500, 1000, 2000, 5000, 10000].map((n) => ({ value: String(n), label: String(n) }));
 
 export const Route = createFileRoute('/embeddings')({
   component: EmbeddingsPage,
@@ -72,13 +78,11 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Embedding map</h1>
-        <p className="text-sm text-muted-foreground">
-          Turn vectors projected onto their two principal axes. Nearby points say similar things, as far as the embedder
-          can tell.
-        </p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Embedding map"
+        description="Turn vectors projected onto their two principal axes. Nearby points say similar things, as far as the embedder can tell."
+      />
 
       {fallback && (
         <p
@@ -104,72 +108,68 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
       )}
 
       <form onSubmit={submitQuery} className="flex flex-wrap items-end gap-3">
-        <div className="flex min-w-64 flex-1 flex-col gap-1">
-          <Label htmlFor="embed-query">Drop a query onto the map</Label>
-          <div className="flex gap-2">
-            <Input
-              id="embed-query"
-              value={queryText}
-              onChange={(event) => setQueryText(event.target.value)}
-              placeholder="who owns the billing service?"
+        <div className="flex min-w-64 flex-1 items-end gap-2">
+          <FormField
+            className="flex-1"
+            label="Drop a query onto the map"
+            control={
+              <Input
+                value={queryText}
+                onChange={(event) => setQueryText(event.target.value)}
+                placeholder="who owns the billing service?"
+              />
+            }
+          />
+          <Button type="submit" variant="secondary">
+            <SearchIcon /> Place
+          </Button>
+          {options.query && (
+            <ActionButton
+              variant="ghost"
+              size="icon"
+              label="Clear query"
+              onClick={() => {
+                setQueryText('');
+                onChange({ query: undefined });
+              }}
+            >
+              <XIcon />
+            </ActionButton>
+          )}
+        </div>
+        <FormField
+          className="w-56"
+          label="Session"
+          control={(props) => (
+            <OptionSelect
+              {...props}
+              options={[
+                { value: 'all', label: 'All sessions' },
+                ...(sessions.data?.sessions ?? []).map((s) => ({ value: s.session_id, label: s.session_id })),
+              ]}
+              value={options.session ?? 'all'}
+              onValueChange={(v) => onChange({ session: v === 'all' ? undefined : v })}
             />
-            <Button type="submit" variant="secondary">
-              <SearchIcon /> Place
-            </Button>
-            {options.query && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Clear query"
-                onClick={() => {
-                  setQueryText('');
-                  onChange({ query: undefined });
-                }}
-              >
-                <XIcon />
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="embed-session">Session</Label>
-          <Select
-            value={options.session ?? 'all'}
-            onValueChange={(v) => onChange({ session: v === 'all' ? undefined : v })}
-          >
-            <SelectTrigger id="embed-session" className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sessions</SelectItem>
-              {sessions.data?.sessions.map((s) => (
-                <SelectItem key={s.session_id} value={s.session_id}>
-                  {s.session_id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="embed-limit">Points</Label>
-          <Select value={String(options.limit ?? 2000)} onValueChange={(v) => onChange({ limit: Number(v) })}>
-            <SelectTrigger id="embed-limit" className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[500, 1000, 2000, 5000, 10000].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          )}
+        />
+        <FormField
+          className="w-24"
+          label="Points"
+          control={(props) => (
+            <OptionSelect
+              {...props}
+              options={POINT_OPTIONS}
+              value={String(options.limit ?? 2000)}
+              onValueChange={(v) => onChange({ limit: Number(v) })}
+            />
+          )}
+        />
       </form>
 
       {projection.isPending && <Skeleton className="h-[480px] w-full" />}
-      {projection.error && <p className="text-sm text-destructive">Failed to project: {projection.error.message}</p>}
+      {projection.error && (
+        <QueryError what="the projection" error={projection.error} onRetry={() => projection.refetch()} />
+      )}
 
       {projection.data && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -203,49 +203,54 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           </ChartCard>
           <aside className="flex max-h-[80vh] flex-col gap-4 overflow-y-auto rounded-md border p-4">
             {projection.data.query && (
-              <div>
-                <h2 className="text-sm font-medium">Nearest to the query</h2>
-                <p className="mb-2 text-xs text-muted-foreground">“{projection.data.query.text}”</p>
-                <ol className="flex flex-col gap-2">
-                  {projection.data.query.neighbours.map((id) => {
-                    const p = points.find((point) => point.turn_id === id);
-                    return (
-                      <li key={id} className="text-xs">
-                        <span className="font-mono">#{id}</span>
-                        {p ? (
-                          <>
-                            {' '}
-                            <span className="text-muted-foreground">{p.session_id}</span>
-                            <p>{excerpt(p.text)}</p>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground"> (not in the sampled points)</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ol>
-              </div>
+              <Section
+                title="Nearest to the query"
+                description={`“${projection.data.query.text}”`}
+                content={
+                  <ol className="flex flex-col gap-2">
+                    {projection.data.query.neighbours.map((id) => {
+                      const p = points.find((point) => point.turn_id === id);
+                      return (
+                        <li key={id} className="text-xs">
+                          <span className="font-mono">#{id}</span>
+                          {p ? (
+                            <>
+                              {' '}
+                              <span className="text-muted-foreground">{p.session_id}</span>
+                              <p>{excerpt(p.text)}</p>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground"> (not in the sampled points)</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                }
+              />
             )}
-            <div>
-              <h2 className="text-sm font-medium">Picked turn</h2>
-              {!picked && <p className="text-xs text-muted-foreground">Click a point.</p>}
-              {picked && (
-                <div className="text-sm">
-                  <p className="text-xs text-muted-foreground">
-                    <Link
-                      to="/sessions/$sessionId"
-                      params={{ sessionId: picked.session_id }}
-                      className="font-mono underline"
-                    >
-                      {picked.session_id}
-                    </Link>{' '}
-                    · {picked.speaker} · {formatDateTime(picked.ts)}
-                  </p>
-                  <p className="whitespace-pre-wrap">{picked.text}</p>
-                </div>
-              )}
-            </div>
+            <Section
+              title="Picked turn"
+              content={
+                picked ? (
+                  <div className="text-sm">
+                    <p className="text-xs text-muted-foreground">
+                      <Link
+                        to="/sessions/$sessionId"
+                        params={{ sessionId: picked.session_id }}
+                        className="font-mono underline"
+                      >
+                        {picked.session_id}
+                      </Link>{' '}
+                      · {picked.speaker} · {formatDateTime(picked.ts)}
+                    </p>
+                    <p className="whitespace-pre-wrap">{picked.text}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Click a point.</p>
+                )
+              }
+            />
           </aside>
         </div>
       )}
