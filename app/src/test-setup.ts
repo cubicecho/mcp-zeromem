@@ -51,3 +51,15 @@ if (typeof window.localStorage === 'undefined') {
 // jsdom has no 2D canvas. The canvas views (graph, embedding map) skip
 // painting when there is no context, so a null return is the right stub.
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
+
+// floating-ui asks every clipping ancestor whether it is in the top layer via
+// `matches(':popover-open')` and `matches(':modal')`. jsdom has no top layer, and
+// nwsapi can take tens of seconds on those selectors once a Radix Select is in the
+// document, so opening a tooltip beside one stalls the test. Answer them directly.
+const nativeMatches = Element.prototype.matches;
+Element.prototype.matches = function matches(this: Element, selector: string) {
+  if (selector === ':popover-open' || selector === ':modal') {
+    return false;
+  }
+  return nativeMatches.call(this, selector);
+};
