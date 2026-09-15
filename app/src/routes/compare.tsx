@@ -2,12 +2,14 @@ import type { Evidence, QueryResult, RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { GitCompareIcon, PinIcon, PinOffIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
+import { FormField } from '@/components/form-field';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
 import { EvidenceList } from '@/components/memory/evidence-list';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatPercent } from '@/lib/format';
@@ -122,12 +124,11 @@ export function ComparePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Compare</h1>
-        <p className="text-sm text-muted-foreground">
-          One query, two answers. Vary the settings, or pin the left side and run again after the store has changed.
-        </p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Compare"
+        description="One query, two answers. Vary the settings, or pin the left side and run again after the store has changed."
+      />
 
       <form onSubmit={run} className="flex flex-col gap-4">
         <div className="flex gap-2">
@@ -170,8 +171,8 @@ export function ComparePage() {
       </form>
 
       {(liveA.isFetching || liveB.isFetching) && <Skeleton className="h-32 w-full" />}
-      {liveA.error && <p className="text-sm text-destructive">A failed: {liveA.error.message}</p>}
-      {liveB.error && <p className="text-sm text-destructive">B failed: {liveB.error.message}</p>}
+      {liveA.error && <QueryError what="side A" error={liveA.error} onRetry={() => liveA.refetch()} />}
+      {liveB.error && <QueryError what="side B" error={liveB.error} onRetry={() => liveB.refetch()} />}
 
       {resultA && resultB && !liveA.isFetching && !liveB.isFetching && (
         <div className="flex flex-col gap-4">
@@ -286,40 +287,43 @@ function SidePanel({
           )}
         </legend>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={`top-k-${label}`}>Top k</Label>
-            <Input
-              id={`top-k-${label}`}
-              type="number"
-              min={1}
-              max={50}
-              value={settings.top_k}
-              onChange={(event) =>
-                onChange({ ...settings, top_k: Math.max(1, Math.min(50, Number(event.target.value) || 1)) })
-              }
-              className="w-20"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={`session-${label}`}>Only session</Label>
-            <Input
-              id={`session-${label}`}
-              value={settings.session}
-              onChange={(event) => onChange({ ...settings, session: event.target.value })}
-              placeholder="optional"
-              className="w-44"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={`exclude-${label}`}>Exclude session</Label>
-            <Input
-              id={`exclude-${label}`}
-              value={settings.exclude_session}
-              onChange={(event) => onChange({ ...settings, exclude_session: event.target.value })}
-              placeholder="optional"
-              className="w-44"
-            />
-          </div>
+          <FormField
+            className="w-20"
+            label="Top k"
+            control={
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={settings.top_k}
+                onChange={(event) =>
+                  onChange({ ...settings, top_k: Math.max(1, Math.min(50, Number(event.target.value) || 1)) })
+                }
+              />
+            }
+          />
+          <FormField
+            className="w-44"
+            label="Only session"
+            control={
+              <Input
+                value={settings.session}
+                onChange={(event) => onChange({ ...settings, session: event.target.value })}
+                placeholder="optional"
+              />
+            }
+          />
+          <FormField
+            className="w-44"
+            label="Exclude session"
+            control={
+              <Input
+                value={settings.exclude_session}
+                onChange={(event) => onChange({ ...settings, exclude_session: event.target.value })}
+                placeholder="optional"
+              />
+            }
+          />
         </div>
       </fieldset>
       {action && <div>{action}</div>}

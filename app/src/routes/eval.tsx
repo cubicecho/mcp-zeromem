@@ -2,8 +2,11 @@ import type { EvalHistory } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { OptionSelect } from '@/components/option-select';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
+import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartCard } from '@/components/viz/chart-card';
@@ -72,12 +75,16 @@ export function EvalDashboard() {
     return [...seen.values()].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
   }, [shown]);
   const k = shown[0]?.k ?? 5;
+  const profileOptions = useMemo(
+    () => [{ value: 'all', label: 'All profiles' }, ...profiles.map((p) => ({ value: p, label: `${p} corpus` }))],
+    [profiles],
+  );
 
   if (history.isPending) {
     return <Skeleton className="h-80 w-full" />;
   }
   if (history.error) {
-    return <p className="text-sm text-destructive">Failed to load eval history: {history.error.message}</p>;
+    return <QueryError what="the eval history" error={history.error} onRetry={() => history.refetch()} />;
   }
   if (runs.length === 0) {
     return (
@@ -101,19 +108,13 @@ export function EvalDashboard() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={profile} onValueChange={setProfile}>
-          <SelectTrigger className="h-8 w-44 text-xs" aria-label="Corpus profile">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All profiles</SelectItem>
-            {profiles.map((p) => (
-              <SelectItem key={p} value={p}>
-                {p} corpus
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <OptionSelect
+          aria-label="Corpus profile"
+          className="h-8 w-44 text-xs"
+          options={profileOptions}
+          value={profile}
+          onValueChange={setProfile}
+        />
         <Legend items={legend} other={colors.overflow > 0 ? `${colors.overflow} more` : undefined} shape="line" />
         <span className="ml-auto text-xs text-muted-foreground">
           {formatCount(points.length)} recordings · {history.data.source}
@@ -156,67 +157,63 @@ export function EvalDashboard() {
         ))}
       </div>
 
-      <section className="flex flex-col gap-2">
-        <StickyHeaderContentFooter
-          className="h-auto max-h-[70vh] gap-2"
-          contentClassName="overflow-x-auto rounded-md border"
-          header={
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-lg font-medium">Latest recording</h2>
-              {latestAt && (
-                <span className="text-xs text-muted-foreground">{formatDateTime(Date.parse(latestAt))}</span>
-              )}
-              {latest[0]?.label && <Badge variant="outline">{latest[0].label}</Badge>}
-            </div>
-          }
-          content={
-            <Table sticky>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Profile</TableHead>
-                  <TableHead>Embedder</TableHead>
-                  <TableHead>Commit</TableHead>
-                  <TableHead className="text-right">Queries</TableHead>
-                  <TableHead className="text-right">Recall@{k}</TableHead>
-                  <TableHead className="text-right">MRR</TableHead>
-                  <TableHead className="text-right">nDCG@{k}</TableHead>
-                  <TableHead className="text-right">Missed</TableHead>
+      <StickyHeaderContentFooter
+        className="h-auto max-h-[70vh] gap-2"
+        contentClassName="overflow-x-auto rounded-md border"
+        header={
+          <Section
+            title="Latest recording"
+            description={latestAt ? formatDateTime(Date.parse(latestAt)) : undefined}
+            action={latest[0]?.label ? <Badge variant="outline">{latest[0].label}</Badge> : undefined}
+          />
+        }
+        content={
+          <Table sticky>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Profile</TableHead>
+                <TableHead>Embedder</TableHead>
+                <TableHead>Commit</TableHead>
+                <TableHead className="text-right">Queries</TableHead>
+                <TableHead className="text-right">Recall@{k}</TableHead>
+                <TableHead className="text-right">MRR</TableHead>
+                <TableHead className="text-right">nDCG@{k}</TableHead>
+                <TableHead className="text-right">Missed</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {latest.map((r) => (
+                <TableRow key={`${seriesKey(r)}|${pointKey(r)}`}>
+                  <TableCell>{r.profile}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block size-2.5 rounded-sm"
+                        style={{ backgroundColor: colors.color(seriesKey(r)) }}
+                        aria-hidden
+                      />
+                      {r.embedder}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{shortCommit(r.commit)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCount(r.queries)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatPercent(r.recall_at_k)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatPercent(r.mrr)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatPercent(r.ndcg_at_k)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCount(r.missed)}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {latest.map((r) => (
-                  <TableRow key={`${seriesKey(r)}|${pointKey(r)}`}>
-                    <TableCell>{r.profile}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className="inline-block size-2.5 rounded-sm"
-                          style={{ backgroundColor: colors.color(seriesKey(r)) }}
-                          aria-hidden
-                        />
-                        {r.embedder}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{shortCommit(r.commit)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCount(r.queries)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPercent(r.recall_at_k)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPercent(r.mrr)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPercent(r.ndcg_at_k)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCount(r.missed)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          }
-          footer={
-            <p className="text-xs text-muted-foreground">
-              Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
-              <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends
-              one line per profile × embedder.
-            </p>
-          }
-        />
-      </section>
+              ))}
+            </TableBody>
+          </Table>
+        }
+        footer={
+          <p className="text-xs text-muted-foreground">
+            Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
+            <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends
+            one line per profile × embedder.
+          </p>
+        }
+      />
     </div>
   );
 }
@@ -224,12 +221,11 @@ export function EvalDashboard() {
 function EvalPage() {
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Eval</h1>
-        <p className="text-sm text-muted-foreground">
-          Retrieval quality on the labeled query set, per commit. This is the gate; the charts make it visible.
-        </p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Eval"
+        description="Retrieval quality on the labeled query set, per commit. This is the gate; the charts make it visible."
+      />
       <EvalDashboard />
     </div>
   );
