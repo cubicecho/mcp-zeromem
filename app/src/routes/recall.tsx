@@ -2,12 +2,14 @@ import type { RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { SearchIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { FormField } from '@/components/form-field';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { TraceView } from '@/components/memory/trace-view';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRecall, useRecallTrace } from '@/lib/queries';
@@ -46,10 +48,11 @@ export function RecallPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Recall</h1>
-        <p className="text-sm text-muted-foreground">Ask memory a question and see what it returns, and why.</p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Recall"
+        description="Ask memory a question and see what it returns, and why."
+      />
 
       <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex gap-2">
@@ -66,28 +69,30 @@ export function RecallPage() {
           </Button>
         </div>
         <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="top-k">Top k</Label>
-            <Input
-              id="top-k"
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(event) => setTopK(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
-              className="w-24"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="exclude-session">Exclude session</Label>
-            <Input
-              id="exclude-session"
-              value={excludeSession}
-              onChange={(event) => setExcludeSession(event.target.value)}
-              placeholder="optional session id"
-              className="w-64"
-            />
-          </div>
+          <FormField
+            className="w-24"
+            label="Top k"
+            control={
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(event) => setTopK(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
+              />
+            }
+          />
+          <FormField
+            className="w-64"
+            label="Exclude session"
+            control={
+              <Input
+                value={excludeSession}
+                onChange={(event) => setExcludeSession(event.target.value)}
+                placeholder="optional session id"
+              />
+            }
+          />
         </div>
       </form>
 
@@ -101,8 +106,8 @@ export function RecallPage() {
       )}
 
       {(result.isFetching || trace.isFetching) && <Skeleton className="h-32 w-full" />}
-      {result.error && <p className="text-sm text-destructive">Recall failed: {result.error.message}</p>}
-      {trace.error && <p className="text-sm text-destructive">Trace failed: {trace.error.message}</p>}
+      {result.error && <QueryError what="the recall" error={result.error} onRetry={() => result.refetch()} />}
+      {trace.error && <QueryError what="the trace" error={trace.error} onRetry={() => trace.refetch()} />}
 
       {mode === 'trace' && trace.data && !trace.isFetching && <TraceView trace={trace.data} />}
 

@@ -3,12 +3,15 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { CrosshairIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
+import { ActionButton } from '@/components/action-button';
+import { FormField } from '@/components/form-field';
 import { EvidenceList } from '@/components/memory/evidence-list';
+import { OptionSelect } from '@/components/option-select';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ForceGraph } from '@/components/viz/force-graph';
@@ -44,6 +47,15 @@ const KIND_LEGEND = entityKindSchema.options.map((kind) => ({
   label: KIND_LABEL[kind],
   color: entityKindColor(kind),
 }));
+
+const numberOptions = (values: number[]) => values.map((n) => ({ value: String(n), label: String(n) }));
+const HOP_OPTIONS = numberOptions([0, 1, 2, 3]);
+const NODE_OPTIONS = numberOptions([50, 100, 200, 500, 1000, 2000]);
+const WEIGHT_OPTIONS = numberOptions([1, 2, 3, 5, 10]);
+const KIND_OPTIONS = [
+  { value: 'all', label: 'All kinds' },
+  ...entityKindSchema.options.map((kind) => ({ value: kind, label: KIND_LABEL[kind] })),
+];
 
 function GraphPage() {
   const search = Route.useSearch();
@@ -81,113 +93,97 @@ export function GraphExplorer({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Entity graph</h1>
-        <p className="text-sm text-muted-foreground">
-          Entities the store recognised, joined where they were mentioned together. Size is how connected an entity is;
-          width is how often two were mentioned together.
-        </p>
-      </div>
-
-      <form onSubmit={submitFocus} className="flex flex-wrap items-end gap-3">
-        <div className="flex min-w-56 flex-1 flex-col gap-1">
-          <Label htmlFor="graph-focus">Focus entity</Label>
-          <div className="flex gap-2">
-            <Input
-              id="graph-focus"
-              value={focusText}
-              onChange={(event) => setFocusText(event.target.value)}
-              placeholder="maya okafor"
-            />
-            <Button type="submit" variant="secondary">
-              <CrosshairIcon /> Focus
-            </Button>
-            {options.focus && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Clear focus"
-                onClick={() => {
-                  setFocusText('');
-                  onChange({ focus: undefined, hops: undefined });
-                }}
-              >
-                <XIcon />
+      <PageHeader
+        className="px-0 pt-0"
+        title="Entity graph"
+        description="Entities the store recognised, joined where they were mentioned together. Size is how connected an entity is; width is how often two were mentioned together."
+        content={
+          <form onSubmit={submitFocus} className="flex flex-wrap items-end gap-3">
+            <div className="flex min-w-56 flex-1 items-end gap-2">
+              <FormField
+                className="flex-1"
+                label="Focus entity"
+                control={
+                  <Input
+                    value={focusText}
+                    onChange={(event) => setFocusText(event.target.value)}
+                    placeholder="maya okafor"
+                  />
+                }
+              />
+              <Button type="submit" variant="secondary">
+                <CrosshairIcon /> Focus
               </Button>
+              {options.focus && (
+                <ActionButton
+                  variant="ghost"
+                  size="icon"
+                  label="Clear focus"
+                  onClick={() => {
+                    setFocusText('');
+                    onChange({ focus: undefined, hops: undefined });
+                  }}
+                >
+                  <XIcon />
+                </ActionButton>
+              )}
+            </div>
+            {options.focus && (
+              <FormField
+                className="w-20"
+                label="Hops"
+                control={(props) => (
+                  <OptionSelect
+                    {...props}
+                    options={HOP_OPTIONS}
+                    value={String(options.hops ?? 1)}
+                    onValueChange={(v) => onChange({ hops: Number(v) })}
+                  />
+                )}
+              />
             )}
-          </div>
-        </div>
-        {options.focus && (
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="graph-hops">Hops</Label>
-            <Select value={String(options.hops ?? 1)} onValueChange={(v) => onChange({ hops: Number(v) })}>
-              <SelectTrigger id="graph-hops" className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[0, 1, 2, 3].map((h) => (
-                  <SelectItem key={h} value={String(h)}>
-                    {h}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="graph-kind">Kind</Label>
-          <Select
-            value={options.kind ?? 'all'}
-            onValueChange={(v) => onChange({ kind: v === 'all' ? undefined : (v as EntityKind) })}
-          >
-            <SelectTrigger id="graph-kind" className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              {entityKindSchema.options.map((kind) => (
-                <SelectItem key={kind} value={kind}>
-                  {KIND_LABEL[kind]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="graph-limit">Nodes</Label>
-          <Select value={String(options.limit ?? 200)} onValueChange={(v) => onChange({ limit: Number(v) })}>
-            <SelectTrigger id="graph-limit" className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[50, 100, 200, 500, 1000, 2000].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="graph-weight">Min. co-mentions</Label>
-          <Select value={String(options.min_weight ?? 1)} onValueChange={(v) => onChange({ min_weight: Number(v) })}>
-            <SelectTrigger id="graph-weight" className="w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3, 5, 10].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </form>
+            <FormField
+              className="w-32"
+              label="Kind"
+              control={(props) => (
+                <OptionSelect
+                  {...props}
+                  options={KIND_OPTIONS}
+                  value={options.kind ?? 'all'}
+                  onValueChange={(v) => onChange({ kind: v === 'all' ? undefined : (v as EntityKind) })}
+                />
+              )}
+            />
+            <FormField
+              className="w-24"
+              label="Nodes"
+              control={(props) => (
+                <OptionSelect
+                  {...props}
+                  options={NODE_OPTIONS}
+                  value={String(options.limit ?? 200)}
+                  onValueChange={(v) => onChange({ limit: Number(v) })}
+                />
+              )}
+            />
+            <FormField
+              className="w-20"
+              label="Min. co-mentions"
+              control={(props) => (
+                <OptionSelect
+                  {...props}
+                  options={WEIGHT_OPTIONS}
+                  value={String(options.min_weight ?? 1)}
+                  onValueChange={(v) => onChange({ min_weight: Number(v) })}
+                />
+              )}
+            />
+          </form>
+        }
+      />
 
       {snapshot.isPending && <Skeleton className="h-[520px] w-full" />}
-      {snapshot.error && <p className="text-sm text-destructive">Failed to load the graph: {snapshot.error.message}</p>}
+      {snapshot.error && <QueryError what="the graph" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -298,7 +294,7 @@ function NodePanel({
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns recall finds for it</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <p className="text-xs text-destructive">{turns.error.message}</p>}
+        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <EvidenceList evidence={turns.data.evidence} />}
         {turns.data?.evidence[0] && (
           <p className="mt-2 text-xs">

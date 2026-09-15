@@ -3,8 +3,11 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
+import { ActionButton } from '@/components/action-button';
+import { OptionSelect } from '@/components/option-select';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { Legend } from '@/components/viz/legend';
@@ -26,6 +29,8 @@ export const Route = createFileRoute('/timeline')({
 });
 
 type Search = z.infer<typeof searchSchema>;
+
+const SESSION_LIMIT_OPTIONS = [20, 50, 100, 200, 500].map((n) => ({ value: String(n), label: `${n} sessions` }));
 
 function TimelinePage() {
   const search = Route.useSearch();
@@ -71,63 +76,55 @@ export function TimelineExplorer({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Timeline</h1>
-        <p className="text-sm text-muted-foreground">
-          Each session as a lane. The light bands are the windows the engine cut it into; the darker segments are the
-          episodes inside them. Drag to brush a range, click a lane to pick a session.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={String(options.limit ?? 50)} onValueChange={(v) => onChange({ limit: Number(v) })}>
-          <SelectTrigger className="w-36" aria-label="Sessions shown">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[20, 50, 100, 200, 500].map((n) => (
-              <SelectItem key={n} value={String(n)}>
-                {n} sessions
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={brush === null}
-          onClick={() => {
-            if (brush) {
-              onChange({ since: Math.floor(brush.since), until: Math.ceil(brush.until) });
-              setBrush(null);
-            }
-          }}
-        >
-          <ZoomInIcon /> Zoom to brush
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={options.since === undefined && options.until === undefined && !options.session}
-          onClick={() => {
-            onChange({ since: undefined, until: undefined, session: undefined });
-            setBrush(null);
-          }}
-        >
-          <ZoomOutIcon /> Reset
-        </Button>
-        {(options.since !== undefined || options.until !== undefined) && (
-          <span className="text-xs text-muted-foreground">
-            {options.since !== undefined ? formatDateTime(options.since) : '…'} →{' '}
-            {options.until !== undefined ? formatDateTime(options.until) : '…'}
-          </span>
-        )}
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Timeline"
+        description="Each session as a lane. The light bands are the windows the engine cut it into; the darker segments are the episodes inside them. Drag to brush a range, click a lane to pick a session."
+        content={
+          <div className="flex flex-wrap items-center gap-3">
+            <OptionSelect
+              className="w-36"
+              aria-label="Sessions shown"
+              options={SESSION_LIMIT_OPTIONS}
+              value={String(options.limit ?? 50)}
+              onValueChange={(v) => onChange({ limit: Number(v) })}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={brush === null}
+              onClick={() => {
+                if (brush) {
+                  onChange({ since: Math.floor(brush.since), until: Math.ceil(brush.until) });
+                  setBrush(null);
+                }
+              }}
+            >
+              <ZoomInIcon /> Zoom to brush
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={options.since === undefined && options.until === undefined && !options.session}
+              onClick={() => {
+                onChange({ since: undefined, until: undefined, session: undefined });
+                setBrush(null);
+              }}
+            >
+              <ZoomOutIcon /> Reset
+            </Button>
+            {(options.since !== undefined || options.until !== undefined) && (
+              <span className="text-xs text-muted-foreground">
+                {options.since !== undefined ? formatDateTime(options.since) : '…'} →{' '}
+                {options.until !== undefined ? formatDateTime(options.until) : '…'}
+              </span>
+            )}
+          </div>
+        }
+      />
 
       {snapshot.isPending && <Skeleton className="h-64 w-full" />}
-      {snapshot.error && (
-        <p className="text-sm text-destructive">Failed to load the timeline: {snapshot.error.message}</p>
-      )}
+      {snapshot.error && <QueryError what="the timeline" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && extent && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -200,11 +197,11 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h2 className="flex items-center gap-2 font-mono text-sm font-semibold">
           {session.session_id}
-          <Button variant="ghost" size="icon-sm" asChild aria-label="Open in the session inspector">
+          <ActionButton variant="ghost" size="icon-sm" asChild label="Open in the session inspector">
             <Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }}>
               <ScanSearchIcon />
             </Link>
-          </Button>
+          </ActionButton>
         </h2>
         <p className="text-xs text-muted-foreground">
           {brush
@@ -237,7 +234,7 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <p className="text-xs text-destructive">{turns.error.message}</p>}
+        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <TurnList turns={inRange} />}
       </div>
     </aside>
