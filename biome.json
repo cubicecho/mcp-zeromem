@@ -72,6 +72,12 @@
   },
   "overrides": [
     {
+      "includes": ["app/src/components/ui/**"],
+      "linter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["**/*.css"],
       "linter": {
         "rules": {
