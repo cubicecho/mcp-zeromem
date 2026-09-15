@@ -3,19 +3,13 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ActionButton } from '@/components/action-button';
+import { ConfirmButton } from '@/components/confirm-button';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { PageHeader } from '@/components/page-header';
+import { QueryError } from '@/components/query-state';
+import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,13 +41,11 @@ export function CurationPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Curation</h1>
-        <p className="text-sm text-muted-foreground">
-          Hidden duplicates and noise, superseded facts, entity aliases and consolidated notes, each with the curator's
-          reason. Nothing is deleted: undo an action and recall is as it was.
-        </p>
-      </div>
+      <PageHeader
+        className="px-0 pt-0"
+        title="Curation"
+        description="Hidden duplicates and noise, superseded facts, entity aliases and consolidated notes, each with the curator's reason. Nothing is deleted: undo an action and recall is as it was."
+      />
       <Tabs defaultValue="runs">
         <TabsList>
           <TabsTrigger value="runs">Runs</TabsTrigger>
@@ -78,7 +70,7 @@ function Runs({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (runs.error) {
-    return <p className="text-sm text-destructive">Failed to load the curation runs: {runs.error.message}</p>;
+    return <QueryError what="the curation runs" error={runs.error} onRetry={() => runs.refetch()} />;
   }
   if (runs.data.runs.length === 0) {
     return (
@@ -167,7 +159,6 @@ function OpCounts({ run }: { run: RunSummary }) {
 function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
   const actions = useCurationActions(run.run_id);
   const undo = useUndoCuration();
-  const [confirming, setConfirming] = useState(false);
   const live = run.actions - run.undone;
 
   const undoAction = (row: ActionRow) =>
@@ -181,7 +172,6 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
       {
         onSuccess: (report) => toast.success(`Undid ${formatCount(report.undone.length)} actions of ${run.run_id}.`),
         onError: toastApiError,
-        onSettled: () => setConfirming(false),
       },
     );
 
@@ -196,21 +186,24 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
           {run.summary && <p className="mt-1 text-sm">{run.summary}</p>}
         </div>
         {!readOnly && (
-          <Button
-            type="button"
+          <ConfirmButton
             variant="outline"
             className="shrink-0"
+            label="Undo run"
             disabled={undo.isPending || live === 0}
-            onClick={() => setConfirming(true)}
+            title={`Undo ${formatCount(live)} actions?`}
+            description={`Every action of ${run.run_id} that is still in force is reversed, newest first. Hidden turns come back into recall, aliases and blocks are lifted and the run's notes are removed.`}
+            confirmLabel="Undo run"
+            onConfirm={undoRun}
           >
             <Undo2Icon aria-hidden />
             Undo run
-          </Button>
+          </ConfirmButton>
         )}
       </div>
 
       {actions.isPending && <Skeleton className="h-32 w-full" />}
-      {actions.error && <p className="text-sm text-destructive">{actions.error.message}</p>}
+      {actions.error && <QueryError what="the run's actions" error={actions.error} onRetry={() => actions.refetch()} />}
       {actions.data && (
         <div className="overflow-x-auto rounded-md border">
           <Table>
@@ -238,17 +231,16 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
                     ) : (
                       !readOnly &&
                       row.op !== 'run_end' && (
-                        <Button
-                          type="button"
+                        <ActionButton
                           variant="ghost"
                           size="sm"
+                          label={`Undo action ${row.id}`}
                           disabled={undo.isPending}
                           onClick={() => undoAction(row)}
-                          aria-label={`Undo action ${row.id}`}
                         >
                           <Undo2Icon aria-hidden />
                           Undo
-                        </Button>
+                        </ActionButton>
                       )
                     )}
                   </TableCell>
@@ -258,30 +250,6 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
           </Table>
         </div>
       )}
-
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Undo {formatCount(live)} actions?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Every action of {run.run_id} that is still in force is reversed, newest first. Hidden turns come back into
-              recall, aliases and blocks are lifted and the run's notes are removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={undo.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                undoRun();
-              }}
-              disabled={undo.isPending}
-            >
-              {undo.isPending ? 'Undoing…' : 'Undo run'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -355,7 +323,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (entities.error) {
-    return <p className="text-sm text-destructive">Failed to load the aliases: {entities.error.message}</p>;
+    return <QueryError what="the aliases" error={entities.error} onRetry={() => entities.refetch()} />;
   }
 
   const remove = (actionId: number | null, label: string) => {
@@ -369,89 +337,90 @@ function Entities({ readOnly }: { readOnly: boolean }) {
   };
   const removeButton = (actionId: number | null, label: string) =>
     !readOnly && (
-      <Button
-        type="button"
+      <ActionButton
         variant="ghost"
         size="sm"
+        label={`Remove ${label}`}
         disabled={undo.isPending || actionId === null}
         onClick={() => remove(actionId, label)}
-        aria-label={`Remove ${label}`}
       >
         <Undo2Icon aria-hidden />
         Remove
-      </Button>
+      </ActionButton>
     );
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium">Aliases</h2>
-        <p className="text-xs text-muted-foreground">
-          Each alias is folded into its canonical name in the entity index, as if the text had used it.
-        </p>
-        {entities.data.aliases.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Alias</TableHead>
-                  <TableHead>Canonical</TableHead>
-                  <TableHead className="w-24" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entities.data.aliases.map((entry) => (
-                  <TableRow key={entry.alias}>
-                    <TableCell>{entry.alias}</TableCell>
-                    <TableCell>
-                      <Link
-                        to="/graph"
-                        search={{ focus: entry.canonical }}
-                        className="underline-offset-2 hover:underline"
-                      >
-                        {entry.canonical}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {removeButton(entry.action_id, `the alias ${entry.alias}`)}
-                    </TableCell>
+      <Section
+        title="Aliases"
+        description="Each alias is folded into its canonical name in the entity index, as if the text had used it."
+        content={
+          entities.data.aliases.length === 0 ? (
+            <p className="text-sm text-muted-foreground">None.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Alias</TableHead>
+                    <TableHead>Canonical</TableHead>
+                    <TableHead className="w-24" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium">Blocklist</h2>
-        <p className="text-xs text-muted-foreground">Names the extractor picked up that are not entities.</p>
-        {entities.data.blocklist.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Entity</TableHead>
-                  <TableHead className="w-24" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entities.data.blocklist.map((entry) => (
-                  <TableRow key={entry.entity}>
-                    <TableCell>{entry.entity}</TableCell>
-                    <TableCell className="text-right">
-                      {removeButton(entry.action_id, `the block on ${entry.entity}`)}
-                    </TableCell>
+                </TableHeader>
+                <TableBody>
+                  {entities.data.aliases.map((entry) => (
+                    <TableRow key={entry.alias}>
+                      <TableCell>{entry.alias}</TableCell>
+                      <TableCell>
+                        <Link
+                          to="/graph"
+                          search={{ focus: entry.canonical }}
+                          className="underline-offset-2 hover:underline"
+                        >
+                          {entry.canonical}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {removeButton(entry.action_id, `the alias ${entry.alias}`)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
+      <Section
+        title="Blocklist"
+        description="Names the extractor picked up that are not entities."
+        content={
+          entities.data.blocklist.length === 0 ? (
+            <p className="text-sm text-muted-foreground">None.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entity</TableHead>
+                    <TableHead className="w-24" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+                </TableHeader>
+                <TableBody>
+                  {entities.data.blocklist.map((entry) => (
+                    <TableRow key={entry.entity}>
+                      <TableCell>{entry.entity}</TableCell>
+                      <TableCell className="text-right">
+                        {removeButton(entry.action_id, `the block on ${entry.entity}`)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
     </div>
   );
 }
