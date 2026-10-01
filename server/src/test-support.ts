@@ -25,6 +25,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
   return {
     dataDir: '/nonexistent',
     port: 3000,
+    keepAliveTimeoutMs: 75_000,
     authToken: 'test-token',
     readOnly: false,
     recallTextLimit: 2000,

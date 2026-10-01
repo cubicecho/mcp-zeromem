@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     }
   };
   const httpServer = host ? app.listen(config.port, host, onListen) : app.listen(config.port, onListen);
+  httpServer.keepAliveTimeout = config.keepAliveTimeoutMs;
 
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals) => {
