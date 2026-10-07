@@ -48,6 +48,7 @@ npm run test:rust        # cargo test --workspace (oracle, properties, golden, e
 npm run fixtures:gen     # regenerate crates/zeromem-harness/fixtures/ after changing the generator
 npm run bench            # cold open / RSS / recall latency at 1k, 10k, 50k turns → target/bench/
 scripts/record-eval.sh   # run the eval harness and append a row per corpus × embedder to docs/eval/history.jsonl
+npm run eval:answers -- <corpus-dir>  # a model answers the labeled questions from memory; a judge grades it (needs ZEROMEM_EVAL_LLM_*)
 npm run routes:gen -w app # regenerate app/src/routeTree.gen.ts (also done by the Vite plugin in dev)
 scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-harness compare`
 
@@ -55,6 +56,7 @@ scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-ha
 npm run build            # build:native → shared typecheck → server tsc → app vite build
 npm start                # node server/dist/index.js
 npm run stdio            # node server/dist/stdio.js (stdio MCP)
+npm run curate           # node server/dist/curate.js: one curation run by a local model (dev: npm run dev:curate)
 npm run build:docker     # docker build -t mcp-zeromem .
 docker compose up        # ./data mounted at /data, port 3200 on the host
 ```
@@ -130,6 +132,20 @@ and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is
 call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
 model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
 
+**Retrieval is gated; answers are only recorded.** `server/src/answer-eval.ts` loads a harness
+corpus into a temp store, gives a model the two memory reads (`zeromem_recall`,
+`zeromem_read_session`) and the labeled questions, and has a judge model compare each answer with
+the grade-2 turns (`server/src/answer-eval/`). Both ends are models, so the number moves with the
+model and never gates a commit: a retrieval change is still proved in `tests/eval.rs`. `--curate`
+runs the curator model's sweep first, which is the only measure of a model curator there is.
+
+**The curator runner is a client, not part of the server.** `server/src/curate.ts`
+(`mcp-zeromem-curate`) connects as an MCP client, over `/mcp` or to a gateway it builds in-process
+on the store under `DATA_DIR`, fetches a curator prompt and drives an OpenAI-compatible model
+through it (`server/src/curator-agent/`). It holds no curation rule: a change to what the curator
+should do goes in `docs/curator-*.md`, never in the runner. Its tests script the model and use a
+real store.
+
 **Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
 verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,
 `_notes` and `_entities` one job each, and `server/src/gateway/prompts.ts` adds only a
@@ -189,7 +205,12 @@ fixtures under `crates/zeromem-harness/fixtures/` are generated, not hand-writte
 `corpus.rs`, run `npm run fixtures:gen`, commit both — `fixtures_are_fresh` fails otherwise.
 Labeled queries carry graded relevance (2 = states the current value, 1 = a superseded one);
 `zeromem_harness::eval` turns a ranked list into recall@k / MRR / nDCG, and `tests/eval.rs`
-holds the floors — the quality gate. Raise a floor when retrieval improves; never lower one
+holds the floors — the quality gate. `probes.jsonl` holds the questions the queries cannot ask
+(`ask`: `history`, `as_of`, `abstain`), drawn from their own random stream so they never move a
+turn or a query; `PROBE_FLOORS` gates the first two before and after the oracle curator, and
+abstention and tokens per answer are recorded, not gated. `zm-harness import longmemeval` plus
+`ZEROMEM_EVAL_CORPUS=<dir>` scores an outside benchmark; that is recorded under
+`target/eval/external/` and never committed or gated. Raise a floor when retrieval improves; never lower one
 without saying why in the commit. `tests/golden.rs` snapshots full results for the small corpus
 (`UPDATE_GOLDEN=1` rewrites them after an intended ranking change). `zm-harness compare`
 scores two rankers' answers against the labels and each other (top-k overlap, Spearman); that

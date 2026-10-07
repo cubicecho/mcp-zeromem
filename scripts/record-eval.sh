@@ -5,7 +5,9 @@
 #
 # Runs the `eval` test in crates/zeromem-core (which writes one JSON file per
 # profile × embedder to target/eval/) and appends one history line per file,
-# stamped with the commit and the time. Needs the ONNX model for the
+# stamped with the commit and the time. The probe numbers the same test
+# writes to target/eval/probes/ (hash embedder only) are folded into the
+# matching line. Needs the ONNX model for the
 # bge-small rows; set ZEROMEM_MODELS to a cache to avoid re-downloading it.
 # Set ZEROMEM_SKIP_ONNX=1 to record the hash rows only. With
 # ZEROMEM_EMBEDDING_URL and ZEROMEM_EMBEDDING_MODEL set, an OpenAI-compatible
@@ -20,17 +22,20 @@ recorded_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 command -v jq >/dev/null || { echo "record-eval: jq is required" >&2; exit 1; }
 
-rm -f "$root"/target/eval/*-*.json
+rm -f "$root"/target/eval/*-*.json "$root"/target/eval/probes/*-*.json
 (cd "$root" && cargo test -p zeromem-core --test eval -- --nocapture >/dev/null)
 
 mkdir -p "$(dirname "$history")"
 appended=0
 for f in "$root"/target/eval/*-*.json; do
   [ -f "$f" ] || continue
-  jq -c --arg recorded_at "$recorded_at" --arg commit "$commit" --arg label "$label" '{
+  probes="$root/target/eval/probes/$(basename "$f")"
+  [ -f "$probes" ] || probes=/dev/null
+  jq -c --arg recorded_at "$recorded_at" --arg commit "$commit" --arg tag "$label" \
+    --slurpfile probes "$probes" '($probes[0] // {}) as $p | {
     recorded_at: $recorded_at,
     commit: $commit,
-    label: (if $label == "" then null else $label end),
+    "label": (if $tag == "" then null else $tag end),
     profile: .profile,
     embedder: .embedder,
     k: .summary.k,
@@ -38,7 +43,12 @@ for f in "$root"/target/eval/*-*.json; do
     recall_at_k: .summary.recall_at_k,
     mrr: .summary.mrr,
     ndcg_at_k: .summary.ndcg_at_k,
-    missed: (.missed | length)
+    missed: (.missed | length),
+    tokens_per_answer: .tokens_per_answer,
+    history_ndcg_at_k: ($p.by_ask.history | if (.queries // 0) > 0 then .ndcg_at_k else null end),
+    as_of_ndcg_at_k: ($p.by_ask.as_of | if (.queries // 0) > 0 then .ndcg_at_k else null end),
+    abstain_answered: $p.abstention.answered,
+    abstain_auc: $p.abstention.auc
   } | with_entries(select(.value != null))' "$f" >> "$history"
   appended=$((appended + 1))
 done

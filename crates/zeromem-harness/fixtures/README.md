@@ -16,6 +16,13 @@ and commit the result. Each profile directory holds:
 - `queries.jsonl` — one labeled question per fact the corpus states, with the
   uuids of the turns that answer it. Grade 2 states the fact's current value;
   grade 1 states a value that was later changed.
+- `probes.jsonl` — the questions `queries.jsonl` cannot ask, each marked with
+  its `ask`. `history` wants the value before the last change and `as_of` the
+  value in force during a named month; for both, grade 2 states the wanted
+  value and grade 1 any other, the current one included. `abstain` asks about
+  a fact the corpus never states and has no relevant turns. They are drawn from
+  their own random stream, so adding or rephrasing one never moves a turn or a
+  query.
 
 `small` is ~50 turns in 5 sessions, readable end to end. `large` is ~5k turns in
 325 sessions, with facts restated and revised across sessions so the entity
