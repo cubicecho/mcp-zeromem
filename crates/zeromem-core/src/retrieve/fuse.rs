@@ -197,6 +197,7 @@ mod tests {
             text: "t".into(),
             ts,
             kind: Default::default(),
+            scope: String::new(),
         }
     }
 

@@ -27,7 +27,7 @@ pub mod profile;
 pub mod route;
 pub mod window;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +35,7 @@ use crate::curation::Flags;
 use crate::dense::{Embedder, VectorIndex};
 use crate::entities;
 use crate::error::Result;
-use crate::store::Store;
+use crate::store::{Reach, Store};
 use crate::text;
 use crate::types::Turn;
 
@@ -68,6 +68,10 @@ pub struct QueryOptions {
     pub since: Option<i64>,
     /// Only turns at or before this timestamp (ms).
     pub until: Option<i64>,
+    /// Only turns in exactly this scope. Absent or blank searches every
+    /// scope, the unscoped turns included.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
     pub detail: Option<Detail>,
     /// Let hidden turns be recalled too, flagged; for the curator and the
     /// admin UI.
@@ -202,23 +206,18 @@ pub struct Context<'a> {
     pub latest_ts: i64,
 }
 
-/// A filter over turns, from the options.
+/// A filter over turns, from the options. The views already search inside
+/// `reach`; this is what a turn pulled in afterwards (a superseded hit's
+/// replacement) is held to.
 struct Filter<'a> {
-    exclude_session: Option<&'a str>,
-    session: Option<&'a str>,
-    since: Option<i64>,
-    until: Option<i64>,
+    reach: Reach<'a>,
     /// Hidden turns to leave out; `None` with `include_hidden`.
     hidden: Option<&'a BTreeSet<i64>>,
 }
 
 impl Filter<'_> {
     fn keeps(&self, t: &Turn) -> bool {
-        self.hidden.is_none_or(|h| !h.contains(&t.id))
-            && self.exclude_session.is_none_or(|s| t.session_id != s)
-            && self.session.is_none_or(|s| t.session_id == s)
-            && self.since.is_none_or(|s| t.ts >= s)
-            && self.until.is_none_or(|u| t.ts <= u)
+        self.hidden.is_none_or(|h| !h.contains(&t.id)) && self.reach.keeps(t)
     }
 }
 
@@ -233,10 +232,20 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let include_hidden = opts.include_hidden.unwrap_or(false);
     let flags = ctx.store.curation_flags()?;
 
+    let reach = Reach {
+        exclude_session: opts.exclude_session.as_deref(),
+        session: opts.session.as_deref(),
+        since: opts.since,
+        until: opts.until,
+        scope: opts.scope.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    };
+    // The dense index is in memory, so it is narrowed by id.
+    let within = if reach.is_open() { None } else { Some(ctx.store.turn_ids_within(&reach)?) };
+
     // Nominate.
     let mut views: Vec<ViewTrace> = Vec::with_capacity(plan.len());
     for view in &plan {
-        let candidates = nominate(ctx, view, &profile, include_hidden, &flags)?;
+        let candidates = nominate(ctx, view, &profile, include_hidden, &flags, &reach, within.as_ref())?;
         views.push(ViewTrace { view: view.kind, weight: view.weight, candidates });
     }
 
@@ -244,13 +253,7 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let mut ids: Vec<i64> = views.iter().flat_map(|v| v.candidates.iter().map(|c| c.0)).collect();
     ids.sort_unstable();
     ids.dedup();
-    let filter = Filter {
-        exclude_session: opts.exclude_session.as_deref(),
-        session: opts.session.as_deref(),
-        since: opts.since,
-        until: opts.until,
-        hidden: (!include_hidden).then_some(&flags.hidden),
-    };
+    let filter = Filter { reach, hidden: (!include_hidden).then_some(&flags.hidden) };
     let mut turns: BTreeMap<i64, Turn> =
         ctx.store.turns_by_ids(&ids)?.into_iter().filter(|(_, t)| filter.keeps(t)).collect();
     for v in &mut views {
@@ -538,17 +541,21 @@ fn nominate(
     profile: &Profile,
     include_hidden: bool,
     flags: &Flags,
+    reach: &Reach<'_>,
+    within: Option<&HashSet<i64>>,
 ) -> Result<Vec<(i64, f64)>> {
     Ok(match view.kind {
-        ViewKind::Lexical => lexical_view(ctx.store, profile, include_hidden)?,
-        ViewKind::Entity => entity_view(ctx.store, &profile.entities, include_hidden)?,
+        ViewKind::Lexical => lexical_view(ctx.store, profile, include_hidden, reach)?,
+        ViewKind::Entity => entity_view(ctx.store, &profile.entities, include_hidden, reach)?,
         ViewKind::Dense => match ctx.embedder.as_deref_mut() {
             // A failing embedder (a remote box that is down) empties this
             // view; the others still answer.
             Some(embedder) if !ctx.index.is_empty() => match embedder.embed_query(&profile.text) {
                 Ok(q) => ctx
                     .index
-                    .search(&q, VIEW_LIMIT, |id| include_hidden || !flags.hidden.contains(&id))
+                    .search(&q, VIEW_LIMIT, |id| {
+                        (include_hidden || !flags.hidden.contains(&id)) && within.is_none_or(|w| w.contains(&id))
+                    })
                     .into_iter()
                     .map(|(id, s)| (id, f64::from(s)))
                     .collect(),
@@ -560,7 +567,7 @@ fn nominate(
             _ => Vec::new(),
         },
         ViewKind::Recent => {
-            ctx.store.recent_turn_ids(VIEW_LIMIT, include_hidden)?.into_iter().map(|id| (id, 1.0)).collect()
+            ctx.store.recent_turn_ids(VIEW_LIMIT, include_hidden, reach)?.into_iter().map(|id| (id, 1.0)).collect()
         }
     })
 }
@@ -578,7 +585,7 @@ fn nominate(
 /// holds every content word of `who owns the billing service on heron?` and
 /// answers none of it. A question that does name one keeps them, or asking
 /// for `HERON_BILLING_SERVICE_URL` would discount its own answer.
-fn lexical_view(store: &Store, profile: &Profile, include_hidden: bool) -> Result<Vec<(i64, f64)>> {
+fn lexical_view(store: &Store, profile: &Profile, include_hidden: bool, reach: &Reach<'_>) -> Result<Vec<(i64, f64)>> {
     // One slot per question word; each slot is its alternatives, each a
     // run of stems.
     let mut terms = profile.tokens.clone();
@@ -598,7 +605,7 @@ fn lexical_view(store: &Store, profile: &Profile, include_hidden: bool) -> Resul
             None => vec![vec![text::stem(t)]],
         })
         .collect();
-    let mut hits = store.lexical_search(&terms, VIEW_LIMIT, include_hidden)?;
+    let mut hits = store.lexical_search(&terms, VIEW_LIMIT, include_hidden, reach)?;
     let mask = entities::technical_spans(&profile.text).is_empty();
     let turns = store.turns_by_ids(&hits.iter().map(|h| h.0).collect::<Vec<_>>())?;
     let covered: HashMap<i64, usize> = turns
@@ -643,11 +650,11 @@ fn resolve_known_entities(store: &Store, profile: &mut Profile) -> Result<()> {
 /// turns mentioning an entity that often co-occurs with one of them score
 /// a fraction, so a question about a person also reaches the project they
 /// are always mentioned with.
-fn entity_view(store: &Store, keys: &[String], include_hidden: bool) -> Result<Vec<(i64, f64)>> {
+fn entity_view(store: &Store, keys: &[String], include_hidden: bool, reach: &Reach<'_>) -> Result<Vec<(i64, f64)>> {
     const NEIGHBOURS: usize = 5;
     const NEIGHBOUR_WEIGHT: f64 = 0.3;
     let mut scores: BTreeMap<i64, f64> = BTreeMap::new();
-    for (id, n) in store.turns_mentioning(keys, VIEW_LIMIT * 2, include_hidden)? {
+    for (id, n) in store.turns_mentioning(keys, VIEW_LIMIT * 2, include_hidden, reach)? {
         scores.insert(id, f64::from(n));
     }
     let mut neighbours: Vec<String> = Vec::new();
@@ -658,7 +665,7 @@ fn entity_view(store: &Store, keys: &[String], include_hidden: bool) -> Result<V
             }
         }
     }
-    for (id, n) in store.turns_mentioning(&neighbours, VIEW_LIMIT * 2, include_hidden)? {
+    for (id, n) in store.turns_mentioning(&neighbours, VIEW_LIMIT * 2, include_hidden, reach)? {
         *scores.entry(id).or_insert(0.0) += NEIGHBOUR_WEIGHT * f64::from(n);
     }
     let mut ranked: Vec<(i64, f64)> = scores.into_iter().collect();

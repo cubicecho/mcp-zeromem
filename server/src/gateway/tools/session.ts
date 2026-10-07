@@ -14,8 +14,10 @@ import { defineTool, type ToolDefinition } from '../tool.ts';
 export function formatWindowText(window: SessionWindow): string {
   const { turns, offset, total } = window;
   const first = turns.length === 0 ? 0 : offset + 1;
+  // A session's turns share a scope; it is named only when there is one.
+  const scope = turns.find((turn) => turn.scope)?.scope;
   const header =
-    `session ${window.session_id}: turns ${first}–${offset + turns.length} of ${total}` +
+    `session ${window.session_id}${scope ? ` (scope ${scope})` : ''}: turns ${first}–${offset + turns.length} of ${total}` +
     (window.truncated ? ' (more; page on with `offset`)' : '');
   const body = turns.map((turn) => {
     const date = new Date(turn.ts).toISOString().slice(0, 10);
@@ -48,6 +50,7 @@ export function sessionTools(engine: ZeroMemEngine): ToolDefinition[] {
         'Pass `session_id` instead to read a session from the start, paging with `limit` and `offset`.',
         'This is a read in conversation order, not a search: use `zeromem_recall` to find what is relevant.',
         'The reply reports `total` and `truncated`, so you can tell a whole session from part of one.',
+        'Pass `scope` to read only if the session is in that scope: a turn id from another project is then refused, not read.',
       ].join(' '),
       inputSchema: {
         session_id: z
@@ -82,6 +85,14 @@ export function sessionTools(engine: ZeroMemEngine): ToolDefinition[] {
           .optional()
           .describe(`With \`session_id\`: how many turns at most; default 50, capped at ${SESSION_WINDOW_MAX_TURNS}.`),
         offset: z.number().int().min(0).optional().describe('With `session_id`: skip this many turns from the start.'),
+        scope: z
+          .string()
+          .trim()
+          .max(200)
+          .optional()
+          .describe(
+            'Read only if the session is in exactly this scope. Never defaulted: a turn id recall returned can always be expanded.',
+          ),
         format: z
           .enum(['json', 'text'])
           .optional()
@@ -90,8 +101,13 @@ export function sessionTools(engine: ZeroMemEngine): ToolDefinition[] {
       kind: 'read',
       run: async (args) => {
         // `format` shapes the reply here; the engine never sees it.
-        const { format, ...options } = args as {
+        const {
+          format,
+          scope: given,
+          ...options
+        } = args as {
           format?: 'json' | 'text';
+          scope?: string;
           session_id?: string;
           around_turn?: number;
         } & Record<string, unknown>;
@@ -100,6 +116,15 @@ export function sessionTools(engine: ZeroMemEngine): ToolDefinition[] {
           throw new Error('give `session_id` to read a session, or `around_turn` to read around one turn');
         }
         const window = await engine.sessionWindow(options);
+        // Checked only on request: ZEROMEM_SCOPE never applies here, or the read a
+        // clipped hit points at could fail for a hit recall itself returned.
+        const scope = given || undefined;
+        const found = window.turns.find((turn) => turn.scope)?.scope ?? '';
+        if (scope !== undefined && window.turns.length > 0 && found !== scope) {
+          throw new Error(
+            `session ${window.session_id} is ${found ? `in scope "${found}"` : 'unscoped'}, not "${scope}"; drop \`scope\` to read it anyway`,
+          );
+        }
         return format === 'text' ? formatWindowText(window) : window;
       },
     }),

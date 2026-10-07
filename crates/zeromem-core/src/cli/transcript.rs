@@ -12,11 +12,11 @@ use serde_json::Value;
 use zeromem_core::dates::parse_rfc3339_ms;
 use zeromem_core::TurnInput;
 
-pub fn parse(session_id: &str, jsonl: &str) -> Vec<TurnInput> {
-    jsonl.lines().filter_map(|line| turn_from_line(session_id, line)).collect()
+pub fn parse(session_id: &str, scope: Option<&str>, jsonl: &str) -> Vec<TurnInput> {
+    jsonl.lines().filter_map(|line| turn_from_line(session_id, scope, line)).collect()
 }
 
-fn turn_from_line(session_id: &str, line: &str) -> Option<TurnInput> {
+fn turn_from_line(session_id: &str, scope: Option<&str>, line: &str) -> Option<TurnInput> {
     let v: Value = serde_json::from_str(line.trim()).ok()?;
     let speaker = match v.get("type")?.as_str()? {
         "user" => "user",
@@ -29,7 +29,14 @@ fn turn_from_line(session_id: &str, line: &str) -> Option<TurnInput> {
     }
     let ts = v.get("timestamp").and_then(Value::as_str).and_then(parse_rfc3339_ms);
     let uuid = v.get("uuid").and_then(Value::as_str).map(str::to_string);
-    Some(TurnInput { session_id: session_id.to_string(), speaker: speaker.into(), text, ts, uuid })
+    Some(TurnInput {
+        session_id: session_id.to_string(),
+        speaker: speaker.into(),
+        text,
+        ts,
+        uuid,
+        scope: scope.map(str::to_string),
+    })
 }
 
 fn text_of(content: &Value) -> Option<String> {
@@ -63,7 +70,7 @@ mod tests {
 {"type":"user","uuid":"u2","message":{"content":[{"type":"tool_result","content":"ignored too"}]}}
 not json
 "#;
-        let turns = parse("sess", jsonl);
+        let turns = parse("sess", None, jsonl);
         assert_eq!(turns.len(), 2);
         assert_eq!(turns[0].speaker, "user");
         assert_eq!(turns[0].uuid.as_deref(), Some("u1"));

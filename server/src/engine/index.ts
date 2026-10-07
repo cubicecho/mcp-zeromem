@@ -162,8 +162,10 @@ export class ZeroMemEngine {
     return report;
   }
 
-  listSessions(page?: { limit?: number; offset?: number }): Promise<SessionSummary[]> {
-    return check(sessionSummarySchema.array(), this.native.listSessions(page));
+  /** With `scope`, only the sessions holding turns in exactly that scope. */
+  listSessions(page?: { limit?: number; offset?: number; scope?: string }): Promise<SessionSummary[]> {
+    const { scope, ...rest } = page ?? {};
+    return check(sessionSummarySchema.array(), this.native.listSessions(rest, scope?.trim() || undefined));
   }
 
   sessionTurns(sessionId: string, page?: { limit?: number; offset?: number }): Promise<StoredTurn[]> {

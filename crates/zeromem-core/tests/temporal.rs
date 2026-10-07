@@ -21,6 +21,7 @@ fn turn(session: &str, uuid: &str, date: &str, text: &str) -> TurnInput {
         text: text.into(),
         ts: Some(at(date)),
         uuid: Some(uuid.into()),
+        scope: None,
     }
 }
 

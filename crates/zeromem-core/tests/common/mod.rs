@@ -52,6 +52,7 @@ pub fn input(t: &corpus::Turn) -> TurnInput {
         text: t.text.clone(),
         ts: Some(t.ts),
         uuid: Some(t.uuid.clone()),
+        scope: None,
     }
 }
 
@@ -65,6 +66,7 @@ pub struct Content {
     pub text: String,
     pub ts: i64,
     pub kind: TurnKind,
+    pub scope: String,
 }
 
 impl From<&Turn> for Content {
@@ -76,6 +78,7 @@ impl From<&Turn> for Content {
             text: t.text.clone(),
             ts: t.ts,
             kind: t.kind,
+            scope: t.scope.clone(),
         }
     }
 }

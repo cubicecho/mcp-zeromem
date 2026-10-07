@@ -29,7 +29,9 @@ export function formatEvidenceText(evidence: readonly Evidence[], limit = DEFAUL
 
 function formatBlock(item: Evidence, limit: number): string {
   const { role, turn } = item;
-  const header = `[${role}] ${day(turn.ts)} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id}${replaced(item)})`;
+  // The scope is named only when the turn has one, so an unscoped store reads as it always did.
+  const scope = turn.scope ? `, scope ${turn.scope}` : '';
+  const header = `[${role}] ${day(turn.ts)} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id}${scope}${replaced(item)})`;
   return [
     ...(item.before ?? []).map((neighbour) => neighbourLine('before', neighbour, limit)),
     `${header}: ${body(turn, limit)}`,
@@ -106,6 +108,7 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
         'If a hit ends in `[clipped: … — zeromem_read_session {around_turn: N}]` it was cut to fit; call',
         '`zeromem_read_session` with that turn id to read the whole thing rather than treating memory as incomplete.',
         'Pass `exclude_session` with the current session id so recall does not echo the conversation in progress.',
+        'Pass `scope` (e.g. `project:atlas`) to recall only from that scope; it is matched exactly, and `scope: ""` searches every scope.',
       ].join(' '),
       inputSchema: {
         query: z.string().trim().min(1).describe('What to recall, in natural language.'),
@@ -116,6 +119,14 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
           .optional()
           .describe('Leave out this session, typically the one asking; defaults to ZEROMEM_SESSION_ID when set.'),
         session: z.string().min(1).optional().describe('Only recall from this one session.'),
+        scope: z
+          .string()
+          .trim()
+          .max(200)
+          .optional()
+          .describe(
+            'Only turns in exactly this scope; defaults to ZEROMEM_SCOPE when set, otherwise every scope. Pass "" to search every scope.',
+          ),
         since: z.number().int().optional().describe('Only turns at or after this Unix timestamp in milliseconds.'),
         until: z.number().int().optional().describe('Only turns at or before this Unix timestamp in milliseconds.'),
         detail: z
@@ -153,9 +164,12 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
           format?: 'json' | 'text';
           max_chars?: number;
           exclude_session?: string;
+          scope?: string;
         } & Record<string, unknown>;
         const exclude_session = options.exclude_session ?? config.sessionId ?? undefined;
-        const result = await engine.query(query, { ...options, exclude_session });
+        // An explicit blank is "every scope", so only an absent one takes the default.
+        const scope = (options.scope ?? config.scope ?? '') || undefined;
+        const result = await engine.query(query, { ...options, exclude_session, scope });
         return format === 'text' ? formatEvidenceText(result.evidence, max_chars ?? config.recallTextLimit) : result;
       },
     }),

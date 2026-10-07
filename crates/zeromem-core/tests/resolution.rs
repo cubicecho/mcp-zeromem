@@ -22,6 +22,7 @@ fn turn(uuid: &str, ts: i64, text: &str) -> TurnInput {
         text: text.into(),
         ts: Some(ts),
         uuid: Some(uuid.into()),
+        scope: None,
     }
 }
 

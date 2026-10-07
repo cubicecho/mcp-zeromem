@@ -146,7 +146,7 @@
     "took_ms": 0
   },
   "small-q0001:exclude_session": {
-    "considered": 39,
+    "considered": 42,
     "evidence": [
       {
         "confidence": 1.0,
@@ -197,7 +197,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 39,
+          "candidates": 42,
           "view": "dense",
           "weight": 0.4
         }
@@ -352,7 +352,7 @@
     "took_ms": 0
   },
   "small-q0001:since": {
-    "considered": 25,
+    "considered": 27,
     "evidence": [
       {
         "confidence": 1.0,
@@ -478,7 +478,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 25,
+          "candidates": 27,
           "view": "dense",
           "weight": 0.4
         }
@@ -676,7 +676,7 @@
     "took_ms": 0
   },
   "small-q0001:until": {
-    "considered": 26,
+    "considered": 27,
     "evidence": [
       {
         "confidence": 1.0,
@@ -813,7 +813,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 26,
+          "candidates": 27,
           "view": "dense",
           "weight": 0.4
         }

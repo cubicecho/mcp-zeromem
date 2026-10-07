@@ -57,4 +57,45 @@ describe('SessionsPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Forget' }));
     expect(forget).toHaveBeenCalledWith('alpha');
   });
+
+  it('offers the scopes the store holds and asks for one scope when it is chosen', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue({
+      ...status,
+      engine: {
+        ...status.engine,
+        scopes: [
+          { scope: '', turns: 2, sessions: 1 },
+          { scope: 'project:atlas', turns: 3, sessions: 1 },
+        ],
+      },
+    });
+    const list = vi.spyOn(api, 'listSessions').mockResolvedValue({
+      sessions: [
+        {
+          session_id: 'alpha',
+          turns: 3,
+          first_ts: 1_700_000_000_000,
+          last_ts: 1_700_000_100_000,
+          scope: 'project:atlas',
+        },
+      ],
+    });
+    renderPage(<SessionsPage />, '/sessions');
+
+    const user = userEvent.setup();
+    expect(await screen.findByText('project:atlas')).toBeInTheDocument();
+    await user.click(await screen.findByRole('combobox', { name: 'Scope' }));
+    await user.click(await screen.findByRole('option', { name: /project:atlas/ }));
+    expect(list).toHaveBeenLastCalledWith({ limit: 500, scope: 'project:atlas' });
+  });
+
+  it('shows no scope filter for a store with no scopes', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue(status);
+    vi.spyOn(api, 'listSessions').mockResolvedValue({
+      sessions: [{ session_id: 'alpha', turns: 3, first_ts: 1_700_000_000_000, last_ts: 1_700_000_100_000 }],
+    });
+    renderPage(<SessionsPage />, '/sessions');
+    await screen.findByText('alpha');
+    expect(screen.queryByRole('combobox', { name: 'Scope' })).not.toBeInTheDocument();
+  });
 });

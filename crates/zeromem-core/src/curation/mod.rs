@@ -388,16 +388,18 @@ struct TurnBrief {
     uuid: String,
     ts: i64,
     kind: TurnKind,
+    scope: String,
 }
 
 fn brief(tx: &Transaction<'_>, id: i64) -> Result<Option<TurnBrief>> {
     Ok(tx
-        .query_row("SELECT id, uuid, ts, kind FROM turns WHERE id = ?1", [id], |r| {
+        .query_row("SELECT id, uuid, ts, kind, scope FROM turns WHERE id = ?1", [id], |r| {
             Ok(TurnBrief {
                 id: r.get(0)?,
                 uuid: r.get(1)?,
                 ts: r.get(2)?,
                 kind: TurnKind::parse(&r.get::<_, String>(3)?),
+                scope: r.get(4)?,
             })
         })
         .optional()?)
@@ -806,10 +808,8 @@ impl Store {
                 uuids.push(n.to_string());
             }
             uuids.extend(payload_uuids(&a.payload));
-            for key in ["by"] {
-                if let Some(u) = a.payload[key].as_str() {
-                    uuids.push(u.to_string());
-                }
+            if let Some(u) = a.payload["by"].as_str() {
+                uuids.push(u.to_string());
             }
             if let Some(sources) = a.payload["sources"].as_array() {
                 uuids.extend(sources.iter().filter_map(|v| v.as_str().map(str::to_string)));
@@ -1057,12 +1057,22 @@ fn plan(tx: &Transaction<'_>, action: &CurationAction, cutoff: i64) -> std::resu
                 return Err("there is already a note for these sources".into());
             }
             let ts = sources.iter().map(|t| t.ts).max().unwrap_or(0);
+            // A note is recalled in its sources' place, so it lives where
+            // they do; one over two scopes would carry each into the other.
+            let scope = sources.first().map(|t| t.scope.clone()).unwrap_or_default();
+            if let Some(other) = sources.iter().find(|t| t.scope != scope) {
+                return Err(format!(
+                    "turn {} is in scope '{}', not '{scope}'; a note stays inside one scope",
+                    other.id, other.scope
+                ));
+            }
             let input = TurnInput {
                 session_id: session_id.trim().to_string(),
                 speaker: CURATOR_SPEAKER.to_string(),
                 text: text.trim().to_string(),
                 ts: Some(ts),
                 uuid: Some(uuid),
+                scope: (!scope.is_empty()).then_some(scope),
             };
             store::validate(&input).map_err(sql)?;
             let payload = serde_json::json!({ "session_id": input.session_id, "sources": uuids });

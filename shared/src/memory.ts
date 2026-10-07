@@ -14,6 +14,20 @@ const count = z.number().int().nonnegative();
 export const embedderKindSchema = z.enum(['onnx', 'hash', 'openai']);
 export type EmbedderKind = z.infer<typeof embedderKindSchema>;
 
+/**
+ * A scope is one free-form label on a turn (`project:atlas`, `user:ben`) that
+ * keeps one store's projects or people apart. It is matched exactly, never as
+ * a prefix; a turn without one is unscoped and the field is left out.
+ */
+export const scopeSchema = z.string().trim().max(200);
+
+export const scopeSummarySchema = z.object({
+  scope: z.string(),
+  turns: count,
+  sessions: count,
+});
+export type ScopeSummary = z.infer<typeof scopeSummarySchema>;
+
 export const statsSchema = z.object({
   home: z.string(),
   turns: count,
@@ -43,6 +57,8 @@ export const statsSchema = z.object({
   hidden: count,
   /** Notes written by the curator. */
   notes: count,
+  /** The scopes in the store, largest first; left out while every turn is unscoped. */
+  scopes: z.array(scopeSummarySchema).optional(),
 });
 export type Stats = z.infer<typeof statsSchema>;
 
@@ -136,6 +152,7 @@ export const sessionSummarySchema = z.object({
   turns: z.number().int().nonnegative(),
   first_ts: z.number().int(),
   last_ts: z.number().int(),
+  scope: z.string().optional(),
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 
@@ -151,6 +168,7 @@ export const storedTurnSchema = z.object({
   text: z.string(),
   ts: z.number().int(),
   kind: turnKindSchema.optional(),
+  scope: z.string().optional(),
 });
 export type StoredTurn = z.infer<typeof storedTurnSchema>;
 
@@ -222,6 +240,8 @@ export const turnInputSchema = z.object({
   text: z.string().min(1),
   ts: z.number().int().optional(),
   uuid: z.string().min(1).optional(),
+  /** Not part of a derived uuid: the first write of a turn decides its scope. */
+  scope: scopeSchema.optional(),
 });
 export type TurnInput = z.infer<typeof turnInputSchema>;
 
@@ -246,6 +266,8 @@ export const recallOptionsSchema = z.object({
   session: z.string().min(1).optional(),
   since: z.number().int().optional(),
   until: z.number().int().optional(),
+  /** Only this scope, matched exactly; absent or blank searches every scope. */
+  scope: scopeSchema.optional(),
   detail: detailSchema.optional(),
   /** Include turns curation hid; they come back flagged `hidden`. */
   include_hidden: z.boolean().optional(),
