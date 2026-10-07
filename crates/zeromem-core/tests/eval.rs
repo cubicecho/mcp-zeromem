@@ -26,7 +26,7 @@ use zeromem_core::dense::remote::{RemoteSpec, DEFAULT_TIMEOUT_MS};
 use zeromem_core::dense::{self, EmbedderChoice};
 use zeromem_core::{Detail, OpenOptions, QueryOptions, ZeroMem};
 use zeromem_harness::corpus::{Ask, Corpus, Profile, Query, LARGE, SMALL, TRANSCRIPT};
-use zeromem_harness::eval::{self, Abstention, QueryScore, Summary};
+use zeromem_harness::eval::{self, Abstention, Outcome, QueryScore, Summary};
 
 struct Floor {
     profile: &'static Profile,
@@ -65,11 +65,11 @@ struct Floor {
 /// transcripts; `by_kind` in `target/eval/*.json` tracks the family.
 const FLOORS: &[Floor] = &[
     Floor { profile: &SMALL, embedder: EmbedderChoice::Hash, recall_at_5: 0.95, mrr: 0.85, ndcg_at_5: 0.88 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.84, mrr: 0.94, ndcg_at_5: 0.77 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Hash, recall_at_5: 0.89, mrr: 0.96, ndcg_at_5: 0.81 },
     Floor { profile: &SMALL, embedder: EmbedderChoice::Onnx, recall_at_5: 0.95, mrr: 0.90, ndcg_at_5: 0.90 },
-    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.93, mrr: 0.97, ndcg_at_5: 0.84 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.89, mrr: 0.94, ndcg_at_5: 0.82 },
-    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.94, mrr: 0.97, ndcg_at_5: 0.87 },
+    Floor { profile: &LARGE, embedder: EmbedderChoice::Onnx, recall_at_5: 0.96, mrr: 0.99, ndcg_at_5: 0.87 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Hash, recall_at_5: 0.93, mrr: 0.97, ndcg_at_5: 0.87 },
+    Floor { profile: &TRANSCRIPT, embedder: EmbedderChoice::Onnx, recall_at_5: 0.96, mrr: 0.98, ndcg_at_5: 0.91 },
 ];
 
 fn embedder_name(choice: EmbedderChoice) -> &'static str {
@@ -323,37 +323,73 @@ struct ProbeFloor {
 /// 0.55 -> 0.65. Recall counts a statement of any value, so the later
 /// values a period question now ranks below what held then are hits it
 /// loses from the top five; that trade is the feature.
+///
+/// Every row rose again when a turn that does not mention what the question
+/// names started losing part of its score (`retrieve::anchor`): the
+/// statements crowding these answers out were about the same attribute of
+/// another project.
 #[rustfmt::skip]
 const PROBE_FLOORS: &[ProbeFloor] = &[
-    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: false, recall_at_5: 0.88, mrr: 0.95, ndcg_at_5: 0.67 },
-    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: false, recall_at_5: 0.73, mrr: 0.85, ndcg_at_5: 0.63 },
-    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: true, recall_at_5: 0.88, mrr: 0.98, ndcg_at_5: 0.78 },
-    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: true, recall_at_5: 0.73, mrr: 0.85, ndcg_at_5: 0.63 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: false, recall_at_5: 0.89, mrr: 0.97, ndcg_at_5: 0.78 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: false, recall_at_5: 0.86, mrr: 0.95, ndcg_at_5: 0.83 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: true, recall_at_5: 0.88, mrr: 0.98, ndcg_at_5: 0.84 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: true, recall_at_5: 0.86, mrr: 0.95, ndcg_at_5: 0.83 },
+    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: false, recall_at_5: 0.91, mrr: 0.95, ndcg_at_5: 0.69 },
+    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: false, recall_at_5: 0.79, mrr: 0.89, ndcg_at_5: 0.69 },
+    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: true, recall_at_5: 0.92, mrr: 0.98, ndcg_at_5: 0.81 },
+    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: true, recall_at_5: 0.79, mrr: 0.89, ndcg_at_5: 0.69 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: false, recall_at_5: 0.93, mrr: 0.98, ndcg_at_5: 0.80 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: false, recall_at_5: 0.91, mrr: 0.96, ndcg_at_5: 0.86 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: true, recall_at_5: 0.93, mrr: 0.98, ndcg_at_5: 0.87 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: true, recall_at_5: 0.91, mrr: 0.96, ndcg_at_5: 0.86 },
+];
+
+struct AbstainFloor {
+    profile: &'static Profile,
+    /// The most unanswerable questions that may come back as an answer.
+    answered: f64,
+    /// The most answerable ones recall may decline, before and after the
+    /// oracle curator.
+    withheld: f64,
+    auc: f64,
+}
+
+/// Ceilings on the two ways abstaining goes wrong, a little over the
+/// measured numbers, and a floor on how well the best score separates the
+/// two kinds of question. Before `retrieve::anchor` every unanswerable
+/// question was answered and the AUC on `large` was 0.80.
+///
+/// What still gets answered is a question about something the store does
+/// hold: `Which tool handles caching on Sparrow?` when Sparrow is all over
+/// it and its cache tool never is. The best turn mentions everything the
+/// question names and matches well (`the edge cache for Sparrow is Mateo
+/// Quiroga's responsibility now`), and nothing in a name check can tell.
+/// What gets withheld is a question whose best turn is about another
+/// project: a ranking miss, declined instead of handed over as an answer.
+///
+/// `small` has three such questions, so its row only says the mechanism is
+/// on.
+const ABSTAIN_FLOORS: &[AbstainFloor] = &[
+    AbstainFloor { profile: &SMALL, answered: 0.34, withheld: 0.0, auc: 0.95 },
+    AbstainFloor { profile: &LARGE, answered: 0.22, withheld: 0.04, auc: 0.95 },
+    AbstainFloor { profile: &TRANSCRIPT, answered: 0.14, withheld: 0.02, auc: 0.96 },
 ];
 
 /// One ask's metrics over the probes, on the store as it stands.
-fn score_probes(zm: &mut ZeroMem, probes: &[Query], ask: Ask) -> (Summary, Vec<Option<f64>>) {
+fn score_probes(zm: &mut ZeroMem, probes: &[Query], ask: Ask) -> (Summary, Vec<Outcome>) {
     let mut scores = Vec::new();
-    let mut best = Vec::new();
+    let mut outcomes = Vec::new();
     for q in probes.iter().filter(|q| q.ask == ask) {
         let opts = QueryOptions { top_k: Some(5), detail: Some(Detail::Compact), ..Default::default() };
-        let evidence = zm.query(&q.query, &opts).unwrap().evidence;
-        best.push(evidence.first().map(|e| e.score));
-        let ranked: Vec<String> = evidence.into_iter().map(|e| e.turn.uuid).collect();
+        let result = zm.query(&q.query, &opts).unwrap();
+        outcomes
+            .push(Outcome { best: result.evidence.first().map(|e| e.score), abstained: result.abstained.is_some() });
+        let ranked: Vec<String> = result.evidence.into_iter().map(|e| e.turn.uuid).collect();
         scores.push(eval::score(&ranked, &q.relevant, 5));
     }
-    (eval::summarise(5, &scores), best)
+    (eval::summarise(5, &scores), outcomes)
 }
 
 /// The probes, hash embedder only: history and as-of questions before and
 /// after the oracle curator, and how well the top score tells a question
-/// the corpus answers from one it does not. Abstention is recorded, never
-/// gated — confidence is relative to the best hit, so recall has no way to
-/// say "nothing" yet, and the number is here so that shows.
+/// the corpus answers from one it does not, with how often recall says so
+/// itself (`QueryResult::abstained`) on either kind.
 #[test]
 fn probes_clear_their_floors() {
     // Every miss is reported, not just the first: the rows move together.
@@ -402,10 +438,35 @@ fn probes_clear_their_floors() {
                 by_ask.insert(label, summary);
             }
         }
+        // Curated: a replacement seldom repeats the name its question asks
+        // by, and must not be declined for it.
+        let (_, curated) = score_probes(&mut zm, &corpus.queries, Ask::Current);
+        let withheld_curated = eval::abstention(&curated, &unanswerable).withheld;
         eprintln!(
-            "{} / {name} {:>24}: {:.3} answered of {}, auc {:.3} (recorded, no floor)",
-            profile.name, "abstain", abstention.answered, abstention.queries, abstention.auc
+            "{} / {name} {:>24}: {:.3} answered of {}, {:.3} withheld ({:.3} curated), auc {:.3}",
+            profile.name,
+            "abstain",
+            abstention.answered,
+            abstention.queries,
+            abstention.withheld,
+            withheld_curated,
+            abstention.auc
         );
+        for floor in ABSTAIN_FLOORS.iter().filter(|f| f.profile.name == profile.name) {
+            let at = format!("{} / {name} abstain", profile.name);
+            for (metric, got, most) in [
+                ("answered", abstention.answered, floor.answered),
+                ("withheld", abstention.withheld, floor.withheld),
+                ("withheld after the oracle curator", withheld_curated, floor.withheld),
+            ] {
+                if got > most {
+                    misses.push(format!("{at}: {metric} {got:.3} is over {most}"));
+                }
+            }
+            if abstention.auc < floor.auc {
+                misses.push(format!("{at}: auc {:.3} is under {}", abstention.auc, floor.auc));
+            }
+        }
 
         let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/eval/probes");
         fs::create_dir_all(&out).unwrap();

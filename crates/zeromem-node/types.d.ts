@@ -156,6 +156,8 @@ export interface Profile {
   history?: boolean;
   /** The period the question names, `[start, end)` in Unix milliseconds. */
   window?: { start: number; end: number };
+  /** What the question names, as entity keys: a hit that mentions none of them is marked down. */
+  names?: string[];
 }
 
 export interface ViewSummary {
@@ -192,10 +194,20 @@ export interface Evidence {
   after?: StoredTurn[];
 }
 
+/** The engine's verdict that memory does not hold the answer. */
+export interface Abstained {
+  /** The names in the question that the best hit does not mention. */
+  missing?: string[];
+  /** The best hit's fused score. */
+  best: number;
+}
+
 export interface QueryResult {
   query: string;
   /** Present under `detail: 'full'`. */
   route?: Route;
+  /** Present only when the engine declined to answer; `evidence` is then the closest turns. */
+  abstained?: Abstained;
   evidence: Evidence[];
   considered: number;
   took_ms: number;
@@ -213,6 +225,8 @@ export interface Fused {
   sources: ViewKind[];
   ts: number;
   uuid: string;
+  /** The share of the question's names this turn mentions; absent when it mentions them all. */
+  anchor?: number;
 }
 
 export interface Dropped {
@@ -227,6 +241,7 @@ export interface QueryTrace {
   views: ViewTrace[];
   fused: Fused[];
   dropped: Dropped[];
+  abstained?: Abstained;
   evidence: Evidence[];
   took_ms: number;
 }

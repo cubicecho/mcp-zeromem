@@ -1,6 +1,6 @@
 import type { Evidence, StoredTurn } from '@mcp-zeromem/shared';
 import { describe, expect, it } from 'vitest';
-import { formatEvidenceText } from './recall.ts';
+import { formatAbstained, formatEvidenceText } from './recall.ts';
 
 // 2026-09-10T23:30:00Z: late enough that a local-time date would roll over east of UTC.
 const TS = Date.UTC(2026, 8, 10, 23, 30);
@@ -101,5 +101,17 @@ describe('formatEvidenceText', () => {
         '[after] assistant (turn 43): Flip the flag last.',
       ].join('\n'),
     );
+  });
+});
+
+describe('formatAbstained', () => {
+  it('names what the question asked about and memory does not mention', () => {
+    expect(formatAbstained({ missing: ['quill', 'tidewater'], best: 0.71 })).toBe(
+      '[abstained] Memory does not hold the answer: no turn in memory mentions "quill", "tidewater". The closest turns follow; they are probably not the answer.',
+    );
+  });
+
+  it('says the match was weak when every name was found', () => {
+    expect(formatAbstained({ best: 0.3149 })).toContain('nothing in memory matches this closely (best score 0.31)');
   });
 });

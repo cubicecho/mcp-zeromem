@@ -290,6 +290,8 @@ export const profileSchema = z.object({
   history: z.boolean().optional(),
   /** The period the question names, `[start, end)` in Unix milliseconds. */
   window: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
+  /** What the question names, as entity keys: a hit that mentions none of them is marked down. */
+  names: z.array(z.string()).optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -328,9 +330,23 @@ export const evidenceSchema = z.object({
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 
+/**
+ * The engine's verdict that memory does not hold the answer. `evidence` is then
+ * only the closest turns, all `supporting`, to be read as near misses.
+ */
+export const abstainedSchema = z.object({
+  /** The names in the question that the best hit does not mention; absent when the match was merely weak. */
+  missing: z.array(z.string()).optional(),
+  /** The best hit's fused score. */
+  best: z.number(),
+});
+export type Abstained = z.infer<typeof abstainedSchema>;
+
 export const queryResultSchema = z.object({
   query: z.string(),
   route: routeSchema.optional(),
+  /** Present only when the engine declined to answer. */
+  abstained: abstainedSchema.optional(),
   evidence: z.array(evidenceSchema),
   considered: count,
   took_ms: count,
@@ -350,6 +366,8 @@ export const fusedSchema = z.object({
   sources: z.array(viewKindSchema),
   ts: z.number().int(),
   uuid: z.string(),
+  /** The share of the question's names this turn mentions; absent when it mentions them all. */
+  anchor: z.number().optional(),
 });
 export type Fused = z.infer<typeof fusedSchema>;
 
@@ -367,6 +385,7 @@ export const queryTraceSchema = z.object({
   views: z.array(viewTraceSchema),
   fused: z.array(fusedSchema),
   dropped: z.array(droppedSchema),
+  abstained: abstainedSchema.optional(),
   evidence: z.array(evidenceSchema),
   took_ms: count,
 });

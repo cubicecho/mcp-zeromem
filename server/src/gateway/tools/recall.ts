@@ -1,4 +1,4 @@
-import { type Evidence, MAX_CONTEXT, type StoredTurn } from '@mcp-zeromem/shared';
+import { type Abstained, type Evidence, MAX_CONTEXT, type StoredTurn } from '@mcp-zeromem/shared';
 import { z } from 'zod';
 import type { Config } from '../../config.ts';
 import type { ZeroMemEngine } from '../../engine/index.ts';
@@ -86,6 +86,20 @@ function clip(text: string, limit: number, turnId: number): string {
   return `${kept}\n… [clipped: ${limit} of ${chars.length} characters — zeromem_read_session {around_turn: ${turnId}}]`;
 }
 
+/**
+ * The line that leads a `text` reply when the engine declined to answer. The
+ * blocks under it are the closest turns, and a model that is not told so reads
+ * them as the answer.
+ */
+export function formatAbstained(abstained: Abstained): string {
+  const missing = abstained.missing ?? [];
+  const why =
+    missing.length > 0
+      ? `no turn in memory mentions ${missing.map((name) => `"${name}"`).join(', ')}`
+      : `nothing in memory matches this closely (best score ${abstained.best.toFixed(2)})`;
+  return `[abstained] Memory does not hold the answer: ${why}. The closest turns follow; they are probably not the answer.`;
+}
+
 export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefinition[] {
   return [
     defineTool({
@@ -99,6 +113,9 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
         'A question about the past is read as one: "before" or "used to" ranks the value that was replaced first,',
         'and a named period ("in March 2025", "2025-03-14", "last week", "3 days ago") ranks what held then.',
         'A hit that curation knows was replaced carries `superseded_by` and `valid_until`, when it stopped holding.',
+        'When the question names something no stored turn mentions, or nothing matches closely, the result carries',
+        '`abstained` (`missing`: the names not found) and `evidence` is only the closest turns, all `supporting`:',
+        'say that memory does not hold the answer rather than answering from them.',
         'Ask in natural language and name the people, projects or things involved — entities are what the graph keys on.',
         'Use `detail: "full"` to see which views were used and which entities each hit matched — this is',
         'the explanation, and asking again would re-run retrieval against a corpus that may have moved.',
@@ -170,7 +187,9 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
         // An explicit blank is "every scope", so only an absent one takes the default.
         const scope = (options.scope ?? config.scope ?? '') || undefined;
         const result = await engine.query(query, { ...options, exclude_session, scope });
-        return format === 'text' ? formatEvidenceText(result.evidence, max_chars ?? config.recallTextLimit) : result;
+        if (format !== 'text') return result;
+        const blocks = formatEvidenceText(result.evidence, max_chars ?? config.recallTextLimit);
+        return result.abstained ? `${formatAbstained(result.abstained)}\n\n${blocks}` : blocks;
       },
     }),
   ];

@@ -93,22 +93,41 @@ pub fn summarise(k: usize, scores: &[QueryScore]) -> Summary {
 pub struct Abstention {
     /// How many unanswerable questions were asked.
     pub queries: usize,
-    /// The share of them that came back with evidence anyway. Lower is better.
+    /// The share of them that came back as an answer: with evidence, and
+    /// without the ranker saying it has none. Lower is better.
     pub answered: f64,
+    /// The share of answerable questions the ranker gave no answer to, by
+    /// saying so or by returning nothing. Lower is better, and it is the
+    /// price of `answered`: a ranker that always abstains scores 0 there
+    /// and 1 here.
+    pub withheld: f64,
     /// The chance that an answerable question's best score beats an
     /// unanswerable one's: 1 means a threshold on the score separates them
     /// perfectly, 0.5 that the score says nothing.
     pub auc: f64,
 }
 
-/// `answerable` and `unanswerable` are the best score each question's
-/// evidence carried, `None` when it came back empty.
-pub fn abstention(answerable: &[Option<f64>], unanswerable: &[Option<f64>]) -> Abstention {
-    let answered = unanswerable.iter().filter(|s| s.is_some()).count();
+/// What a ranker returned for one question, as far as abstention goes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Outcome {
+    /// The best score its evidence carried, `None` when it came back empty.
+    pub best: Option<f64>,
+    /// The ranker said memory does not hold the answer.
+    pub abstained: bool,
+}
+
+impl Outcome {
+    fn is_answer(&self) -> bool {
+        self.best.is_some() && !self.abstained
+    }
+}
+
+pub fn abstention(answerable: &[Outcome], unanswerable: &[Outcome]) -> Abstention {
+    let share = |n: usize, of: usize| n as f64 / of.max(1) as f64;
     let mut wins = 0.0;
     for a in answerable {
         for u in unanswerable {
-            let (a, u) = (a.unwrap_or(0.0), u.unwrap_or(0.0));
+            let (a, u) = (a.best.unwrap_or(0.0), u.best.unwrap_or(0.0));
             wins += if a > u {
                 1.0
             } else if a == u {
@@ -118,11 +137,11 @@ pub fn abstention(answerable: &[Option<f64>], unanswerable: &[Option<f64>]) -> A
             };
         }
     }
-    let pairs = (answerable.len() * unanswerable.len()).max(1) as f64;
     Abstention {
         queries: unanswerable.len(),
-        answered: answered as f64 / unanswerable.len().max(1) as f64,
-        auc: wins / pairs,
+        answered: share(unanswerable.iter().filter(|o| o.is_answer()).count(), unanswerable.len()),
+        withheld: share(answerable.iter().filter(|o| !o.is_answer()).count(), answerable.len()),
+        auc: wins / (answerable.len() * unanswerable.len()).max(1) as f64,
     }
 }
 
@@ -192,11 +211,16 @@ mod tests {
 
     #[test]
     fn abstention_counts_answers_and_separation() {
-        let a = abstention(&[Some(0.9), Some(0.8)], &[None, Some(0.1)]);
-        assert_eq!(a, Abstention { queries: 2, answered: 0.5, auc: 1.0 });
-        let a = abstention(&[Some(0.5)], &[Some(0.5), Some(0.7)]);
-        assert_eq!(a.answered, 1.0);
-        assert_eq!(a.auc, 0.25);
+        let got = |best: f64| Outcome { best: Some(best), abstained: false };
+        let said_no = |best: f64| Outcome { best: Some(best), abstained: true };
+        let empty = Outcome { best: None, abstained: false };
+        let a = abstention(&[got(0.9), got(0.8)], &[empty, got(0.1)]);
+        assert_eq!(a, Abstention { queries: 2, answered: 0.5, withheld: 0.0, auc: 1.0 });
+        let a = abstention(&[got(0.5)], &[got(0.5), got(0.7)]);
+        assert_eq!((a.answered, a.auc), (1.0, 0.25));
+        // Saying no is not an answer, whichever side it is said on.
+        let a = abstention(&[got(0.9), said_no(0.6), empty, got(0.7)], &[said_no(0.8), empty, got(0.2), said_no(0.1)]);
+        assert_eq!((a.answered, a.withheld), (0.25, 0.5));
     }
 
     #[test]

@@ -1,6 +1,6 @@
-import type { RecallRequest } from '@mcp-zeromem/shared';
+import type { Abstained, RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import { SearchIcon } from 'lucide-react';
+import { CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { FormField } from '@/components/form-field';
 import { EvidenceList } from '@/components/memory/evidence-list';
@@ -143,9 +143,35 @@ export function RecallPage() {
               <Badge variant="secondary">{formatWindow(result.data.route.profile.window)}</Badge>
             )}
           </div>
+          {result.data.abstained && <AbstainedNotice abstained={result.data.abstained} />}
           <EvidenceList evidence={result.data.evidence} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The engine declined to answer. The evidence under this is the closest it
+ * found, and without the notice a near miss reads like a hit.
+ */
+function AbstainedNotice({ abstained }: { abstained: Abstained }) {
+  const missing = abstained.missing ?? [];
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm"
+    >
+      <CircleSlashIcon className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+      <div className="flex flex-col gap-1">
+        <p className="font-medium">Memory does not hold the answer.</p>
+        <p className="text-muted-foreground">
+          {missing.length > 0
+            ? `No turn mentions ${missing.join(', ')}.`
+            : `Nothing matches this closely (best score ${abstained.best.toFixed(2)}).`}{' '}
+          The turns below are the closest, and are probably not the answer.
+        </p>
+      </div>
     </div>
   );
 }

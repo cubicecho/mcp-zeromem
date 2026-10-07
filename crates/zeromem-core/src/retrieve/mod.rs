@@ -21,6 +21,7 @@
 //! `fuse::Clock` prefers it; every superseded hit says when it stopped
 //! holding (`Evidence::valid_until`).
 
+pub mod anchor;
 pub mod calibrate;
 pub mod fuse;
 pub mod profile;
@@ -39,6 +40,7 @@ use crate::store::{Reach, Store};
 use crate::text;
 use crate::types::{Turn, TurnKind};
 
+pub use anchor::{Abstained, ABSTAIN_BELOW, CLOSEST, MISS_PENALTY};
 pub use calibrate::{Calibrated, Role, DROP_BELOW, PRIMARY_AT};
 pub use fuse::{Fused, RRF_K};
 pub use profile::Profile;
@@ -163,6 +165,10 @@ pub struct QueryResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<Route>,
     pub evidence: Vec<Evidence>,
+    /// Set when memory most likely does not hold the answer; `evidence` is
+    /// then only the closest turns. See [`anchor`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abstained: Option<Abstained>,
     /// Distinct turns any view nominated, after filters.
     pub considered: usize,
     pub took_ms: u64,
@@ -194,6 +200,8 @@ pub struct QueryTrace {
     pub fused: Vec<Fused>,
     pub dropped: Vec<Dropped>,
     pub evidence: Vec<Evidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abstained: Option<Abstained>,
     pub took_ms: u64,
 }
 
@@ -229,6 +237,7 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let mut profile = profile::profile(query);
     profile.window = window::parse(&profile.text, ctx.latest_ts);
     resolve_known_entities(ctx.store, &mut profile)?;
+    profile.names = anchor::names(&profile.text, &profile.entities);
     let plan = route::plan(&profile, ctx);
     let include_hidden = opts.include_hidden.unwrap_or(false);
     let flags = ctx.store.curation_flags()?;
@@ -265,11 +274,20 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let valid_until = valid_until(ctx.store, &turns, &flags)?;
     let clock = route::clock(&profile, ctx.latest_ts, &valid_until);
     fuse::settle_ties(&mut views, &turns, clock);
-    let mut fused = fuse::fuse(&views, &turns, clock);
+    let mut fused = fuse::fuse(&views, &turns, clock, &profile.names);
     if !profile.past() && !valid_until.is_empty() {
         hand_over(ctx.store, &mut fused, &mut turns, &flags, &filter)?;
     }
-    let Calibrated { kept, dropped } = collapse(&fused, top_k, &flags, profile.past());
+    let Calibrated { mut kept, mut dropped } = collapse(&fused, top_k, &flags, profile.past());
+    let abstained = kept.first().and_then(|k| {
+        let best = fused.iter().find(|f| f.id == k.id)?;
+        anchor::verdict(&profile.names, best, &turns[&k.id].text)
+    });
+    if abstained.is_some() {
+        let reason = format!("abstained: beyond the closest {CLOSEST}");
+        let cut = anchor::cut(&mut kept);
+        dropped.splice(0..0, cut.into_iter().map(|k| Dropped { id: k.id, score: k.score, reason: reason.clone() }));
+    }
 
     let mut evidence = Vec::with_capacity(kept.len());
     for item in kept {
@@ -312,6 +330,7 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
         fused,
         dropped,
         evidence,
+        abstained,
         took_ms: started.elapsed().as_millis() as u64,
     })
 }
@@ -445,11 +464,15 @@ fn hand_over(
             sources: Vec::new(),
             ts: turn.ts,
             uuid: turn.uuid.clone(),
+            anchor: 0.0,
         });
         if old.score > entry.score {
             entry.score = old.score;
             entry.sources = old.sources.clone();
         }
+        // A replacement rarely repeats the subject ("moved it to Flagsmith"),
+        // so it is about whatever the turn it replaced was about.
+        entry.anchor = entry.anchor.max(old.anchor);
     }
     for f in fused.iter_mut() {
         if flags.superseded_by.contains_key(&f.id) {
@@ -459,6 +482,7 @@ fn hand_over(
             if heir.score > f.score {
                 f.score = heir.score;
             }
+            f.anchor = f.anchor.max(heir.anchor);
         }
     }
     fused.extend(inherited.into_values());
@@ -533,7 +557,14 @@ pub fn to_result(trace: QueryTrace, detail: Detail) -> QueryResult {
                 .collect(),
         }),
     };
-    QueryResult { query: trace.query, route, evidence: trace.evidence, considered, took_ms: trace.took_ms }
+    QueryResult {
+        query: trace.query,
+        route,
+        evidence: trace.evidence,
+        abstained: trace.abstained,
+        considered,
+        took_ms: trace.took_ms,
+    }
 }
 
 fn nominate(
