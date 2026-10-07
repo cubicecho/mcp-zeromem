@@ -48,6 +48,7 @@ npm run test:rust        # cargo test --workspace (oracle, properties, golden, e
 npm run fixtures:gen     # regenerate crates/zeromem-harness/fixtures/ after changing the generator
 npm run bench            # cold open / RSS / recall latency at 1k, 10k, 50k turns → target/bench/
 scripts/record-eval.sh   # run the eval harness and append a row per corpus × embedder to docs/eval/history.jsonl
+npm run eval:answers -- <corpus-dir>  # a model answers the labeled questions from memory; a judge grades it (needs ZEROMEM_EVAL_LLM_*)
 npm run routes:gen -w app # regenerate app/src/routeTree.gen.ts (also done by the Vite plugin in dev)
 scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-harness compare`
 
@@ -130,6 +131,13 @@ and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is
 `format: text` keeps line breaks and clips only past `ZEROMEM_RECALL_TEXT_LIMIT` (`max_chars` per
 call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
 model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
+
+**Retrieval is gated; answers are only recorded.** `server/src/answer-eval.ts` loads a harness
+corpus into a temp store, gives a model the two memory reads (`zeromem_recall`,
+`zeromem_read_session`) and the labeled questions, and has a judge model compare each answer with
+the grade-2 turns (`server/src/answer-eval/`). Both ends are models, so the number moves with the
+model and never gates a commit: a retrieval change is still proved in `tests/eval.rs`. `--curate`
+runs the curator model's sweep first, which is the only measure of a model curator there is.
 
 **The curator runner is a client, not part of the server.** `server/src/curate.ts`
 (`mcp-zeromem-curate`) connects as an MCP client, over `/mcp` or to a gateway it builds in-process

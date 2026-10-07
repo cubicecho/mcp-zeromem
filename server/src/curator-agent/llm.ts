@@ -1,10 +1,12 @@
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { z } from 'zod';
 
 /**
  * The one request the curator agent makes of a model: an OpenAI-compatible
  * `chat/completions` call with tools. Lemonade, llama.cpp, Ollama and vLLM all
  * serve it, which is the point: the curator is whatever model the operator
- * already runs.
+ * already runs. The answer eval makes the same request of the model under test.
  */
 
 export interface LlmConfig {
@@ -14,6 +16,8 @@ export interface LlmConfig {
   apiKey: string | null;
   /** A local model reads a long playbook slowly; this is per request, not per run. */
   timeoutMs: number;
+  /** Cap on one reply, reasoning included. Unset leaves it to the server. */
+  maxTokens?: number;
 }
 
 export interface ToolCall {
@@ -37,12 +41,15 @@ export interface Completion {
   message: Extract<ChatMessage, { role: 'assistant' }>;
   promptTokens: number;
   completionTokens: number;
+  /** The reply stopped at the token cap, not because the model was done. */
+  truncated: boolean;
 }
 
 const responseSchema = z.object({
   choices: z
     .array(
       z.object({
+        finish_reason: z.string().nullish(),
         message: z.object({
           content: z.string().nullish(),
           tool_calls: z
@@ -73,40 +80,38 @@ export async function complete(
   tools: readonly ToolSpec[],
 ): Promise<Completion> {
   const endpoint = `${llm.url.replace(/\/+$/, '')}/chat/completions`;
-  let response: Response;
+  let status: number;
+  let body: string;
   try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(llm.apiKey ? { Authorization: `Bearer ${llm.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
+    ({ status, body } = await post(
+      endpoint,
+      llm.apiKey,
+      JSON.stringify({
         model: llm.model,
         messages,
         ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
         // Curation is judgement against written rules, not invention.
         temperature: 0,
         stream: false,
+        ...(llm.maxTokens === undefined ? {} : { max_tokens: llm.maxTokens }),
       }),
-      signal: AbortSignal.timeout(llm.timeoutMs),
-    });
+      llm.timeoutMs,
+    ));
   } catch (err) {
-    throw new Error(`curator model at ${endpoint} did not answer`, { cause: err });
+    throw new Error(`model at ${endpoint} did not answer`, { cause: err });
   }
-  const body = await response.text();
-  if (!response.ok) {
-    throw new Error(`curator model at ${endpoint} answered ${response.status}: ${body.slice(0, 500)}`);
+  if (status < 200 || status >= 300) {
+    throw new Error(`model at ${endpoint} answered ${status}: ${body.slice(0, 500)}`);
   }
   let json: unknown;
   try {
     json = JSON.parse(body);
   } catch (err) {
-    throw new Error(`curator model at ${endpoint} did not answer in JSON: ${body.slice(0, 200)}`, { cause: err });
+    throw new Error(`model at ${endpoint} did not answer in JSON: ${body.slice(0, 200)}`, { cause: err });
   }
   const parsed = responseSchema.safeParse(json);
   if (!parsed.success) {
-    throw new Error(`curator model at ${endpoint} answered in an unexpected shape: ${parsed.error.message}`);
+    throw new Error(`model at ${endpoint} answered in an unexpected shape: ${parsed.error.message}`);
   }
   const [choice] = parsed.data.choices;
   const raw = choice?.message;
@@ -130,5 +135,43 @@ export async function complete(
     },
     promptTokens: parsed.data.usage?.prompt_tokens ?? 0,
     completionTokens: parsed.data.usage?.completion_tokens ?? 0,
+    truncated: choice?.finish_reason === 'length',
   };
+}
+
+/**
+ * One POST with one deadline. Not `fetch`: Node's gives up after five minutes
+ * without response headers whatever signal it is handed, and a local model
+ * answering without streaming sends its headers only when it has finished.
+ */
+function post(
+  endpoint: string,
+  apiKey: string | null,
+  payload: string,
+  timeoutMs: number,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(endpoint);
+    const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    const req = send(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }));
+        res.on('error', reject);
+      },
+    );
+    req.on('error', reject);
+    req.end(payload);
+  });
 }

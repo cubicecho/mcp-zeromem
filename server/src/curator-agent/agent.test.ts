@@ -1,74 +1,10 @@
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGatewayServer } from '../gateway/server.ts';
-import { tempEngine, testConfig } from '../test-support.ts';
+import { scriptedModel, tempEngine, testConfig } from '../test-support.ts';
 import { runCurator } from './agent.ts';
 import { loadAgentConfig } from './config.ts';
-import type { ChatMessage, LlmConfig, ToolSpec } from './llm.ts';
-
-interface ChatRequest {
-  model: string;
-  messages: ChatMessage[];
-  tools?: ToolSpec[];
-  authorization: string | null;
-}
-
-type Reply = { content?: string; calls?: Array<{ name: string; arguments: string }> };
-
-/**
- * A stand-in for an OpenAI-compatible `/chat/completions` endpoint that plays
- * a script: the nth request gets the nth reply. The store, the MCP server and
- * the tools behind it are real.
- */
-async function scriptedModel(
-  script: Reply[],
-): Promise<{ llm: LlmConfig; requests: ChatRequest[]; close(): Promise<void> }> {
-  const requests: ChatRequest[] = [];
-  const server: Server = createServer((req, res) => {
-    let body = '';
-    req.on('data', (chunk: Buffer) => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      if (req.url !== '/v1/chat/completions' || req.method !== 'POST') {
-        res.writeHead(404).end();
-        return;
-      }
-      const reply = script[requests.length];
-      requests.push({ ...(JSON.parse(body) as ChatRequest), authorization: req.headers.authorization ?? null });
-      if (reply === undefined) {
-        res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'script ran out' }));
-        return;
-      }
-      const message = {
-        role: 'assistant',
-        content: reply.content ?? null,
-        tool_calls: reply.calls?.map((call, index) => ({
-          id: `call_${requests.length}_${index}`,
-          type: 'function',
-          function: call,
-        })),
-      };
-      res
-        .writeHead(200, { 'Content-Type': 'application/json' })
-        .end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 2 } }));
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    llm: { url: `http://127.0.0.1:${port}/v1`, model: 'scripted', apiKey: 'sk-test', timeoutMs: 5000 },
-    requests,
-    close: () =>
-      new Promise((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
-  };
-}
 
 let rig: ReturnType<typeof tempEngine>;
 let model: Awaited<ReturnType<typeof scriptedModel>> | null = null;

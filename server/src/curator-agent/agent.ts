@@ -147,14 +147,14 @@ export async function runCurator(options: AgentOptions): Promise<AgentReport> {
   return report;
 }
 
-interface Outcome {
+export interface Outcome {
   args: Record<string, unknown>;
   text: string;
   isError: boolean;
 }
 
 /** Run one tool call. Whatever goes wrong is an answer the model can read and correct. */
-async function relay(client: Client, call: ToolCall, tools: readonly ToolSpec[]): Promise<Outcome> {
+export async function relay(client: Client, call: ToolCall, tools: readonly ToolSpec[]): Promise<Outcome> {
   const name = call.function.name;
   if (!tools.some((tool) => tool.function.name === name)) {
     return { args: {}, text: `There is no tool named ${name}.`, isError: true };
@@ -201,7 +201,7 @@ function summarise(args: Record<string, unknown>): string {
  * Cut a long result and say so, with what to do about it: an unmarked cut reads
  * as "that is everything", and the model curates half a page as if it were whole.
  */
-function clip(text: string, limit: number): string {
+export function clip(text: string, limit: number): string {
   if (text.length <= limit) {
     return text;
   }

@@ -495,6 +495,47 @@ retrieval improvements are locked in. With `ZEROMEM_EMBEDDING_URL` and
 never gated, so `scripts/record-eval.sh` gives your model its own line on the
 Eval page.
 
+### Answering from memory, end to end
+
+The numbers above say the right turn was returned. `npm run eval:answers` asks
+whether a model can use it: it loads a harness corpus into a store of its own,
+gives a model the two memory reads (`zeromem_recall`, `zeromem_read_session`)
+and the labeled questions, and has a judge model compare each answer with the
+turns the labels grade 2. For a question the store cannot answer, the right
+reply is "I don't know."
+
+```bash
+ZEROMEM_EVAL_LLM_URL=http://framework.lan:13306/v1    # the model under test; it also grades,
+ZEROMEM_EVAL_LLM_MODEL=Qwen3.6-35B-A3B                # unless ZEROMEM_EVAL_JUDGE_LLM_* names another
+
+npm run eval:answers -- crates/zeromem-harness/fixtures/small
+npm run eval:answers -- crates/zeromem-harness/fixtures/large --limit 60 --out answers.json
+npm run eval:answers -- crates/zeromem-harness/fixtures/small --curate   # the curator model sweeps first
+```
+
+The report gives, per kind of question, how many were right, wrong, declined or
+cut off at the reply cap (`ZEROMEM_EVAL_LLM_MAX_TOKENS`, 4096) before the model
+answered, with the tool calls and prompt tokens an answer took. Both ends are
+models and the grader here is the model under test, so the number moves with the
+model and is recorded, never gated. `--curate` is the only measure there is of a
+model curator, as opposed to the oracle one in `tests/eval.rs`.
+
+One run, Qwen3.6-35B-A3B answering and grading, hash-384, 60 questions spread
+over the large corpus and its probes:
+
+| question | asked | right | wrong value | declined | cut off | prompt tokens / answer |
+| --- | --- | --- | --- | --- | --- | --- |
+| current value | 27 | 25 | 2 | 0 | 0 | 4,538 |
+| history ("before") | 11 | 6 | 2 | 0 | 3 | 4,897 |
+| as of a date | 17 | 8 | 3 | 3 | 3 | 8,877 |
+| not in the store | 5 | 4 | 0 | 4 | 1 | 23,390 |
+
+Both current-value misses named an older value of a fact that changed four or
+more times. A history question counts only the value just before the current
+one, so naming an earlier one is wrong. A question the store cannot answer
+costs five times the tokens of one it can, because the model keeps searching
+before it gives up.
+
 ### Comparing against upstream
 
 The upstream binary is a black box here (see the clean-room policy). To
