@@ -29,14 +29,16 @@ const JOBS: Record<string, string> = {
   session: 'zeromem_curate_session',
   notes: 'zeromem_curate_notes',
   entities: 'zeromem_curate_entities',
+  brief: 'zeromem_curate_brief',
 };
 
-const USAGE = `usage: mcp-zeromem-curate [sweep|session|notes|entities] [options]
+const USAGE = `usage: mcp-zeromem-curate [sweep|session|notes|entities|brief] [options]
 
   --focus <kinds>     sweep: only these kinds, comma-separated
                       (duplicates, noise, supersession, aliases, consolidation)
   --session <id>      session, notes: the session to work on
   --entity <name>     entities: the one name to settle
+  --scope <scope>     brief: the one scope to write the standing brief of
   --max-steps <n>     model requests at most (default ZEROMEM_CURATOR_MAX_STEPS or 40)
   --dry-run           serve the store read-only: the model reports what it would do
                       (needs the store opened here, i.e. no ZEROMEM_CURATOR_MCP_URL)
@@ -49,6 +51,7 @@ async function main(): Promise<number> {
       focus: { type: 'string' },
       session: { type: 'string' },
       entity: { type: 'string' },
+      scope: { type: 'string' },
       'max-steps': { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -70,6 +73,7 @@ async function main(): Promise<number> {
   if (job === 'sweep' && values.focus) args.focus = values.focus;
   if ((job === 'session' || job === 'notes') && values.session) args.session_id = values.session;
   if (job === 'entities' && values.entity) args.entity = values.entity;
+  if (job === 'brief' && values.scope) args.scope = values.scope;
 
   const agent = loadAgentConfig(process.env);
   const maxSteps = values['max-steps'] === undefined ? agent.maxSteps : Number(values['max-steps']);
