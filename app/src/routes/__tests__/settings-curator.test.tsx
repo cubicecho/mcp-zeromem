@@ -24,6 +24,7 @@ const curator: CuratorSettings = {
   max_per_call: 100,
   max_per_run: 300,
   min_age_ms: 86_400_000,
+  brief_max_chars: 1500,
   expose_to_all: false,
   token_set: false,
   token_source: 'none',
@@ -77,6 +78,7 @@ describe('SettingsPage → Curator', () => {
       max_per_call: 50,
       max_per_run: 300,
       min_age_ms: 3_600_000,
+      brief_max_chars: 1500,
       expose_to_all: true,
     });
   });

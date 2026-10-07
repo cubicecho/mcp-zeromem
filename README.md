@@ -143,6 +143,38 @@ retrieval view, before its candidate cut, so a small scope in a large store is
 not crowded out by the turns around it. A curator note takes the scope of its
 sources and is refused when they span two.
 
+### The standing brief
+
+Everything above costs a recall. A **brief** is the part that does not: one short
+paragraph per scope, written by the [curator](#curation), that a host puts in
+context when a session starts. It says who and what the scope is about and what
+currently holds, and nothing the stored turns do not say.
+
+```bash
+zm brief --scope project:atlas     # prints the text; prints nothing, exit 0, when there is none
+zm brief --scope-from-cwd          # as a hook: scope = the basename of the hook's cwd
+```
+
+Wire it to `SessionStart` next to the `Stop` hook above; Claude Code adds what a
+`SessionStart` command prints to the session's context:
+
+```json
+{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+    "command": "ZEROMEM_HOME=$HOME/mcp-zeromem/data zm --embedder none brief --scope-from-cwd" }] }] } }
+```
+
+An MCP client gets it without a hook: the server's `initialize` response carries
+the brief of `ZEROMEM_SCOPE` as its `instructions`, dated, and the resource
+`zeromem://brief/{scope}` serves any other scope (`zeromem://brief/_` is the
+unscoped store's). The admin UI reads `GET /api/brief?scope=`. None of this is a
+seventh tool.
+
+A brief is a turn (`kind: brief`) that recall never returns, so writing one moves
+no ranking. The brief in force is the newest one of its scope; the ones before it
+stay in the store, and undoing the newest brings the previous back. Its length is
+capped (Settings → Curator, 1,500 characters by default) because it is paid at the
+start of every session.
+
 ## Tools
 
 | Tool | What it does |
@@ -158,7 +190,8 @@ Set `ZEROMEM_READ_ONLY=true` to drop the three write tools from the listing
 entirely.
 
 A client holding the curator token also gets five `zeromem_curate_*` tools and
-the `zeromem_curate` prompt; see [Curation](#curation).
+the `zeromem_curate*` prompts; see [Curation](#curation). Every client can read
+the `zeromem://brief/{scope}` resource; see [The standing brief](#the-standing-brief).
 
 ### How recall answers
 
@@ -290,7 +323,7 @@ text.
 | Eval | recall@k / MRR / nDCG per commit, one line per corpus × embedder | `/api/viz/eval` |
 | Health | Recall latency percentiles and throughput per minute for the last hour, cold-open time, errors, then the raw status payload | `/api/viz/health` |
 | Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; and clearing the vectors or the whole memory | `/api/settings/embedder`, `/api/settings/clear` |
-| Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases` |
+| Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force; the standing brief of each scope | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases`, `/api/brief` |
 
 Every snapshot endpoint is capped (`limit`) so a 50k-turn store never lands
 whole in a browser tab; the graph page says when it cut at the node cap. The
@@ -322,6 +355,7 @@ reason and can be undone from the Curation page. Purging is left to a human
 | `alias` / `unalias` | Mentions of the alias count as the canonical entity in the graph and entity stats |
 | `block` / `unblock` | The name is not an entity at all |
 | `note` | A new turn (`kind: note`, speaker `zeromem-curator`) summarising source turns; when both make the list the sources fold under the note |
+| `brief` | A new turn (`kind: brief`) that becomes the scope's [standing brief](#the-standing-brief); recall never returns it, and undoing it puts the previous brief back in force |
 | `run_end` | Records the run's summary and advances the cursor the finders start from |
 
 ### The curator surface
@@ -329,7 +363,7 @@ reason and can be undone from the Curation page. Purging is left to a human
 | Tool | What it does |
 | --- | --- |
 | `zeromem_curate_runs` | Past runs, their action counts and summaries, the cursor, and the limits in force |
-| `zeromem_curate_candidates` | `{kind, since_turn_id?, limit?, offset?}`: candidates of one kind (`duplicates`, `noise`, `aliases`, `supersession`, `consolidation`), each with a score, a reason and a suggested op; `scanned_through` is the cursor to hand to `run_end` |
+| `zeromem_curate_candidates` | `{kind, since_turn_id?, limit?, offset?}`: candidates of one kind (`duplicates`, `noise`, `aliases`, `supersession`, `consolidation`, `brief`), each with a score, a reason and a suggested op; `scanned_through` is the cursor to hand to `run_end` |
 | `zeromem_curate_read` | `{turn_ids? \| session_id? \| entity?}`: turns with their flags, supersession links and covering notes |
 | `zeromem_curate_apply` | `{run_id, actions[{op, …, reason}], dry_run?}`: applies a batch; each action is accepted or rejected on its own |
 | `zeromem_curate_undo` | `{action_id? \| run_id?}` |
@@ -346,7 +380,9 @@ from a doc so the two cannot drift:
 | `zeromem_curate_notes` ([doc](docs/curator-notes.md)) | `session_id?` | Consolidation on its own: find long old episodes, read them whole, write a paragraph that says only what the sources say, check it afterwards |
 | `zeromem_curate_entities` ([doc](docs/curator-entities.md)) | `entity?` | Entity hygiene: fold a name into the entity it belongs to, strike out a name that is not one, each judged from the turns that mention both |
 
-The three focused prompts hand the sweep's cursor back to `run_end` unchanged, so a
+| `zeromem_curate_brief` ([doc](docs/curator-brief.md)) | `scope?` | The standing brief: find the scopes with none or with one that has fallen behind, read what is current, write one paragraph of what holds now, cite its sources |
+
+The four focused prompts hand the sweep's cursor back to `run_end` unchanged, so a
 session pass at midnight never moves the cursor past turns the nightly sweep has not
 read. Under `ZEROMEM_READ_ONLY` every prompt ends with the same addendum: the write
 tools are not there, so report the actions rather than applying them.
@@ -363,8 +399,8 @@ Settings → Curator holds all of it:
 - **Serve the curator tools to every client.** Off by default; on, every `/mcp`
   client and the stdio server get them, token or not.
 - **Limits.** Actions per call (default 100), actions per run (300), and a minimum
-  turn age (24 h) so a live conversation is never curated under the user. A reason
-  is required on every action.
+  turn age (24 h) so a live conversation is never curated under the user, and the
+  longest standing brief (1,500 characters). A reason is required on every action.
 
 `ZEROMEM_READ_ONLY` drops the curator's write tools like the others. For the stdio
 server, `ZEROMEM_CURATOR=true` serves the curator tools.

@@ -1,4 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { StoredTurn } from '@mcp-zeromem/shared';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from '../config.ts';
 import type { ZeroMemEngine } from '../engine/index.ts';
 import { errorChainMessage } from '../errors.ts';
@@ -17,6 +18,28 @@ export interface GatewayDeps {
   config: Config;
   /** Serve the curator tools and prompts: the curator token, or everyone when configured. */
   curator?: boolean;
+  /**
+   * The standing brief of `config.scope`, read by the caller so building a
+   * server stays synchronous. It goes out as the server's `instructions`,
+   * which a client puts in context at initialize: no recall, no tool call.
+   */
+  brief?: StoredTurn | null;
+}
+
+/** What `zeromem://brief/{scope}` calls the unscoped store, which has no name of its own. */
+export const UNSCOPED_BRIEF = '_';
+
+/** A brief as a model should meet it: what it is, how old, and where the rest is. */
+export function briefInstructions(brief: StoredTurn): string {
+  const where = brief.scope ? `scope ${brief.scope}` : 'this memory';
+  const day = new Date(brief.ts).toISOString().slice(0, 10);
+  return [
+    `Standing brief for ${where}, written by the memory's curator on ${day}. It summarises what earlier`,
+    'conversations established; zeromem_recall has the turns behind it and whatever it leaves out or that',
+    'came later.',
+    '',
+    brief.text,
+  ].join('\n');
 }
 
 /**
@@ -49,7 +72,10 @@ export function allTools(deps: GatewayDeps): ToolDefinition[] {
  * one per process.
  */
 export function createGatewayServer(deps: GatewayDeps): McpServer {
-  const server = new McpServer({ name: 'mcp-zeromem', version: SERVER_VERSION });
+  const server = new McpServer(
+    { name: 'mcp-zeromem', version: SERVER_VERSION },
+    deps.brief ? { instructions: briefInstructions(deps.brief) } : undefined,
+  );
 
   for (const tool of allTools(deps)) {
     // An empty raw shape still registers a schema that rejects a call carrying
@@ -87,6 +113,23 @@ export function createGatewayServer(deps: GatewayDeps): McpServer {
       },
     );
   }
+
+  // A resource, not a seventh tool: a host that wants another scope's brief
+  // (or this one's again, mid-session) reads it by URI.
+  server.registerResource(
+    'zeromem_brief',
+    new ResourceTemplate('zeromem://brief/{scope}', { list: undefined }),
+    {
+      title: 'Standing brief',
+      description: `The curator's standing brief of a scope, e.g. zeromem://brief/project:atlas; zeromem://brief/${UNSCOPED_BRIEF} for the unscoped store. Empty when the scope has none.`,
+      mimeType: 'text/plain',
+    },
+    async (uri, variables) => {
+      const given = decodeURIComponent(String(Array.isArray(variables.scope) ? variables.scope[0] : variables.scope));
+      const brief = await deps.engine.brief(given === UNSCOPED_BRIEF ? '' : given);
+      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: brief?.text ?? '' }] };
+    },
+  );
 
   if (deps.curator) {
     registerCuratorPrompts(server, { readOnly: deps.config.readOnly });

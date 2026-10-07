@@ -276,6 +276,20 @@ enum Command {
         #[arg(long, env = "ZEROMEM_SCOPE")]
         scope: Option<String>,
     },
+    /// Print a scope's standing brief as plain text, or nothing when it has
+    /// none. Made for a SessionStart hook: what it prints is in context
+    /// before the first recall.
+    Brief {
+        /// The scope whose brief to print; the unscoped store's when
+        /// omitted. Also read from ZEROMEM_SCOPE.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
+        /// Read the hook input from stdin and use the name of the directory
+        /// the session runs in (its `cwd`) as the scope. Falls back to
+        /// --scope when the input names no directory.
+        #[arg(long)]
+        scope_from_cwd: bool,
+    },
     /// Read one conversation in order: the whole session, or a window around
     /// one turn (the `id` a recall hit carries).
     Session {
@@ -413,6 +427,20 @@ fn run() -> Result<()> {
             emit(&zm.ingest_many(&turns)?)?;
         }
         Command::Sessions { limit, offset, scope } => emit(&zm.list_sessions(limit, offset, scope.as_deref())?)?,
+        Command::Brief { scope, scope_from_cwd } => {
+            let from_cwd = if scope_from_cwd {
+                let mut input = String::new();
+                io::stdin().lock().read_to_string(&mut input)?;
+                let event: serde_json::Value = serde_json::from_str(&input).context("hook input is not JSON")?;
+                event.get("cwd").and_then(|v| v.as_str()).and_then(cwd_scope)
+            } else {
+                None
+            };
+            let scope = from_cwd.or_else(|| given(scope)).unwrap_or_default();
+            if let Some(brief) = zm.brief(&scope)? {
+                println!("{}", brief.text);
+            }
+        }
         Command::Session { session_id, around_turn, before, after, limit, offset } => {
             let opts = zeromem_core::SessionWindowOptions { session_id, around_turn, before, after, limit, offset };
             emit(&zm.session_window(&opts)?)?;

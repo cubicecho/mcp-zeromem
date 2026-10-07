@@ -37,13 +37,15 @@ pub struct Turn {
 }
 
 /// What a stored turn is. Notes are turns in every index; the kind only
-/// changes how recall presents them.
+/// changes how recall presents them. A brief is the standing summary of a
+/// scope: stored like a turn, read with `ZeroMem::brief`, never recalled.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnKind {
     #[default]
     Turn,
     Note,
+    Brief,
 }
 
 impl TurnKind {
@@ -55,14 +57,15 @@ impl TurnKind {
         match self {
             TurnKind::Turn => "turn",
             TurnKind::Note => "note",
+            TurnKind::Brief => "brief",
         }
     }
 
     pub fn parse(s: &str) -> Self {
-        if s == "note" {
-            TurnKind::Note
-        } else {
-            TurnKind::Turn
+        match s {
+            "note" => TurnKind::Note,
+            "brief" => TurnKind::Brief,
+            _ => TurnKind::Turn,
         }
     }
 }

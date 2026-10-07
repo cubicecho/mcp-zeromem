@@ -132,7 +132,7 @@ model handed an unmarked fragment concludes memory is incomplete and searches th
 
 **Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
 verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,
-`_notes` and `_entities` one job each, and `server/src/gateway/prompts.ts` adds only a
+`_notes`, `_entities` and `_brief` one job each, and `server/src/gateway/prompts.ts` adds only a
 `## This run` section from the arguments and a read-only addendum) hides, supersedes, aliases,
 blocks and writes notes, each an action in `curation_actions` with a reason, undone by replaying
 its inverse. Turns stay immutable; flags, aliases, the blocklist and note sources live beside them
@@ -145,6 +145,17 @@ reports `token_source`. The curator token opens `/mcp` with the curator scope (t
 plus the curator tools and prompt) and nothing under `/api`; `expose_to_all` (or `ZEROMEM_CURATOR`
 for stdio) gives every client that scope. New `Turn` and `Evidence` fields are skipped when empty, so
 the goldens do not move. In recall a superseded turn hands its fused score to its replacement (`retrieve::hand_over`), pulling it in when no view nominated it; the oracle curator in `tests/eval.rs` must raise nDCG on the large corpus, so a change that makes curation hurt ranking fails there.
+
+**A brief is a turn nobody recalls.** `CurationOp::Brief` writes a `kind = 'brief'` turn into the
+session `brief_session(scope)` (`zeromem-brief`, `zeromem-brief:<scope>`); `ZeroMem::brief(scope)`
+is the newest one there, so replacing a brief is one more turn and undoing it deletes that turn and
+the previous is in force again, with no flag to maintain. `Filter::keeps` drops briefs from every
+view and `store::latest_ts` skips them, or a brief stamped "now" would move the recency reference
+and with it every score; `tests/brief.rs` holds both. Its sources live only in the action payload.
+`brief_max_chars` in `curator_config` is enforced in `plan()`. Hosts read it with `zm brief`
+(a SessionStart hook), the MCP `instructions` (`gateway/routes.ts` reads it only for an
+`initialize` request, so `createGatewayServer` stays synchronous) and the `zeromem://brief/{scope}`
+resource; `docs/curator-brief.md` is the `zeromem_curate_brief` prompt. It is not a seventh tool.
 
 **Tests use a real store.** `server/src/test-support.ts` opens the engine in a temp directory;
 nothing mocks the addon or SQLite. App tests mock only `src/lib/api.ts` (`vi.spyOn(api, …)`);

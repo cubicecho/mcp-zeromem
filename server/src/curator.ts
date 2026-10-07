@@ -48,6 +48,7 @@ export class CuratorSettingsStore {
       max_per_run: config.max_per_run,
       min_age_ms: config.min_age_ms,
       expose_to_all: config.expose_to_all,
+      brief_max_chars: config.brief_max_chars,
       token_set: source !== 'none',
       token_source: source,
       last_run_at: runs.runs[0]?.ended_at ?? null,

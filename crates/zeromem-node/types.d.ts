@@ -128,7 +128,7 @@ export interface SessionWindow {
   truncated: boolean;
 }
 
-export type TurnKind = 'turn' | 'note';
+export type TurnKind = 'turn' | 'note' | 'brief';
 
 export interface StoredTurn {
   id: number;
@@ -347,6 +347,8 @@ export interface CuratorConfig {
   token: string | null;
   /** Give every MCP client the curator tools. */
   expose_to_all: boolean;
+  /** Longest standing brief the curator may write, in characters. */
+  brief_max_chars: number;
 }
 
 export type CurationOp =
@@ -358,6 +360,7 @@ export type CurationOp =
   | { op: 'block'; entity: string }
   | { op: 'unblock'; entity: string }
   | { op: 'note'; session_id: string; text: string; source_ids: number[] }
+  | { op: 'brief'; scope?: string; text: string; source_ids?: number[] }
   | { op: 'run_end'; summary?: string; cursor?: number | null };
 
 /** An op and why; `reason` is required for everything but `run_end`. */
@@ -369,6 +372,7 @@ export interface ActionResult {
   ok: boolean;
   action_id?: number;
   note_id?: number;
+  brief_id?: number;
   error?: string;
 }
 
@@ -464,7 +468,7 @@ export interface CurationAliases {
   blocklist: BlockEntry[];
 }
 
-export type CandidateKind = 'duplicates' | 'noise' | 'aliases' | 'supersession' | 'consolidation';
+export type CandidateKind = 'duplicates' | 'noise' | 'aliases' | 'supersession' | 'consolidation' | 'brief';
 
 export interface CandidateTurn {
   id: number;

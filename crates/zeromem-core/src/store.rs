@@ -624,8 +624,15 @@ impl Store {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM turns WHERE id > ?1", [id], |r| r.get::<_, i64>(0))? as u32)
     }
 
+    /// The newest thing said, which recency decays from. A brief is stamped
+    /// when it is written and says nothing new, so it does not count: writing
+    /// one must not age every turn in the store. Walks `turns_ts` from the end.
     pub fn latest_ts(&self) -> Result<i64> {
-        Ok(self.conn.query_row("SELECT COALESCE(MAX(ts), 0) FROM turns", [], |r| r.get(0))?)
+        let ts = self
+            .conn
+            .query_row("SELECT ts FROM turns WHERE kind != 'brief' ORDER BY ts DESC, id DESC LIMIT 1", [], |r| r.get(0))
+            .optional()?;
+        Ok(ts.unwrap_or(0))
     }
 
     pub fn list_sessions(&self, limit: u32, offset: u32) -> Result<Vec<SessionSummary>> {

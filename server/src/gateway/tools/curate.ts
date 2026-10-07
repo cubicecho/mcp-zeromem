@@ -28,7 +28,12 @@ export function curateTools(engine: ZeroMemEngine): ToolDefinition[] {
         const [runs, config] = await Promise.all([engine.curationRuns({ limit: limit ?? 10 }), engine.curatorConfig()]);
         return {
           ...runs,
-          limits: { max_per_call: config.max_per_call, max_per_run: config.max_per_run, min_age_ms: config.min_age_ms },
+          limits: {
+            max_per_call: config.max_per_call,
+            max_per_run: config.max_per_run,
+            min_age_ms: config.min_age_ms,
+            brief_max_chars: config.brief_max_chars,
+          },
         };
       },
     }),
@@ -38,10 +43,10 @@ export function curateTools(engine: ZeroMemEngine): ToolDefinition[] {
       description: [
         'One page of candidates of one kind, found without a model: duplicates (the same statement twice),',
         'noise (chatter, pasted output), supersession (a newer value for the same subject), aliases (two names',
-        'for one entity) and consolidation (a long old episode with no note). Each has a score, the turns',
-        'involved (text clipped), a reason and a suggested action. A candidate is a lead, not a verdict.',
-        'When `more` is true, continue with since_turn_id = scanned_through (or offset for aliases and',
-        'consolidation).',
+        'for one entity), consolidation (a long old episode with no note) and brief (a scope with no standing',
+        'brief, or one many turns behind). Each has a score, the turns involved (text clipped), a reason and a',
+        'suggested action. A candidate is a lead, not a verdict. When `more` is true, continue with',
+        'since_turn_id = scanned_through (or offset for aliases, consolidation and brief).',
       ].join(' '),
       inputSchema: {
         kind: candidateKindSchema,
@@ -52,7 +57,7 @@ export function curateTools(engine: ZeroMemEngine): ToolDefinition[] {
           .optional()
           .describe('Look only at turns after this id; defaults to the run cursor.'),
         limit: z.number().int().min(1).max(100).optional().describe('Candidates per page; default 20.'),
-        offset: z.number().int().min(0).optional().describe('For aliases and consolidation: skip this many.'),
+        offset: z.number().int().min(0).optional().describe('For aliases, consolidation and brief: skip this many.'),
       },
       kind: 'read',
       run: async (args) => {
@@ -100,6 +105,7 @@ export function curateTools(engine: ZeroMemEngine): ToolDefinition[] {
       description: [
         'Apply reversible edits in one transaction: hide/unhide turns, supersede older turns by a newer one,',
         'alias/unalias an entity name, block/unblock a false entity, write a note standing for source turns,',
+        'write the standing brief of a scope (loaded at session start, never recalled; the newest is in force),',
         'and run_end to close the run and advance the cursor. Nothing is deleted and every action can be',
         'undone. Each action needs a reason (except run_end) and is checked on its own: a rejected one is',
         'reported with its error and does not stop the rest. Turns younger than the minimum age are refused.',

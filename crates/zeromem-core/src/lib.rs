@@ -760,6 +760,14 @@ impl ZeroMem {
         Ok(report)
     }
 
+    /// The standing brief of `scope` (empty for the unscoped store): what a
+    /// session should know before it asks anything. Read straight from the
+    /// store with no `refresh`, since a session start must not wait on an
+    /// embedding batch.
+    pub fn brief(&self, scope: &str) -> Result<Option<Turn>> {
+        self.store.brief(scope)
+    }
+
     pub fn curate_candidates(
         &mut self,
         kind: curation::finders::CandidateKind,

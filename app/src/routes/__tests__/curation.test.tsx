@@ -110,6 +110,41 @@ describe('CurationPage', () => {
     expect(undo).toHaveBeenCalledWith({ action_id: 8 });
   });
 
+  it('shows the standing brief of the chosen scope', async () => {
+    vi.spyOn(api, 'getStatus').mockResolvedValue({
+      ...status,
+      engine: { ...status.engine, scopes: [{ scope: 'project:atlas', turns: 12, sessions: 2 }] },
+    });
+    vi.spyOn(api, 'getCurationRuns').mockResolvedValue(runs);
+    const getBrief = vi.spyOn(api, 'getBrief').mockImplementation(async (scope = '') => ({
+      scope,
+      brief:
+        scope === 'project:atlas'
+          ? {
+              id: 31,
+              uuid: 'b1',
+              session_id: 'zeromem-brief:project:atlas',
+              speaker: 'zeromem-curator',
+              text: 'Atlas ships in March. Maya owns the importer.',
+              ts: 1_700_000_000_000,
+              kind: 'brief',
+              scope: 'project:atlas',
+            }
+          : null,
+    }));
+    renderPage(<CurationPage />, '/curation');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('tab', { name: 'Standing brief' }));
+    expect(await screen.findByText(/No brief yet/)).toBeInTheDocument();
+    expect(getBrief).toHaveBeenCalledWith('');
+
+    await user.click(screen.getByRole('combobox', { name: 'Scope' }));
+    await user.click(await screen.findByRole('option', { name: 'project:atlas' }));
+    expect(await screen.findByText('Atlas ships in March. Maya owns the importer.')).toBeInTheDocument();
+    expect(getBrief).toHaveBeenCalledWith('project:atlas');
+  });
+
   it('explains how to start when there are no runs', async () => {
     vi.spyOn(api, 'getStatus').mockResolvedValue(status);
     vi.spyOn(api, 'getCurationRuns').mockResolvedValue({ runs: [], total: 0, cursor: 0, curation_seq: 0 });
