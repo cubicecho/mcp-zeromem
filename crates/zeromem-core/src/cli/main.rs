@@ -217,6 +217,10 @@ enum Command {
         /// Only turns at or before this timestamp (ms).
         #[arg(long)]
         until: Option<i64>,
+        /// Only turns in exactly this scope (`project:atlas`, `user:ben`).
+        /// Also read from ZEROMEM_SCOPE; `--scope ""` searches every scope.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
         /// Include the route and each item's provenance.
         #[arg(long)]
         full: bool,
@@ -242,12 +246,24 @@ enum Command {
         /// ZEROMEM_HOOK_MAP.
         #[arg(long, env = "ZEROMEM_HOOK_MAP", value_name = "HOST=HERE")]
         map: Option<String>,
+        /// Remember the transcript under this scope. Also read from
+        /// ZEROMEM_SCOPE.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
+        /// Use the name of the directory the session ran in (the hook
+        /// input's `cwd`) as the scope, so one hook keeps every project
+        /// apart. Falls back to --scope when the input names no directory.
+        #[arg(long)]
+        scope_from_cwd: bool,
     },
-    /// Read turns as JSON Lines ({session_id, speaker, text, ts?, uuid?}) from a file or stdin.
+    /// Read turns as JSON Lines ({session_id, speaker, text, ts?, uuid?, scope?}) from a file or stdin.
     Ingest {
         /// File to read; stdin when omitted.
         #[arg(long)]
         file: Option<PathBuf>,
+        /// The scope for turns that name none. Also read from ZEROMEM_SCOPE.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
     },
     /// List sessions, most recently active first.
     Sessions {
@@ -255,6 +271,24 @@ enum Command {
         limit: u32,
         #[arg(long, default_value_t = 0)]
         offset: u32,
+        /// Only sessions holding turns in exactly this scope. Also read
+        /// from ZEROMEM_SCOPE; `--scope ""` lists every session.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
+    },
+    /// Print a scope's standing brief as plain text, or nothing when it has
+    /// none. Made for a SessionStart hook: what it prints is in context
+    /// before the first recall.
+    Brief {
+        /// The scope whose brief to print; the unscoped store's when
+        /// omitted. Also read from ZEROMEM_SCOPE.
+        #[arg(long, env = "ZEROMEM_SCOPE")]
+        scope: Option<String>,
+        /// Read the hook input from stdin and use the name of the directory
+        /// the session runs in (its `cwd`) as the scope. Falls back to
+        /// --scope when the input names no directory.
+        #[arg(long)]
+        scope_from_cwd: bool,
     },
     /// Read one conversation in order: the whole session, or a window around
     /// one turn (the `id` a recall hit carries).
@@ -330,6 +364,7 @@ fn run() -> Result<()> {
             session,
             since,
             until,
+            scope,
             full,
             trace,
             include_hidden,
@@ -341,6 +376,7 @@ fn run() -> Result<()> {
                 session,
                 since,
                 until,
+                scope: given(scope),
                 detail: Some(if full || trace { Detail::Full } else { Detail::Compact }),
                 include_hidden: include_hidden.then_some(true),
                 context: (context > 0).then_some(context),
@@ -355,7 +391,7 @@ fn run() -> Result<()> {
             zm.rebuild()?;
             emit(&zm.stats()?)?;
         }
-        Command::Hook { map } => {
+        Command::Hook { map, scope, scope_from_cwd } => {
             let mut input = String::new();
             io::stdin().lock().read_to_string(&mut input)?;
             let event: serde_json::Value = serde_json::from_str(&input).context("hook input is not JSON")?;
@@ -370,15 +406,41 @@ fn run() -> Result<()> {
                 .or_else(|| PathBuf::from(path).file_stem().map(|s| s.to_string_lossy().into_owned()))
                 .context("hook input has no session_id")?;
             let jsonl = std::fs::read_to_string(path).with_context(|| format!("reading transcript {path}"))?;
-            let turns = transcript::parse(&session_id, &jsonl);
+            let from_cwd =
+                if scope_from_cwd { event.get("cwd").and_then(|v| v.as_str()).and_then(cwd_scope) } else { None };
+            let scope = from_cwd.or_else(|| given(scope));
+            let turns = transcript::parse(&session_id, scope.as_deref(), &jsonl);
             let report = zm.ingest_many(&turns)?;
-            emit(&serde_json::json!({ "session_id": session_id, "parsed": turns.len(), "report": report }))?;
+            let mut out = serde_json::json!({ "session_id": session_id, "parsed": turns.len(), "report": report });
+            if let Some(scope) = scope {
+                out["scope"] = scope.into();
+            }
+            emit(&out)?;
         }
-        Command::Ingest { file } => {
-            let turns = read_turns(file)?;
+        Command::Ingest { file, scope } => {
+            let mut turns = read_turns(file)?;
+            if let Some(scope) = given(scope) {
+                for turn in turns.iter_mut().filter(|t| t.scope.as_deref().is_none_or(|s| s.trim().is_empty())) {
+                    turn.scope = Some(scope.clone());
+                }
+            }
             emit(&zm.ingest_many(&turns)?)?;
         }
-        Command::Sessions { limit, offset } => emit(&zm.list_sessions(limit, offset)?)?,
+        Command::Sessions { limit, offset, scope } => emit(&zm.list_sessions(limit, offset, scope.as_deref())?)?,
+        Command::Brief { scope, scope_from_cwd } => {
+            let from_cwd = if scope_from_cwd {
+                let mut input = String::new();
+                io::stdin().lock().read_to_string(&mut input)?;
+                let event: serde_json::Value = serde_json::from_str(&input).context("hook input is not JSON")?;
+                event.get("cwd").and_then(|v| v.as_str()).and_then(cwd_scope)
+            } else {
+                None
+            };
+            let scope = from_cwd.or_else(|| given(scope)).unwrap_or_default();
+            if let Some(brief) = zm.brief(&scope)? {
+                println!("{}", brief.text);
+            }
+        }
         Command::Session { session_id, around_turn, before, after, limit, offset } => {
             let opts = zeromem_core::SessionWindowOptions { session_id, around_turn, before, after, limit, offset };
             emit(&zm.session_window(&opts)?)?;
@@ -436,6 +498,18 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+/// A scope flag's value, or nothing when it is blank: `--scope ""` is how a
+/// caller with ZEROMEM_SCOPE set asks for every scope.
+fn given(scope: Option<String>) -> Option<String> {
+    scope.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// The scope for a session that ran in `cwd`: the directory's own name.
+fn cwd_scope(cwd: &str) -> Option<String> {
+    let name = std::path::Path::new(cwd.trim()).file_name()?.to_string_lossy().trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
 /// Apply a `HOST=HERE` prefix rewrite to a transcript path.
 fn map_path(path: &str, map: Option<&str>) -> Result<String> {
     let Some(map) = map.filter(|m| !m.is_empty()) else {
@@ -481,7 +555,17 @@ fn emit<T: serde::Serialize>(value: &T) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::map_path;
+    use super::{cwd_scope, given, map_path};
+
+    #[test]
+    fn a_scope_comes_from_the_directory_name_and_blank_means_none() {
+        assert_eq!(cwd_scope("/home/me/code/atlas").as_deref(), Some("atlas"));
+        assert_eq!(cwd_scope("/home/me/code/atlas/").as_deref(), Some("atlas"));
+        assert_eq!(cwd_scope("/"), None);
+        assert_eq!(given(Some("  project:atlas ".into())).as_deref(), Some("project:atlas"));
+        assert_eq!(given(Some(" ".into())), None);
+        assert_eq!(given(None), None);
+    }
 
     #[test]
     fn map_path_rewrites_only_the_matching_prefix() {

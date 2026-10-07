@@ -115,6 +115,66 @@ from stdin and remembers the transcript's user and assistant turns. Wire it to
 Set `ZEROMEM_SESSION_ID` on the server (or pass `exclude_session`) so recall
 does not hand the current conversation back to itself.
 
+### Scopes
+
+One store can hold several projects or people. A turn carries one free-form
+`scope` (`project:atlas`, `user:ben`); a turn without one is unscoped, which is
+every turn written before schema 6. Recall with a `scope` returns only that
+scope, matched exactly and never as a prefix; recall without one searches
+everything, as it always did.
+
+```bash
+zm ingest --scope project:atlas < atlas.jsonl      # for the lines that name none
+zm query "who owns billing" --scope project:atlas
+zm sessions --scope project:atlas
+zm hook --scope-from-cwd                           # scope = the basename of the hook's cwd
+```
+
+`ZEROMEM_SCOPE` is the default for all of the above and for `zeromem_recall`,
+`zeromem_remember` and `zeromem_ingest` on the server; pass `scope: ""` on a
+call to step outside it. `zeromem_stats` lists the scopes in the store.
+`zeromem_read_session` never applies the default, so a turn recall returned can
+always be expanded, and checks the scope only when asked to.
+
+The scope is not part of a turn's derived uuid: re-ingesting a transcript under
+a different scope is a duplicate, and the first write decides. A filter
+(`scope`, `session`, `since`, `until`, `exclude_session`) is applied inside each
+retrieval view, before its candidate cut, so a small scope in a large store is
+not crowded out by the turns around it. A curator note takes the scope of its
+sources and is refused when they span two.
+
+### The standing brief
+
+Everything above costs a recall. A **brief** is the part that does not: one short
+paragraph per scope, written by the [curator](#curation), that a host puts in
+context when a session starts. It says who and what the scope is about and what
+currently holds, and nothing the stored turns do not say.
+
+```bash
+zm brief --scope project:atlas     # prints the text; prints nothing, exit 0, when there is none
+zm brief --scope-from-cwd          # as a hook: scope = the basename of the hook's cwd
+```
+
+Wire it to `SessionStart` next to the `Stop` hook above; Claude Code adds what a
+`SessionStart` command prints to the session's context:
+
+```json
+{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+    "command": "ZEROMEM_HOME=$HOME/mcp-zeromem/data zm --embedder none brief --scope-from-cwd" }] }] } }
+```
+
+An MCP client gets it without a hook: the server's `initialize` response carries
+the brief of `ZEROMEM_SCOPE` as its `instructions`, dated, and the resource
+`zeromem://brief/{scope}` serves any other scope (`zeromem://brief/_` is the
+unscoped store's). The admin UI reads `GET /api/brief?scope=`. None of this is a
+seventh tool.
+
+A brief is a turn (`kind: brief`) that recall never returns, so writing one moves
+no ranking. The brief in force is the newest one of its scope; the ones before it
+stay in the store, and undoing the newest brings the previous back. Its length is
+capped (Settings → Curator, 1,500 characters by default) because it is paid at the
+start of every session.
+
 ## Tools
 
 | Tool | What it does |
@@ -130,7 +190,8 @@ Set `ZEROMEM_READ_ONLY=true` to drop the three write tools from the listing
 entirely.
 
 A client holding the curator token also gets five `zeromem_curate_*` tools and
-the `zeromem_curate` prompt; see [Curation](#curation).
+the `zeromem_curate*` prompts; see [Curation](#curation). Every client can read
+the `zeromem://brief/{scope}` resource; see [The standing brief](#the-standing-brief).
 
 ### How recall answers
 
@@ -176,6 +237,7 @@ The same operations are on the REST API the UI uses (`/api/status`,
 | `ZEROMEM_EMBEDDING_TIMEOUT_MS` | `5000` | Per-request timeout for the endpoint |
 | `ZEROMEM_MODELS` | `<DATA_DIR>/models` | Where the model is downloaded to (≈130 MB, once) |
 | `ZEROMEM_SESSION_ID` | — | Session left out of `zeromem_recall` by default |
+| `ZEROMEM_SCOPE` | — | Scope read and written when a call names none; see [Scopes](#scopes) |
 | `EVAL_HISTORY` | `docs/eval/history.jsonl` | The eval runs the Eval page charts |
 | `PORT` | `3000` | Listen port inside the container (published as 3200) |
 | `HTTP_KEEP_ALIVE_TIMEOUT_MS` | `75000` | How long an idle client connection stays open (Node's own default is 5 s). Keep it above the idle timeout of any reverse proxy in front; `0` never closes one |
@@ -262,7 +324,7 @@ text.
 | Eval | recall@k / MRR / nDCG per commit, one line per corpus × embedder | `/api/viz/eval` |
 | Health | Recall latency percentiles and throughput per minute for the last hour, cold-open time, errors, then the raw status payload | `/api/viz/health` |
 | Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; and clearing the vectors or the whole memory | `/api/settings/embedder`, `/api/settings/clear` |
-| Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases` |
+| Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force; the standing brief of each scope | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases`, `/api/brief` |
 
 Every snapshot endpoint is capped (`limit`) so a 50k-turn store never lands
 whole in a browser tab; the graph page says when it cut at the node cap. The
@@ -290,10 +352,11 @@ reason and can be undone from the Curation page. Purging is left to a human
 | Op | Effect on recall |
 | --- | --- |
 | `hide` / `unhide` | The turn is left out of recall (still shown, flagged, in session reads) |
-| `supersede` | The old turn hands its score to its replacement, which is recalled in its place even when it shares few words with the question; the old turn is halved and folds away when both make the answer. Temporal questions ("what did … used to …") are left alone |
+| `supersede` | The old turn hands its score to its replacement, which is recalled in its place even when it shares few words with the question; the old turn is halved and folds away when both make the answer. A question about the past ("who owned … before", "… in March 2025") is left alone: the old turn is what it wants, and comes back with `valid_until`, the date its replacement was said |
 | `alias` / `unalias` | Mentions of the alias count as the canonical entity in the graph and entity stats |
 | `block` / `unblock` | The name is not an entity at all |
 | `note` | A new turn (`kind: note`, speaker `zeromem-curator`) summarising source turns; when both make the list the sources fold under the note |
+| `brief` | A new turn (`kind: brief`) that becomes the scope's [standing brief](#the-standing-brief); recall never returns it, and undoing it puts the previous brief back in force |
 | `run_end` | Records the run's summary and advances the cursor the finders start from |
 
 ### The curator surface
@@ -301,7 +364,7 @@ reason and can be undone from the Curation page. Purging is left to a human
 | Tool | What it does |
 | --- | --- |
 | `zeromem_curate_runs` | Past runs, their action counts and summaries, the cursor, and the limits in force |
-| `zeromem_curate_candidates` | `{kind, since_turn_id?, limit?, offset?}`: candidates of one kind (`duplicates`, `noise`, `aliases`, `supersession`, `consolidation`), each with a score, a reason and a suggested op; `scanned_through` is the cursor to hand to `run_end` |
+| `zeromem_curate_candidates` | `{kind, since_turn_id?, limit?, offset?}`: candidates of one kind (`duplicates`, `noise`, `aliases`, `supersession`, `consolidation`, `brief`), each with a score, a reason and a suggested op; `scanned_through` is the cursor to hand to `run_end` |
 | `zeromem_curate_read` | `{turn_ids? \| session_id? \| entity?}`: turns with their flags, supersession links and covering notes |
 | `zeromem_curate_apply` | `{run_id, actions[{op, …, reason}], dry_run?}`: applies a batch; each action is accepted or rejected on its own |
 | `zeromem_curate_undo` | `{action_id? \| run_id?}` |
@@ -318,7 +381,9 @@ from a doc so the two cannot drift:
 | `zeromem_curate_notes` ([doc](docs/curator-notes.md)) | `session_id?` | Consolidation on its own: find long old episodes, read them whole, write a paragraph that says only what the sources say, check it afterwards |
 | `zeromem_curate_entities` ([doc](docs/curator-entities.md)) | `entity?` | Entity hygiene: fold a name into the entity it belongs to, strike out a name that is not one, each judged from the turns that mention both |
 
-The three focused prompts hand the sweep's cursor back to `run_end` unchanged, so a
+| `zeromem_curate_brief` ([doc](docs/curator-brief.md)) | `scope?` | The standing brief: find the scopes with none or with one that has fallen behind, read what is current, write one paragraph of what holds now, cite its sources |
+
+The four focused prompts hand the sweep's cursor back to `run_end` unchanged, so a
 session pass at midnight never moves the cursor past turns the nightly sweep has not
 read. Under `ZEROMEM_READ_ONLY` every prompt ends with the same addendum: the write
 tools are not there, so report the actions rather than applying them.
@@ -335,8 +400,8 @@ Settings → Curator holds all of it:
 - **Serve the curator tools to every client.** Off by default; on, every `/mcp`
   client and the stdio server get them, token or not.
 - **Limits.** Actions per call (default 100), actions per run (300), and a minimum
-  turn age (24 h) so a live conversation is never curated under the user. A reason
-  is required on every action.
+  turn age (24 h) so a live conversation is never curated under the user, and the
+  longest standing brief (1,500 characters). A reason is required on every action.
 
 `ZEROMEM_READ_ONLY` drops the curator's write tools like the others. For the stdio
 server, `ZEROMEM_CURATOR=true` serves the curator tools.
@@ -402,6 +467,39 @@ for await (const message of query({
 }
 ```
 
+### A local model as the curator
+
+`mcp-zeromem-curate` is that script for a model you host: an MCP client that hands a
+curator prompt to any OpenAI-compatible `chat/completions` endpoint with tool calls
+(Lemonade, llama.cpp, Ollama, vLLM) and relays the model's calls until it stops. The
+server still runs no agent, and every rule the model follows is the prompt the server
+serves.
+
+```bash
+ZEROMEM_CURATOR_LLM_URL=http://framework.lan:13305/api/v1   # requests go to {URL}/chat/completions
+ZEROMEM_CURATOR_LLM_MODEL=qwen3.6-moe-35b-a3b-FLM
+
+npm run curate                                  # the full sweep
+npm run curate -- sweep --focus supersession    # one kind of lead
+npm run curate -- session --session <id>
+npm run curate -- notes
+npm run curate -- entities --entity "Kenji"
+npm run curate -- brief --scope project:atlas   # the standing brief; every scope that needs one without --scope
+npm run curate -- sweep --dry-run               # store served read-only: it reports, changes nothing
+```
+
+With `ZEROMEM_CURATOR_MCP_URL` (and `MCP_ZEROMEM_CURATOR_TOKEN`) it curates a running
+server over `/mcp`; without it, it opens the store under `DATA_DIR` in its own process,
+and a note it writes is embedded by the server's worker or `zm embedder drain`. Progress
+goes to stderr and a JSON report to stdout (`finished`, `closed`, steps, tool calls and
+errors, tokens). The exit code is 1 when the model ran out of `ZEROMEM_CURATOR_MAX_STEPS`
+(40) before finishing, so cron notices. A tool call the model gets wrong (a missing
+field, a string where a boolean belongs) comes back to it as the tool's error and it
+can correct itself; a long result is cut with a marker that says so.
+
+A small model is a worse curator than a large one, and nothing here checks its
+judgement. Start with `--dry-run`, then review the first real runs on the Curation page.
+
 Review a run on the Curation page. Undoing a run restores recall to what it was.
 
 ## How recall works
@@ -436,6 +534,39 @@ dropped, those at 0.7 or above are `primary`, the rest `supporting`. With
 `detail: full` the result carries the route and per-turn sources; the
 `/api/recall/trace` endpoint (and `zm query --trace`) returns every stage.
 
+A question about the past is read as one, from its words alone. `before`,
+`previously`, `used to`, `formerly`, `originally` and the like set
+`profile.history`: the value curation knows was replaced ranks first, the most
+recently replaced ahead of older ones. A named period sets `profile.window` —
+`2025-03-14`, `2025-03`, `March 2025`, `14 March 2025`, `in 2024`,
+`yesterday`, `last week|month|year`, `3 days ago` — in UTC calendar units,
+relative phrases counted from the newest turn in the store; what was in force
+then ranks first: said before the period ended and not replaced before it
+began, the latest such statement ahead of earlier ones. A bare month (`in
+March`) is not read, since it names an event's date as often as the time
+something was said. Both are preferences in the fusion, not filters, so a
+store nobody curated still answers from timestamps alone and `since`/`until`
+remain the way to cut. Every hit that was replaced carries `superseded_by` and
+`valid_until`, the timestamp of the turn that replaced it; its own `ts` is when
+it started to hold. `format: text` writes that into the hit's header.
+
+Recall can also say that memory does not hold the answer. The names in a
+question (its entities, less dates, quantities and calendar words) are what it
+is about, so a turn that mentions none of them is unlikely to answer it: each
+candidate's fused score is scaled by `1 − 0.3 × (the share of names its text
+does not mention)`, which moves the turn about the right project above one
+that only shares the question's other words. When the best hit still misses a
+name, or scores under 0.5, the result carries `abstained` (`missing` lists the
+names nobody mentioned, `best` the top score), `evidence` is cut to the closest
+two turns, all `supporting`, and `format: text` leads with an `[abstained]`
+line. A question that names nothing is never declined, and neither is an empty
+result. The check has three limits worth knowing. A name written in lower case
+is not seen as a name. A turn that answers without repeating the name ("she
+moved it to Friday") loses up to 30% of its score, though the turn a curator
+put in its place inherits its standing. And a name check cannot tell a store
+that knows the project but not the asked fact from one that knows both, so
+those questions are still answered.
+
 ## Numbers
 
 Hash embedder, one core, `npm run bench` (`cargo run --release --example
@@ -455,14 +586,90 @@ the labeled fixtures):
 
 | corpus | hash-384 | bge-small-en-v1.5 |
 | --- | --- | --- |
-| small (10 queries) | 0.90 / 0.83 / 0.84 | 0.90 / 0.90 / 0.90 |
-| large (323 queries) | 0.71 / 0.90 / 0.67 | 0.88 / 0.97 / 0.82 |
+| small (10 queries) | 1.00 / 0.88 / 0.92 | 1.00 / 0.93 / 0.94 |
+| large (266 queries) | 0.90 / 0.97 / 0.83 | 0.98 / 1.00 / 0.89 |
+| transcript (446 queries) | 0.94 / 0.98 / 0.89 | 0.98 / 1.00 / 0.92 |
 
 The floors in `tests/eval.rs` sit a little under these; raising them is how
 retrieval improvements are locked in. With `ZEROMEM_EMBEDDING_URL` and
 `ZEROMEM_EMBEDDING_MODEL` set the eval also scores that endpoint, recorded but
 never gated, so `scripts/record-eval.sh` gives your model its own line on the
 Eval page.
+
+Those queries all ask for the current value of a fact. Each corpus also has
+`probes.jsonl`, the questions they cannot ask, scored by the same test with
+the hash embedder and written to `target/eval/probes/`:
+
+| probe | what it asks | large, hash-384 | after an oracle curator |
+| --- | --- | --- | --- |
+| `history` | the value before the last change | 0.93 / 0.96 / 0.70 | 0.94 / 0.99 / 0.82 |
+| `as_of` | the value in force in a named month | 0.81 / 0.91 / 0.71 | 0.81 / 0.91 / 0.71 |
+| `abstain` | a fact the corpus never states | answered 19%, withheld 2%, AUC 0.97 | withheld 2% |
+
+All three have floors. For `abstain`, *answered* is the share of the 58
+unanswerable questions recall did not decline, *withheld* the share of the 266
+answerable ones it declined by mistake, and the AUC says how far the top score
+alone tells the two kinds apart (0.5 is chance). The questions still answered
+name a project the corpus does talk about and ask for a fact it never states
+about it. The same run reports tokens per answer, the evidence text of a top-5
+recall at four characters a token: 71 on the large corpus.
+
+To score a benchmark from outside the repo, convert it and name the directory:
+
+```bash
+cargo run -q -p zeromem-harness -- import longmemeval longmemeval_s.json --out target/longmemeval
+ZEROMEM_EVAL_CORPUS=target/longmemeval ZEROMEM_SKIP_ONNX=1 \
+  cargo test -p zeromem-core --test eval an_external_corpus -- --nocapture
+```
+
+The importer merges every question's sessions into one store, grades the turns
+the file marks as holding the answer 2 (or the whole answer session 1 when
+none is marked) and writes unanswerable questions as `abstain` probes. It
+prints what it kept and what it could not place. The result lands in
+`target/eval/external/`; it is never committed and no floor reads it. The
+importer is tested against a hand-written sample in the published shape, not
+against the dataset itself.
+
+### Answering from memory, end to end
+
+The numbers above say the right turn was returned. `npm run eval:answers` asks
+whether a model can use it: it loads a harness corpus into a store of its own,
+gives a model the two memory reads (`zeromem_recall`, `zeromem_read_session`)
+and the labeled questions, and has a judge model compare each answer with the
+turns the labels grade 2. For a question the store cannot answer, the right
+reply is "I don't know."
+
+```bash
+ZEROMEM_EVAL_LLM_URL=http://framework.lan:13306/v1    # the model under test; it also grades,
+ZEROMEM_EVAL_LLM_MODEL=Qwen3.6-35B-A3B                # unless ZEROMEM_EVAL_JUDGE_LLM_* names another
+
+npm run eval:answers -- crates/zeromem-harness/fixtures/small
+npm run eval:answers -- crates/zeromem-harness/fixtures/large --limit 60 --out answers.json
+npm run eval:answers -- crates/zeromem-harness/fixtures/small --curate   # the curator model sweeps first
+```
+
+The report gives, per kind of question, how many were right, wrong, declined or
+cut off at the reply cap (`ZEROMEM_EVAL_LLM_MAX_TOKENS`, 4096) before the model
+answered, with the tool calls and prompt tokens an answer took. Both ends are
+models and the grader here is the model under test, so the number moves with the
+model and is recorded, never gated. `--curate` is the only measure there is of a
+model curator, as opposed to the oracle one in `tests/eval.rs`.
+
+One run, Qwen3.6-35B-A3B answering and grading, hash-384, 60 questions spread
+over the large corpus and its probes:
+
+| question | asked | right | wrong value | declined | cut off | prompt tokens / answer |
+| --- | --- | --- | --- | --- | --- | --- |
+| current value | 27 | 25 | 2 | 0 | 0 | 4,538 |
+| history ("before") | 11 | 6 | 2 | 0 | 3 | 4,897 |
+| as of a date | 17 | 8 | 3 | 3 | 3 | 8,877 |
+| not in the store | 5 | 4 | 0 | 4 | 1 | 23,390 |
+
+Both current-value misses named an older value of a fact that changed four or
+more times. A history question counts only the value just before the current
+one, so naming an earlier one is wrong. A question the store cannot answer
+costs five times the tokens of one it can, because the model keeps searching
+before it gives up.
 
 ### Comparing against upstream
 

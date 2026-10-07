@@ -41,7 +41,13 @@ async function toolNames(server: Express, token: string): Promise<string[] | num
 
 const hasCurator = (names: string[] | number) => Array.isArray(names) && names.includes('zeromem_curate_apply');
 
-const limits = { max_per_call: 100, max_per_run: 300, min_age_ms: 86_400_000, expose_to_all: false };
+const limits = {
+  max_per_call: 100,
+  max_per_run: 300,
+  min_age_ms: 86_400_000,
+  expose_to_all: false,
+  brief_max_chars: 1500,
+};
 
 describe('/api/settings/curator', () => {
   it('reports the defaults and never the token', async () => {

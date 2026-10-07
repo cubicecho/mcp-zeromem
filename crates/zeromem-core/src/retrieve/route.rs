@@ -1,7 +1,10 @@
 //! Which views run for a question, and how far each is trusted.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
+use super::fuse::Clock;
 use super::profile::Profile;
 use super::Context;
 
@@ -35,8 +38,9 @@ pub const DENSE_WEIGHT: f64 = 0.8;
 /// The hash embedder is a crude stand-in; it still helps but is not trusted
 /// as much as the model.
 pub const DENSE_FALLBACK_WEIGHT: f64 = 0.4;
-/// The recent view runs only for temporal questions; its ranking alone
-/// says little, so its weight is low and the decay term does the work.
+/// The recent view runs only for temporal questions that are not about the
+/// past; its ranking alone says little, so its weight is low and the decay
+/// term does the work.
 pub const RECENT_WEIGHT: f64 = 0.2;
 /// Continuous recency term added to the fused score.
 pub const RECENCY_TEMPORAL: f64 = 0.3;
@@ -56,16 +60,21 @@ pub fn plan(profile: &Profile, ctx: &Context<'_>) -> Vec<ViewPlan> {
             views.push(ViewPlan { kind: ViewKind::Dense, weight });
         }
     }
-    if profile.temporal {
+    // `as of March 2025` and `before the latest change` trip a temporal cue
+    // and mean the opposite of "now".
+    if profile.temporal && !profile.past() {
         views.push(ViewPlan { kind: ViewKind::Recent, weight: RECENT_WEIGHT });
     }
     views
 }
 
-pub fn recency_weight(profile: &Profile) -> f64 {
-    if profile.temporal {
-        RECENCY_TEMPORAL
-    } else {
-        RECENCY_TIEBREAK
+/// How time enters the fused score for this question. A named period
+/// outranks a history cue: `what did we previously agree in March 2025` is
+/// about March.
+pub fn clock<'a>(profile: &Profile, latest_ts: i64, valid_until: &'a BTreeMap<i64, i64>) -> Clock<'a> {
+    match profile.window {
+        Some(window) => Clock::Window { window, valid_until },
+        None if profile.history => Clock::History { valid_until, latest_ts },
+        None => Clock::Now { weight: if profile.temporal { RECENCY_TEMPORAL } else { RECENCY_TIEBREAK }, latest_ts },
     }
 }

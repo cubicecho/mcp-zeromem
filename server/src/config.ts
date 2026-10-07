@@ -50,6 +50,8 @@ const configSchema = z.object({
    * default so memory does not echo the conversation in progress.
    */
   sessionId: z.string().min(1).nullable(),
+  /** The scope this server reads and writes when a call names none. */
+  scope: z.string().min(1).nullable(),
   /**
    * Bearer token that grants the curator scope on /mcp. Overrides the token
    * set from the Settings page; never written to the store or returned.
@@ -127,6 +129,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, options: LoadOp
     remoteEmbedder: remoteEmbedderFromEnv(env),
     embeddingApiKey: envValue(env, 'ZEROMEM_EMBEDDING_API_KEY') ?? null,
     sessionId: envValue(env, 'ZEROMEM_SESSION_ID') ?? null,
+    scope: envValue(env, 'ZEROMEM_SCOPE')?.trim() || null,
     curatorToken: envValue(env, 'MCP_ZEROMEM_CURATOR_TOKEN') ?? null,
     curator: envBoolean(env, 'ZEROMEM_CURATOR', false),
   });
@@ -227,6 +230,7 @@ const ENV_KEYS: Record<string, string> = {
   remoteEmbedder: 'ZEROMEM_EMBEDDING_URL',
   embeddingApiKey: 'ZEROMEM_EMBEDDING_API_KEY',
   sessionId: 'ZEROMEM_SESSION_ID',
+  scope: 'ZEROMEM_SCOPE',
   curatorToken: 'MCP_ZEROMEM_CURATOR_TOKEN',
   curator: 'ZEROMEM_CURATOR',
 };

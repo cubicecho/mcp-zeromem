@@ -1,11 +1,13 @@
-import type { ActionRow, RunSummary } from '@mcp-zeromem/shared';
+import type { ActionRow, RunSummary, ScopeSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ActionButton } from '@/components/action-button';
+import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
@@ -15,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import {
+  useBrief,
   useCurationActions,
   useCurationAliases,
   useCurationRuns,
@@ -30,6 +33,9 @@ export const Route = createFileRoute('/curation')({
 /** How long a target turn's text runs before it is clipped in the log. */
 const CLIP = 160;
 
+/** Radix refuses an empty item value, so the unscoped brief travels as this and leaves as `''`. */
+const UNSCOPED = '__unscoped__';
+
 /**
  * What the curator did, run by run, and the way back. The curator is an
  * outside agent on the /mcp curator surface; nothing it does deletes a turn,
@@ -44,18 +50,22 @@ export function CurationPage() {
       <PageHeader
         className="px-0 pt-0"
         title="Curation"
-        description="Hidden duplicates and noise, superseded facts, entity aliases and consolidated notes, each with the curator's reason. Nothing is deleted: undo an action and recall is as it was."
+        description="Hidden duplicates and noise, superseded facts, entity aliases, consolidated notes and the standing brief, each with the curator's reason. Nothing is deleted: undo an action and recall is as it was."
       />
       <Tabs defaultValue="runs">
         <TabsList>
           <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="entities">Aliases and blocklist</TabsTrigger>
+          <TabsTrigger value="brief">Standing brief</TabsTrigger>
         </TabsList>
         <TabsContent value="runs" className="pt-4">
           <Runs readOnly={readOnly} />
         </TabsContent>
         <TabsContent value="entities" className="pt-4">
           <Entities readOnly={readOnly} />
+        </TabsContent>
+        <TabsContent value="brief" className="pt-4">
+          <Brief scopes={status.data?.engine.scopes} />
         </TabsContent>
       </Tabs>
     </div>
@@ -270,6 +280,9 @@ function ActionDescription({ row }: { row: ActionRow }) {
     case 'unblock':
       headline = `${row.op} “${field('entity')}”`;
       break;
+    case 'brief':
+      headline = `brief for ${field('scope') || 'unscoped turns'}`;
+      break;
     case 'note':
       headline = `note in ${field('session_id')}, standing for ${formatCount(row.targets.length)} turns`;
       break;
@@ -308,6 +321,59 @@ function ActionDescription({ row }: { row: ActionRow }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * The brief a host loads at session start, for one scope. Only the one in
+ * force is shown; the ones it replaced are in the runs that wrote them, and
+ * undoing the newest brings the previous back.
+ */
+function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
+  const [scope, setScope] = useState('');
+  const brief = useBrief(scope);
+  const named = (scopes ?? []).filter((item) => item.scope !== '');
+  const current = brief.data?.brief ?? null;
+
+  return (
+    <CardLayout
+      className="max-w-3xl"
+      title={scope ? `Brief for ${scope}` : 'Brief for unscoped turns'}
+      description={
+        current
+          ? `Written ${formatDateTime(current.ts)} · ${formatCount(current.text.length)} characters · turn #${current.id}`
+          : 'Loaded at session start, without a recall.'
+      }
+      action={
+        named.length > 0 && (
+          <OptionSelect
+            aria-label="Scope"
+            className="w-64"
+            options={[
+              { label: 'Unscoped', value: UNSCOPED },
+              { separator: true as const },
+              ...named.map((item) => ({ label: item.scope, value: item.scope })),
+            ]}
+            value={scope || UNSCOPED}
+            onValueChange={(next) => setScope(next === UNSCOPED ? '' : next)}
+          />
+        )
+      }
+      loading={brief.isPending}
+      content={
+        brief.error ? (
+          <QueryError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
+        ) : current ? (
+          <p className="whitespace-pre-wrap text-sm">{current.text}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No brief yet{scope ? ' for this scope' : ''}. The curator writes one with the{' '}
+            <span className="font-mono">zeromem_curate_brief</span> prompt; a host reads it with{' '}
+            <span className="font-mono">zm brief</span> or from the MCP server's instructions.
+          </p>
+        )
+      }
+    />
   );
 }
 

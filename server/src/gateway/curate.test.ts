@@ -59,6 +59,7 @@ describe('curator scope', () => {
     const { prompts } = await curator.listPrompts();
     expect(prompts.map((p) => p.name).sort()).toEqual([
       'zeromem_curate',
+      'zeromem_curate_brief',
       'zeromem_curate_entities',
       'zeromem_curate_notes',
       'zeromem_curate_session',

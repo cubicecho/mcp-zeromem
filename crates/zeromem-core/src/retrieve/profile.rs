@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::window::Window;
 use crate::entities;
 use crate::text::{is_stopword, normalise, stem, words};
 
@@ -13,10 +14,30 @@ pub struct Profile {
     pub tokens: Vec<String>,
     /// Entity keys the question mentions, in order, without repeats.
     pub entities: Vec<String>,
+    /// The entities a turn has to mention to be about this question.
+    /// Filled in by the run, once the store has resolved the lowercase
+    /// ones; see [`super::anchor`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
     /// Asks about the present or the recent past.
     pub temporal: bool,
+    /// Asks what held before the present value: `who owned it before?`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub history: bool,
+    /// The period the question names, if it names one. Filled in by the
+    /// run, which knows what "now" is; see [`super::window`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<Window>,
     /// Phrased as a question.
     pub question: bool,
+}
+
+impl Profile {
+    /// About an earlier state of things rather than the present one, so
+    /// what curation says was replaced is the answer and not in the way.
+    pub fn past(&self) -> bool {
+        self.history || self.window.is_some()
+    }
 }
 
 const TEMPORAL_CUES: &[&str] = &[
@@ -37,6 +58,35 @@ const TEMPORAL_CUES: &[&str] = &[
     "at the moment",
     "as of",
 ];
+
+/// Phrases that ask for the value something had before its present one.
+const HISTORY_CUES: &[&str] =
+    &["previously", "previous", "used to", "formerly", "former", "originally", "prior to", "back then", "at first"];
+
+/// `before` asks about history when it stands alone (`who owned it
+/// before?`) or points back at the present state (`before it changed`). As a
+/// plain preposition it is about an event: `what has to land before the
+/// launch?` is not a question about an earlier value.
+const BEFORE_WHAT: &[&str] = &[
+    "it",
+    "that",
+    "this",
+    "then",
+    "now",
+    "the change",
+    "the switch",
+    "the move",
+    "the latest",
+    "the last",
+    "the current",
+];
+
+fn asks_history(lower: &str) -> bool {
+    let trimmed = lower.trim_end_matches(|c: char| !c.is_alphanumeric());
+    HISTORY_CUES.iter().any(|cue| contains_phrase(lower, cue))
+        || (trimmed.ends_with("before") && contains_phrase(trimmed, "before"))
+        || BEFORE_WHAT.iter().any(|what| contains_phrase(lower, &format!("before {what}")))
+}
 
 /// Words that ask about the same relation, so a question's word matches a
 /// turn stating the relation another way: `who owns the billing service?`
@@ -124,7 +174,8 @@ pub fn profile(query: &str) -> Profile {
         || ["what", "who", "when", "where", "which", "how", "why", "is", "are", "does", "do", "did", "was", "were"]
             .iter()
             .any(|q| lower.starts_with(q) && lower[q.len()..].starts_with(' '));
-    Profile { text, tokens, entities: keys, temporal, question }
+    let history = asks_history(&lower);
+    Profile { text, tokens, entities: keys, names: Vec::new(), temporal, history, window: None, question }
 }
 
 /// Whole-word containment of a (possibly multi-word) phrase.
@@ -193,6 +244,27 @@ mod tests {
         assert!(!profile("the lastly known ballast").temporal);
         assert!(profile("as of today").temporal);
         assert!(!profile("nowhere near").temporal);
+    }
+
+    #[test]
+    fn history_cues_ask_for_the_earlier_value() {
+        for q in [
+            "Who owned the importer on Atlas before?",
+            "What was the Ferrous budget before it changed?",
+            "Who changed src/importer.rs before the latest change?",
+            "Where did HERON_QUEUE_URL previously point?",
+            "Who used to own Heron's billing service?",
+        ] {
+            assert!(profile(q).history, "{q}");
+        }
+        for q in [
+            "What has to land before the launch?",
+            "Who owns the importer on Atlas?",
+            "Quick sync on Project Atlas before standup.",
+            "what is the beforehand checklist",
+        ] {
+            assert!(!profile(q).history, "{q}");
+        }
     }
 
     #[test]

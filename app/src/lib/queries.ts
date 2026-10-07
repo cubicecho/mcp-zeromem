@@ -8,6 +8,7 @@ import type {
   PageQuery,
   ProjectionOptions,
   RecallRequest,
+  SessionsQuery,
   UndoRequest,
 } from '@mcp-zeromem/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,7 +16,7 @@ import * as api from './api';
 
 export const queryKeys = {
   status: ['status'] as const,
-  sessions: (page: PageQuery = {}) => ['sessions', page] as const,
+  sessions: (page: SessionsQuery = {}) => ['sessions', page] as const,
   sessionTurns: (sessionId: string) => ['sessions', sessionId, 'turns'] as const,
   recall: (body: RecallRequest) => ['recall', body] as const,
   recallTrace: (body: RecallRequest) => ['recall', 'trace', body] as const,
@@ -31,6 +32,7 @@ export const queryKeys = {
   curationRuns: (page: PageQuery = {}) => ['curation', 'runs', page] as const,
   curationActions: (runId: string) => ['curation', 'actions', runId] as const,
   curationAliases: ['curation', 'aliases'] as const,
+  brief: (scope: string) => ['curation', 'brief', scope] as const,
 };
 
 // --- queries ---
@@ -45,7 +47,7 @@ export function useServerStatus() {
   });
 }
 
-export function useSessions(page: PageQuery = {}) {
+export function useSessions(page: SessionsQuery = {}) {
   return useQuery({
     queryKey: queryKeys.sessions(page),
     queryFn: () => api.listSessions(page),
@@ -184,6 +186,10 @@ export function useCurationActions(runId: string | null) {
 
 export function useCurationAliases() {
   return useQuery({ queryKey: queryKeys.curationAliases, queryFn: api.getCurationAliases });
+}
+
+export function useBrief(scope: string) {
+  return useQuery({ queryKey: queryKeys.brief(scope), queryFn: () => api.getBrief(scope) });
 }
 
 // --- mutations ---

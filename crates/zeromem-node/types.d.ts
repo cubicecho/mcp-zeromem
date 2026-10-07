@@ -26,6 +26,8 @@ export interface Stats {
   hidden: number;
   /** Curator notes. */
   notes: number;
+  /** Largest first; left out while every turn is unscoped. */
+  scopes?: ScopeSummary[];
 }
 
 export type EmbedderKind = 'onnx' | 'hash' | 'openai';
@@ -101,6 +103,15 @@ export interface SessionSummary {
   turns: number;
   first_ts: number;
   last_ts: number;
+  /** The scope its turns carry; left out when they carry none. */
+  scope?: string;
+}
+
+/** One scope and how much of the store it holds; the empty scope is the unscoped turns. */
+export interface ScopeSummary {
+  scope: string;
+  turns: number;
+  sessions: number;
 }
 
 /** One conversation in order: a whole session, or a window around one turn. */
@@ -117,7 +128,7 @@ export interface SessionWindow {
   truncated: boolean;
 }
 
-export type TurnKind = 'turn' | 'note';
+export type TurnKind = 'turn' | 'note' | 'brief';
 
 export interface StoredTurn {
   id: number;
@@ -128,6 +139,8 @@ export interface StoredTurn {
   ts: number;
   /** `note` for a curator's note; left out for an ordinary turn. */
   kind?: TurnKind;
+  /** Whose memory this is; left out for an unscoped turn. */
+  scope?: string;
 }
 
 export type ViewKind = 'lexical' | 'entity' | 'dense' | 'recent';
@@ -139,6 +152,12 @@ export interface Profile {
   entities: string[];
   temporal: boolean;
   question: boolean;
+  /** The question asks what held before the current value; absent when it does not. */
+  history?: boolean;
+  /** The period the question names, `[start, end)` in Unix milliseconds. */
+  window?: { start: number; end: number };
+  /** What the question names, as entity keys: a hit that mentions none of them is marked down. */
+  names?: string[];
 }
 
 export interface ViewSummary {
@@ -163,6 +182,8 @@ export interface Evidence {
   entities?: string[];
   /** The newer turn that restates this one; its score was halved. */
   superseded_by?: number;
+  /** When this turn stopped holding: the `ts` of the turn that superseded it. */
+  valid_until?: number;
   /** Hidden by curation; only with `include_hidden`. */
   hidden?: boolean;
   /** For a note: the source turns collapsed under it. */
@@ -173,10 +194,20 @@ export interface Evidence {
   after?: StoredTurn[];
 }
 
+/** The engine's verdict that memory does not hold the answer. */
+export interface Abstained {
+  /** The names in the question that the best hit does not mention. */
+  missing?: string[];
+  /** The best hit's fused score. */
+  best: number;
+}
+
 export interface QueryResult {
   query: string;
   /** Present under `detail: 'full'`. */
   route?: Route;
+  /** Present only when the engine declined to answer; `evidence` is then the closest turns. */
+  abstained?: Abstained;
   evidence: Evidence[];
   considered: number;
   took_ms: number;
@@ -194,6 +225,8 @@ export interface Fused {
   sources: ViewKind[];
   ts: number;
   uuid: string;
+  /** The share of the question's names this turn mentions; absent when it mentions them all. */
+  anchor?: number;
 }
 
 export interface Dropped {
@@ -208,6 +241,7 @@ export interface QueryTrace {
   views: ViewTrace[];
   fused: Fused[];
   dropped: Dropped[];
+  abstained?: Abstained;
   evidence: Evidence[];
   took_ms: number;
 }
@@ -334,6 +368,8 @@ export interface CuratorConfig {
   token: string | null;
   /** Give every MCP client the curator tools. */
   expose_to_all: boolean;
+  /** Longest standing brief the curator may write, in characters. */
+  brief_max_chars: number;
 }
 
 export type CurationOp =
@@ -345,6 +381,7 @@ export type CurationOp =
   | { op: 'block'; entity: string }
   | { op: 'unblock'; entity: string }
   | { op: 'note'; session_id: string; text: string; source_ids: number[] }
+  | { op: 'brief'; scope?: string; text: string; source_ids?: number[] }
   | { op: 'run_end'; summary?: string; cursor?: number | null };
 
 /** An op and why; `reason` is required for everything but `run_end`. */
@@ -356,6 +393,7 @@ export interface ActionResult {
   ok: boolean;
   action_id?: number;
   note_id?: number;
+  brief_id?: number;
   error?: string;
 }
 
@@ -451,7 +489,7 @@ export interface CurationAliases {
   blocklist: BlockEntry[];
 }
 
-export type CandidateKind = 'duplicates' | 'noise' | 'aliases' | 'supersession' | 'consolidation';
+export type CandidateKind = 'duplicates' | 'noise' | 'aliases' | 'supersession' | 'consolidation' | 'brief';
 
 export interface CandidateTurn {
   id: number;

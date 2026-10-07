@@ -63,7 +63,7 @@ mod tests {
     use super::*;
 
     fn fused(id: i64, score: f64) -> Fused {
-        Fused { id, score, sources: vec![ViewKind::Lexical], ts: 0, uuid: format!("u{id}") }
+        Fused { id, score, sources: vec![ViewKind::Lexical], ts: 0, uuid: format!("u{id}"), anchor: 1.0 }
     }
 
     #[test]

@@ -49,7 +49,8 @@ function section(...lines: string[]): string {
 
 /**
  * One procedure per prompt, so a curator that has a job already — a session
- * that just ended, an entity someone disputed, an episode worth a note — reads
+ * that just ended, an entity someone disputed, an episode worth a note, a
+ * scope that needs its brief — reads
  * that job's rules and not the whole sweep. `zeromem_curate` remains the full
  * run, and every focused prompt hands the sweep's cursor back untouched.
  */
@@ -121,6 +122,24 @@ const PROMPTS: CuratorPrompt[] = [
     thisRun: ({ entity }) => {
       const name = entity?.trim();
       return name ? section(`Settle \`${name}\` and the names that appear beside it; skip the candidate sweep.`) : null;
+    },
+  },
+  {
+    name: 'zeromem_curate_brief',
+    title: 'Write the standing brief',
+    description:
+      'The procedure for writing a scope’s standing brief: the short paragraph a host loads at session ' +
+      'start, stating only what the scope’s turns say and only what holds now.',
+    doc: 'curator-brief.md',
+    argsSchema: {
+      scope: z
+        .string()
+        .optional()
+        .describe('Write the brief of this scope only, e.g. "project:atlas". Every candidate scope when omitted.'),
+    },
+    thisRun: ({ scope }) => {
+      const name = scope?.trim();
+      return name ? section(`Write the brief of scope \`${name}\` only; skip the candidate sweep.`) : null;
     },
   },
 ];

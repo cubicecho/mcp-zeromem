@@ -14,6 +14,20 @@ const count = z.number().int().nonnegative();
 export const embedderKindSchema = z.enum(['onnx', 'hash', 'openai']);
 export type EmbedderKind = z.infer<typeof embedderKindSchema>;
 
+/**
+ * A scope is one free-form label on a turn (`project:atlas`, `user:ben`) that
+ * keeps one store's projects or people apart. It is matched exactly, never as
+ * a prefix; a turn without one is unscoped and the field is left out.
+ */
+export const scopeSchema = z.string().trim().max(200);
+
+export const scopeSummarySchema = z.object({
+  scope: z.string(),
+  turns: count,
+  sessions: count,
+});
+export type ScopeSummary = z.infer<typeof scopeSummarySchema>;
+
 export const statsSchema = z.object({
   home: z.string(),
   turns: count,
@@ -43,6 +57,8 @@ export const statsSchema = z.object({
   hidden: count,
   /** Notes written by the curator. */
   notes: count,
+  /** The scopes in the store, largest first; left out while every turn is unscoped. */
+  scopes: z.array(scopeSummarySchema).optional(),
 });
 export type Stats = z.infer<typeof statsSchema>;
 
@@ -136,11 +152,12 @@ export const sessionSummarySchema = z.object({
   turns: z.number().int().nonnegative(),
   first_ts: z.number().int(),
   last_ts: z.number().int(),
+  scope: z.string().optional(),
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 
 /** `note` is a curator's consolidated note; an ordinary turn leaves the field out. */
-export const turnKindSchema = z.enum(['turn', 'note']);
+export const turnKindSchema = z.enum(['turn', 'note', 'brief']);
 export type TurnKind = z.infer<typeof turnKindSchema>;
 
 export const storedTurnSchema = z.object({
@@ -151,6 +168,7 @@ export const storedTurnSchema = z.object({
   text: z.string(),
   ts: z.number().int(),
   kind: turnKindSchema.optional(),
+  scope: z.string().optional(),
 });
 export type StoredTurn = z.infer<typeof storedTurnSchema>;
 
@@ -222,6 +240,8 @@ export const turnInputSchema = z.object({
   text: z.string().min(1),
   ts: z.number().int().optional(),
   uuid: z.string().min(1).optional(),
+  /** Not part of a derived uuid: the first write of a turn decides its scope. */
+  scope: scopeSchema.optional(),
 });
 export type TurnInput = z.infer<typeof turnInputSchema>;
 
@@ -246,6 +266,8 @@ export const recallOptionsSchema = z.object({
   session: z.string().min(1).optional(),
   since: z.number().int().optional(),
   until: z.number().int().optional(),
+  /** Only this scope, matched exactly; absent or blank searches every scope. */
+  scope: scopeSchema.optional(),
   detail: detailSchema.optional(),
   /** Include turns curation hid; they come back flagged `hidden`. */
   include_hidden: z.boolean().optional(),
@@ -264,6 +286,12 @@ export const profileSchema = z.object({
   entities: z.array(z.string()),
   temporal: z.boolean(),
   question: z.boolean(),
+  /** The question asks what held before the current value; absent when it does not. */
+  history: z.boolean().optional(),
+  /** The period the question names, `[start, end)` in Unix milliseconds. */
+  window: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
+  /** What the question names, as entity keys: a hit that mentions none of them is marked down. */
+  names: z.array(z.string()).optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -289,6 +317,8 @@ export const evidenceSchema = z.object({
   entities: z.array(z.string()).optional(),
   /** The newer turn that restates this one; its score was halved. */
   superseded_by: z.number().int().optional(),
+  /** When this turn stopped holding: the `ts` of the turn that superseded it. Its own `ts` is when it started. */
+  valid_until: z.number().int().optional(),
   /** Hidden by curation; only with `include_hidden`. */
   hidden: z.boolean().optional(),
   /** For a note, the source turns collapsed under it. */
@@ -300,9 +330,23 @@ export const evidenceSchema = z.object({
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 
+/**
+ * The engine's verdict that memory does not hold the answer. `evidence` is then
+ * only the closest turns, all `supporting`, to be read as near misses.
+ */
+export const abstainedSchema = z.object({
+  /** The names in the question that the best hit does not mention; absent when the match was merely weak. */
+  missing: z.array(z.string()).optional(),
+  /** The best hit's fused score. */
+  best: z.number(),
+});
+export type Abstained = z.infer<typeof abstainedSchema>;
+
 export const queryResultSchema = z.object({
   query: z.string(),
   route: routeSchema.optional(),
+  /** Present only when the engine declined to answer. */
+  abstained: abstainedSchema.optional(),
   evidence: z.array(evidenceSchema),
   considered: count,
   took_ms: count,
@@ -322,6 +366,8 @@ export const fusedSchema = z.object({
   sources: z.array(viewKindSchema),
   ts: z.number().int(),
   uuid: z.string(),
+  /** The share of the question's names this turn mentions; absent when it mentions them all. */
+  anchor: z.number().optional(),
 });
 export type Fused = z.infer<typeof fusedSchema>;
 
@@ -339,6 +385,7 @@ export const queryTraceSchema = z.object({
   views: z.array(viewTraceSchema),
   fused: z.array(fusedSchema),
   dropped: z.array(droppedSchema),
+  abstained: abstainedSchema.optional(),
   evidence: z.array(evidenceSchema),
   took_ms: count,
 });

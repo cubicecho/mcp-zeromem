@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Config } from './config.ts';
+import type { ChatMessage, LlmConfig, ToolSpec } from './curator-agent/llm.ts';
 import { ZeroMemEngine } from './engine/index.ts';
 
 /**
@@ -34,6 +35,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     remoteEmbedder: null,
     embeddingApiKey: null,
     sessionId: null,
+    scope: null,
     curatorToken: null,
     curator: false,
     ...overrides,
@@ -106,4 +108,73 @@ function embed(text: string, dim: number): number[] {
     vector[slot] = (vector[slot] ?? 0) + 1;
   }
   return vector;
+}
+
+export interface ChatRequest {
+  model: string;
+  messages: ChatMessage[];
+  tools?: ToolSpec[];
+  authorization: string | null;
+}
+
+export type Reply = {
+  content?: string;
+  calls?: Array<{ name: string; arguments: string }>;
+  /** `length` for a reply the server cut at its token cap. */
+  finish?: string;
+};
+
+/**
+ * A stand-in for an OpenAI-compatible `/chat/completions` endpoint that plays
+ * a script: the nth request gets the nth reply. The store, the MCP server and
+ * the tools behind it are real.
+ */
+export async function scriptedModel(
+  script: Reply[],
+): Promise<{ llm: LlmConfig; requests: ChatRequest[]; close(): Promise<void> }> {
+  const requests: ChatRequest[] = [];
+  const server: Server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      if (req.url !== '/v1/chat/completions' || req.method !== 'POST') {
+        res.writeHead(404).end();
+        return;
+      }
+      const reply = script[requests.length];
+      requests.push({ ...(JSON.parse(body) as ChatRequest), authorization: req.headers.authorization ?? null });
+      if (reply === undefined) {
+        res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'script ran out' }));
+        return;
+      }
+      const message = {
+        role: 'assistant',
+        content: reply.content ?? null,
+        tool_calls: reply.calls?.map((call, index) => ({
+          id: `call_${requests.length}_${index}`,
+          type: 'function',
+          function: call,
+        })),
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(
+        JSON.stringify({
+          choices: [{ message, finish_reason: reply.finish ?? 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    llm: { url: `http://127.0.0.1:${port}/v1`, model: 'scripted', apiKey: 'sk-test', timeoutMs: 5000 },
+    requests,
+    close: () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  };
 }

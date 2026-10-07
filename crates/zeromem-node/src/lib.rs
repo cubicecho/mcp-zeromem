@@ -120,6 +120,8 @@ pub struct RecallOptions {
     pub since: Option<i64>,
     /// Only turns at or before this timestamp (ms).
     pub until: Option<i64>,
+    /// Only turns in exactly this scope; every scope when omitted or blank.
+    pub scope: Option<String>,
     /// `compact` (default) or `full`.
     pub detail: Option<String>,
     /// Include turns curation hid; they come back flagged `hidden`.
@@ -144,6 +146,7 @@ impl TryFrom<RecallOptions> for QueryOptions {
             session: o.session,
             since: o.since,
             until: o.until,
+            scope: o.scope,
             detail,
             include_hidden: o.include_hidden,
             context: o.context,
@@ -163,11 +166,13 @@ pub struct Turn {
     pub ts: Option<i64>,
     /// Dedup key; derived from the content when omitted.
     pub uuid: Option<String>,
+    /// Whose memory this is (`project:atlas`); unscoped when omitted.
+    pub scope: Option<String>,
 }
 
 impl From<Turn> for TurnInput {
     fn from(t: Turn) -> Self {
-        TurnInput { session_id: t.session_id, speaker: t.speaker, text: t.text, ts: t.ts, uuid: t.uuid }
+        TurnInput { session_id: t.session_id, speaker: t.speaker, text: t.text, ts: t.ts, uuid: t.uuid, scope: t.scope }
     }
 }
 
@@ -213,11 +218,20 @@ pub struct HierarchyOptions {
     pub until: Option<i64>,
     /// Just this one session.
     pub session: Option<String>,
+    /// Only sessions holding turns in exactly this scope.
+    pub scope: Option<String>,
 }
 
 impl From<HierarchyOptions> for viz::HierarchyOptions {
     fn from(o: HierarchyOptions) -> Self {
-        viz::HierarchyOptions { limit: o.limit, offset: o.offset, since: o.since, until: o.until, session: o.session }
+        viz::HierarchyOptions {
+            limit: o.limit,
+            offset: o.offset,
+            since: o.since,
+            until: o.until,
+            session: o.session,
+            scope: o.scope,
+        }
     }
 }
 
@@ -253,6 +267,9 @@ pub struct CuratorConfigInput {
     pub token: Option<String>,
     #[napi(js_name = "expose_to_all")]
     pub expose_to_all: bool,
+    /// Longest standing brief the curator may write, in characters.
+    #[napi(js_name = "brief_max_chars")]
+    pub brief_max_chars: u32,
 }
 
 impl From<CuratorConfigInput> for CuratorConfig {
@@ -263,6 +280,7 @@ impl From<CuratorConfigInput> for CuratorConfig {
             min_age_ms: c.min_age_ms,
             token: c.token,
             expose_to_all: c.expose_to_all,
+            brief_max_chars: c.brief_max_chars,
         }
     }
 }
@@ -395,12 +413,15 @@ impl Engine {
         with_engine(&self.inner, move |zm| zm.ingest_many(&inputs).map(|r| serde_json::to_value(r).unwrap())).await
     }
 
-    /// Sessions, most recently active first.
+    /// Sessions, most recently active first; with `scope`, only the ones
+    /// holding turns in exactly that scope.
     #[napi(ts_return_type = "Promise<SessionSummary[]>")]
-    pub async fn list_sessions(&self, page: Option<Page>) -> Result<serde_json::Value> {
+    pub async fn list_sessions(&self, page: Option<Page>, scope: Option<String>) -> Result<serde_json::Value> {
         let (limit, offset) = page_bounds(page);
-        with_engine(&self.inner, move |zm| zm.list_sessions(limit, offset).map(|s| serde_json::to_value(s).unwrap()))
-            .await
+        with_engine(&self.inner, move |zm| {
+            zm.list_sessions(limit, offset, scope.as_deref()).map(|s| serde_json::to_value(s).unwrap())
+        })
+        .await
     }
 
     /// One session's turns in time order.
@@ -541,6 +562,12 @@ impl Engine {
         let config = CuratorConfig::from(config);
         with_engine(&self.inner, move |zm| zm.set_curator_config(&config).map(|c| serde_json::to_value(c).unwrap()))
             .await
+    }
+
+    /// The standing brief of a scope (`""` for the unscoped store), or null.
+    #[napi(ts_return_type = "Promise<StoredTurn | null>")]
+    pub async fn brief(&self, scope: String) -> Result<serde_json::Value> {
+        with_engine(&self.inner, move |zm| zm.brief(&scope).map(|t| serde_json::to_value(t).unwrap())).await
     }
 
     /// Apply a batch of reversible curation actions in one transaction.

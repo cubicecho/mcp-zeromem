@@ -1,4 +1,4 @@
-import { type Evidence, MAX_CONTEXT, type StoredTurn } from '@mcp-zeromem/shared';
+import { type Abstained, type Evidence, MAX_CONTEXT, type StoredTurn } from '@mcp-zeromem/shared';
 import { z } from 'zod';
 import type { Config } from '../../config.ts';
 import type { ZeroMemEngine } from '../../engine/index.ts';
@@ -15,7 +15,9 @@ const DEFAULT_TEXT_LIMIT = 2000;
  *
  * A block keeps the turn's own line breaks — a numbered list that arrives as a
  * paragraph reads as a truncated answer — and, under `context`, carries the
- * neighbouring turns of its session around it.
+ * neighbouring turns of its session around it. A hit that was later replaced
+ * says so in its header, with the date, so a model reading the block cannot
+ * take an old value for the current one.
  */
 export function formatEvidenceText(evidence: readonly Evidence[], limit = DEFAULT_TEXT_LIMIT): string {
   const ordered = [
@@ -27,13 +29,24 @@ export function formatEvidenceText(evidence: readonly Evidence[], limit = DEFAUL
 
 function formatBlock(item: Evidence, limit: number): string {
   const { role, turn } = item;
-  const date = new Date(turn.ts).toISOString().slice(0, 10);
-  const header = `[${role}] ${date} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id})`;
+  // The scope is named only when the turn has one, so an unscoped store reads as it always did.
+  const scope = turn.scope ? `, scope ${turn.scope}` : '';
+  const header = `[${role}] ${day(turn.ts)} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id}${scope}${replaced(item)})`;
   return [
     ...(item.before ?? []).map((neighbour) => neighbourLine('before', neighbour, limit)),
     `${header}: ${body(turn, limit)}`,
     ...(item.after ?? []).map((neighbour) => neighbourLine('after', neighbour, limit)),
   ].join('\n');
+}
+
+function day(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function replaced(item: Evidence): string {
+  if (item.superseded_by === undefined) return '';
+  const when = item.valid_until === undefined ? '' : ` ${day(item.valid_until)}`;
+  return `, superseded${when} by turn ${item.superseded_by}`;
 }
 
 /** A neighbour is in the hit's own session, so it repeats only what varies: who, which turn. */
@@ -73,6 +86,20 @@ function clip(text: string, limit: number, turnId: number): string {
   return `${kept}\n… [clipped: ${limit} of ${chars.length} characters — zeromem_read_session {around_turn: ${turnId}}]`;
 }
 
+/**
+ * The line that leads a `text` reply when the engine declined to answer. The
+ * blocks under it are the closest turns, and a model that is not told so reads
+ * them as the answer.
+ */
+export function formatAbstained(abstained: Abstained): string {
+  const missing = abstained.missing ?? [];
+  const why =
+    missing.length > 0
+      ? `no turn in memory mentions ${missing.map((name) => `"${name}"`).join(', ')}`
+      : `nothing in memory matches this closely (best score ${abstained.best.toFixed(2)})`;
+  return `[abstained] Memory does not hold the answer: ${why}. The closest turns follow; they are probably not the answer.`;
+}
+
 export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefinition[] {
   return [
     defineTool({
@@ -81,8 +108,14 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
       description: [
         'Retrieve the past conversation turns that bear on a question, best first, with no LLM in the loop.',
         'Recall fuses a lexical (BM25), an entity-graph and a dense-vector view and, for questions about',
-        'time ("last week", "yesterday"), a recency view; each evidence item carries a score, a confidence',
+        'the present ("latest", "currently"), a recency view; each evidence item carries a score, a confidence',
         'relative to the best hit, and a role: `primary` (answers it) or `supporting` (context).',
+        'A question about the past is read as one: "before" or "used to" ranks the value that was replaced first,',
+        'and a named period ("in March 2025", "2025-03-14", "last week", "3 days ago") ranks what held then.',
+        'A hit that curation knows was replaced carries `superseded_by` and `valid_until`, when it stopped holding.',
+        'When the question names something no stored turn mentions, or nothing matches closely, the result carries',
+        '`abstained` (`missing`: the names not found) and `evidence` is only the closest turns, all `supporting`:',
+        'say that memory does not hold the answer rather than answering from them.',
         'Ask in natural language and name the people, projects or things involved — entities are what the graph keys on.',
         'Use `detail: "full"` to see which views were used and which entities each hit matched — this is',
         'the explanation, and asking again would re-run retrieval against a corpus that may have moved.',
@@ -92,6 +125,7 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
         'If a hit ends in `[clipped: … — zeromem_read_session {around_turn: N}]` it was cut to fit; call',
         '`zeromem_read_session` with that turn id to read the whole thing rather than treating memory as incomplete.',
         'Pass `exclude_session` with the current session id so recall does not echo the conversation in progress.',
+        'Pass `scope` (e.g. `project:atlas`) to recall only from that scope; it is matched exactly, and `scope: ""` searches every scope.',
       ].join(' '),
       inputSchema: {
         query: z.string().trim().min(1).describe('What to recall, in natural language.'),
@@ -102,6 +136,14 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
           .optional()
           .describe('Leave out this session, typically the one asking; defaults to ZEROMEM_SESSION_ID when set.'),
         session: z.string().min(1).optional().describe('Only recall from this one session.'),
+        scope: z
+          .string()
+          .trim()
+          .max(200)
+          .optional()
+          .describe(
+            'Only turns in exactly this scope; defaults to ZEROMEM_SCOPE when set, otherwise every scope. Pass "" to search every scope.',
+          ),
         since: z.number().int().optional().describe('Only turns at or after this Unix timestamp in milliseconds.'),
         until: z.number().int().optional().describe('Only turns at or before this Unix timestamp in milliseconds.'),
         detail: z
@@ -139,10 +181,15 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
           format?: 'json' | 'text';
           max_chars?: number;
           exclude_session?: string;
+          scope?: string;
         } & Record<string, unknown>;
         const exclude_session = options.exclude_session ?? config.sessionId ?? undefined;
-        const result = await engine.query(query, { ...options, exclude_session });
-        return format === 'text' ? formatEvidenceText(result.evidence, max_chars ?? config.recallTextLimit) : result;
+        // An explicit blank is "every scope", so only an absent one takes the default.
+        const scope = (options.scope ?? config.scope ?? '') || undefined;
+        const result = await engine.query(query, { ...options, exclude_session, scope });
+        if (format !== 'text') return result;
+        const blocks = formatEvidenceText(result.evidence, max_chars ?? config.recallTextLimit);
+        return result.abstained ? `${formatAbstained(result.abstained)}\n\n${blocks}` : blocks;
       },
     }),
   ];

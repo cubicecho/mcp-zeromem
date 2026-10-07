@@ -94,6 +94,7 @@ fn run(target_turns: usize) -> anyhow::Result<Report> {
             text: t.text.clone(),
             ts: Some(t.ts),
             uuid: Some(t.uuid.clone()),
+            scope: None,
         })
         .collect();
     let queries: Vec<&str> = generated.queries.iter().map(|q| q.query.as_str()).take(100).collect();

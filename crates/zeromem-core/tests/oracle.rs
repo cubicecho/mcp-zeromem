@@ -105,7 +105,7 @@ fn session_views_agree_with_the_corpus() {
     assert_eq!(stats.turns as usize, corpus.turns.len());
     assert_eq!(stats.sessions as usize, LARGE.sessions);
 
-    let sessions = zm.list_sessions(1000, 0).unwrap();
+    let sessions = zm.list_sessions(1000, 0, None).unwrap();
     assert_eq!(sessions.len(), LARGE.sessions);
     assert_eq!(sessions.iter().map(|s| s.turns as usize).sum::<usize>(), corpus.turns.len());
     assert!(sessions.windows(2).all(|w| w[0].last_ts >= w[1].last_ts), "most recent first");

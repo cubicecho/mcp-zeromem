@@ -19,6 +19,12 @@
 //! re-derives the entity tables from the text (`store::rederive_entities`)
 //! without touching FTS or vectors. Undoing a note deletes the note turn,
 //! which bumps `generation` like any other delete.
+//!
+//! A brief is the one thing here that is not about recall: a short standing
+//! summary of a scope that a host loads when a session starts. It is a turn
+//! of kind `brief`, so it is immutable, in the snapshot and undoable like a
+//! note. The brief of a scope is simply its newest one; writing another
+//! keeps the old ones as history and undoing it brings the previous back.
 
 pub mod finders;
 
@@ -37,6 +43,18 @@ use crate::types::{AliasRow, FlagRow, IngestOutcome, NoteSourceRow, Turn, TurnIn
 pub const CURATOR_SPEAKER: &str = "zeromem-curator";
 /// Longest note a curator may write, in characters.
 pub const NOTE_MAX_CHARS: usize = 4000;
+/// The session every brief of the unscoped store lives in; a scope's briefs
+/// live in `zeromem-brief:<scope>`.
+pub const BRIEF_SESSION: &str = "zeromem-brief";
+
+/// The session that holds the briefs of `scope`.
+pub fn brief_session(scope: &str) -> String {
+    if scope.is_empty() {
+        BRIEF_SESSION.to_string()
+    } else {
+        format!("{BRIEF_SESSION}:{scope}")
+    }
+}
 const DAY_MS: i64 = 24 * 3600 * 1000;
 
 // --- settings ------------------------------------------------------------------
@@ -59,17 +77,29 @@ pub struct CuratorConfig {
     pub token: Option<String>,
     /// Give every MCP client the curator tools, not only the curator token.
     pub expose_to_all: bool,
+    /// Longest brief a curator may write, in characters. A brief is in every
+    /// session's context before anything is asked, so it is kept short.
+    pub brief_max_chars: u32,
 }
 
 impl Default for CuratorConfig {
     fn default() -> Self {
-        CuratorConfig { max_per_call: 100, max_per_run: 300, min_age_ms: DAY_MS, token: None, expose_to_all: false }
+        CuratorConfig {
+            max_per_call: 100,
+            max_per_run: 300,
+            min_age_ms: DAY_MS,
+            token: None,
+            expose_to_all: false,
+            brief_max_chars: 1500,
+        }
     }
 }
 
 impl CuratorConfig {
     pub const MAX_PER_CALL_CAP: u32 = 1000;
     pub const MAX_PER_RUN_CAP: u32 = 100_000;
+    pub const BRIEF_MAX_CHARS_FLOOR: u32 = 200;
+    pub const BRIEF_MAX_CHARS_CAP: u32 = 8000;
 
     fn validate(&self) -> Result<()> {
         if self.max_per_call == 0 || self.max_per_call > Self::MAX_PER_CALL_CAP {
@@ -77,6 +107,13 @@ impl CuratorConfig {
         }
         if self.max_per_run == 0 || self.max_per_run > Self::MAX_PER_RUN_CAP {
             return Err(Error::Curation(format!("max_per_run must be 1..={}", Self::MAX_PER_RUN_CAP)));
+        }
+        if !(Self::BRIEF_MAX_CHARS_FLOOR..=Self::BRIEF_MAX_CHARS_CAP).contains(&self.brief_max_chars) {
+            return Err(Error::Curation(format!(
+                "brief_max_chars must be {}..={}",
+                Self::BRIEF_MAX_CHARS_FLOOR,
+                Self::BRIEF_MAX_CHARS_CAP
+            )));
         }
         if self.min_age_ms < 0 {
             return Err(Error::Curation("min_age_ms must not be negative".into()));
@@ -125,6 +162,17 @@ pub enum CurationOp {
         text: String,
         source_ids: Vec<i64>,
     },
+    /// The standing brief of `scope` (empty for the unscoped store): what a
+    /// session should know before it asks anything. Replaces the previous
+    /// one, which is kept. `source_ids` are the turns it was written from,
+    /// recorded for the log.
+    Brief {
+        #[serde(default)]
+        scope: String,
+        text: String,
+        #[serde(default)]
+        source_ids: Vec<i64>,
+    },
     /// Close a run: record its summary and advance the cursor finders read
     /// from. `cursor` defaults to the newest turn old enough to curate.
     RunEnd {
@@ -146,6 +194,7 @@ impl CurationOp {
             CurationOp::Block { .. } => "block",
             CurationOp::Unblock { .. } => "unblock",
             CurationOp::Note { .. } => "note",
+            CurationOp::Brief { .. } => "brief",
             CurationOp::RunEnd { .. } => "run_end",
         }
     }
@@ -169,6 +218,8 @@ pub struct ActionResult {
     pub action_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -383,21 +434,45 @@ fn note_uuid(source_uuids: &[String]) -> String {
     format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
 }
 
-struct TurnBrief {
+/// A brief's uuid comes from its scope, its text and the brief it replaces,
+/// so writing the same words again after something else is a new turn and
+/// writing them twice in a row is refused before it gets here.
+fn brief_uuid(scope: &str, previous: Option<&str>, text: &str) -> String {
+    let mut h = Sha256::new();
+    for part in ["zeromem-brief", scope, previous.unwrap_or(""), text] {
+        h.update(part.as_bytes());
+        h.update([0]);
+    }
+    let hex: String = h.finalize().iter().take(16).map(|b| format!("{b:02x}")).collect();
+    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
+}
+
+/// The newest brief of `scope`: the one in force.
+const CURRENT_BRIEF: &str = "FROM turns WHERE kind = 'brief' AND scope = ?1 ORDER BY ts DESC, id DESC LIMIT 1";
+
+fn current_brief(tx: &Transaction<'_>, scope: &str) -> Result<Option<(String, String)>> {
+    Ok(tx
+        .query_row(&format!("SELECT uuid, text {CURRENT_BRIEF}"), [scope], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()?)
+}
+
+struct TurnHead {
     id: i64,
     uuid: String,
     ts: i64,
     kind: TurnKind,
+    scope: String,
 }
 
-fn brief(tx: &Transaction<'_>, id: i64) -> Result<Option<TurnBrief>> {
+fn head(tx: &Transaction<'_>, id: i64) -> Result<Option<TurnHead>> {
     Ok(tx
-        .query_row("SELECT id, uuid, ts, kind FROM turns WHERE id = ?1", [id], |r| {
-            Ok(TurnBrief {
+        .query_row("SELECT id, uuid, ts, kind, scope FROM turns WHERE id = ?1", [id], |r| {
+            Ok(TurnHead {
                 id: r.get(0)?,
                 uuid: r.get(1)?,
                 ts: r.get(2)?,
                 kind: TurnKind::parse(&r.get::<_, String>(3)?),
+                scope: r.get(4)?,
             })
         })
         .optional()?)
@@ -414,6 +489,7 @@ enum Plan {
     Turns { op: &'static str, payload: serde_json::Value, uuids: Vec<String> },
     Entity { op: &'static str, payload: serde_json::Value },
     Note { input: TurnInput, sources: Vec<i64>, payload: serde_json::Value },
+    Brief { input: TurnInput, payload: serde_json::Value },
     RunEnd { payload: serde_json::Value },
 }
 
@@ -479,7 +555,7 @@ impl Store {
             let planned = if counted && in_run >= config.max_per_run {
                 Err(format!("run {run_id} has reached its limit of {} actions", config.max_per_run))
             } else {
-                plan(&tx, action, cutoff)
+                plan(&tx, action, &Limits { cutoff, now, brief_max_chars: config.brief_max_chars as usize })
             };
             let plan = match planned {
                 Ok(p) => p,
@@ -491,12 +567,13 @@ impl Store {
                         ok: false,
                         action_id: None,
                         note_id: None,
+                        brief_id: None,
                         error: Some(error),
                     });
                     continue;
                 }
             };
-            let mut note_id = None;
+            let (mut note_id, mut brief_id) = (None, None);
             let action_id = match plan {
                 Plan::Turns { op, payload, uuids } => {
                     let id = record(&tx, run_id, actor, now, op, &payload, &action.reason)?;
@@ -523,6 +600,17 @@ impl Store {
                     note_id = Some(id);
                     record(&tx, run_id, actor, now, "note", &payload, &action.reason)?
                 }
+                Plan::Brief { input, mut payload } => {
+                    let map = EntityMap::load(&tx)?;
+                    let outcome = store::insert_one(&tx, &input, None, None, TurnKind::Brief, &map)?;
+                    let IngestOutcome::Indexed { id } = outcome else {
+                        return Err(Error::Curation("brief collided with an existing turn".into()));
+                    };
+                    payload["brief"] = serde_json::Value::String(input.uuid.clone().unwrap_or_default());
+                    touched_sessions.insert(input.session_id.clone());
+                    brief_id = Some(id);
+                    record(&tx, run_id, actor, now, "brief", &payload, &action.reason)?
+                }
                 Plan::RunEnd { payload } => {
                     let id = record(&tx, run_id, actor, now, "run_end", &payload, &action.reason)?;
                     recompute_cursor(&tx)?;
@@ -539,6 +627,7 @@ impl Store {
                 ok: true,
                 action_id: Some(action_id),
                 note_id,
+                brief_id,
                 error: None,
             });
         }
@@ -616,8 +705,8 @@ impl Store {
                     recompute_entity_rule(&tx, &op, &payload)?;
                     entities_changed = true;
                 }
-                "note" => {
-                    if let Some(uuid) = payload["note"].as_str() {
+                "note" | "brief" => {
+                    if let Some(uuid) = payload[op.as_str()].as_str() {
                         let session: Option<String> = tx
                             .query_row("SELECT session_id FROM turns WHERE uuid = ?1", [uuid], |r| r.get(0))
                             .optional()?;
@@ -802,14 +891,14 @@ impl Store {
         let mut turn = self.conn.prepare_cached("SELECT id, session_id, text FROM turns WHERE uuid = ?1")?;
         for a in &mut actions {
             let mut uuids = Vec::new();
-            if let Some(n) = a.payload["note"].as_str() {
-                uuids.push(n.to_string());
+            for key in ["note", "brief"] {
+                if let Some(n) = a.payload[key].as_str() {
+                    uuids.push(n.to_string());
+                }
             }
             uuids.extend(payload_uuids(&a.payload));
-            for key in ["by"] {
-                if let Some(u) = a.payload[key].as_str() {
-                    uuids.push(u.to_string());
-                }
+            if let Some(u) = a.payload["by"].as_str() {
+                uuids.push(u.to_string());
             }
             if let Some(sources) = a.payload["sources"].as_array() {
                 uuids.extend(sources.iter().filter_map(|v| v.as_str().map(str::to_string)));
@@ -848,6 +937,13 @@ impl Store {
 
     pub fn count_hidden(&self) -> Result<u64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM turn_flags WHERE hidden = 1", [], |r| r.get::<_, i64>(0))? as u64)
+    }
+
+    /// The standing brief of `scope` (empty for the unscoped store), if a
+    /// curator has written one.
+    pub fn brief(&self, scope: &str) -> Result<Option<Turn>> {
+        let sql = format!("SELECT id, uuid, session_id, speaker, text, ts, kind, scope {CURRENT_BRIEF}");
+        Ok(self.conn.query_row(&sql, [scope.trim()], store::row_to_turn).optional()?)
     }
 
     pub fn count_notes(&self) -> Result<u64> {
@@ -889,21 +985,30 @@ impl Store {
     }
 }
 
+/// What an apply call holds every action to.
+struct Limits {
+    /// Turns newer than this are too recent to curate.
+    cutoff: i64,
+    now: i64,
+    brief_max_chars: usize,
+}
+
 /// Validate one action against the store as it stands inside `tx`.
 /// Refusals are strings: they go back to the caller per action.
-fn plan(tx: &Transaction<'_>, action: &CurationAction, cutoff: i64) -> std::result::Result<Plan, String> {
+fn plan(tx: &Transaction<'_>, action: &CurationAction, limits: &Limits) -> std::result::Result<Plan, String> {
     let sql = |e: Error| e.to_string();
+    let cutoff = limits.cutoff;
     if !matches!(action.op, CurationOp::RunEnd { .. }) && action.reason.trim().is_empty() {
         return Err("a reason is required".into());
     }
-    let old_enough = |t: &TurnBrief| -> std::result::Result<(), String> {
+    let old_enough = |t: &TurnHead| -> std::result::Result<(), String> {
         if t.ts > cutoff {
             Err(format!("turn {} is too recent to curate", t.id))
         } else {
             Ok(())
         }
     };
-    let load = |ids: &[i64]| -> std::result::Result<Vec<TurnBrief>, String> {
+    let load = |ids: &[i64]| -> std::result::Result<Vec<TurnHead>, String> {
         if ids.is_empty() {
             return Err("no turn ids".into());
         }
@@ -913,7 +1018,10 @@ fn plan(tx: &Transaction<'_>, action: &CurationAction, cutoff: i64) -> std::resu
             if !seen.insert(*id) {
                 continue;
             }
-            let t = brief(tx, *id).map_err(sql)?.ok_or_else(|| format!("no turn {id}"))?;
+            let t = head(tx, *id).map_err(sql)?.ok_or_else(|| format!("no turn {id}"))?;
+            if t.kind == TurnKind::Brief && !matches!(action.op, CurationOp::Brief { .. }) {
+                return Err(format!("turn {id} is a brief; write a new brief or undo the action that wrote it"));
+            }
             out.push(t);
         }
         Ok(out)
@@ -946,7 +1054,10 @@ fn plan(tx: &Transaction<'_>, action: &CurationAction, cutoff: i64) -> std::resu
         }
         CurationOp::Supersede { turn_ids, by } => {
             let turns = load(turn_ids)?;
-            let by = brief(tx, *by).map_err(sql)?.ok_or_else(|| format!("no turn {by}"))?;
+            let by = head(tx, *by).map_err(sql)?.ok_or_else(|| format!("no turn {by}"))?;
+            if by.kind == TurnKind::Brief {
+                return Err(format!("turn {} is a brief; it cannot supersede a turn", by.id));
+            }
             let mut uuids = Vec::new();
             for t in &turns {
                 old_enough(t)?;
@@ -1057,16 +1168,77 @@ fn plan(tx: &Transaction<'_>, action: &CurationAction, cutoff: i64) -> std::resu
                 return Err("there is already a note for these sources".into());
             }
             let ts = sources.iter().map(|t| t.ts).max().unwrap_or(0);
+            // A note is recalled in its sources' place, so it lives where
+            // they do; one over two scopes would carry each into the other.
+            let scope = sources.first().map(|t| t.scope.clone()).unwrap_or_default();
+            if let Some(other) = sources.iter().find(|t| t.scope != scope) {
+                return Err(format!(
+                    "turn {} is in scope '{}', not '{scope}'; a note stays inside one scope",
+                    other.id, other.scope
+                ));
+            }
             let input = TurnInput {
                 session_id: session_id.trim().to_string(),
                 speaker: CURATOR_SPEAKER.to_string(),
                 text: text.trim().to_string(),
                 ts: Some(ts),
                 uuid: Some(uuid),
+                scope: (!scope.is_empty()).then_some(scope),
             };
             store::validate(&input).map_err(sql)?;
             let payload = serde_json::json!({ "session_id": input.session_id, "sources": uuids });
             Ok(Plan::Note { input, sources: sources.iter().map(|t| t.id).collect(), payload })
+        }
+        CurationOp::Brief { scope, text, source_ids } => {
+            let (scope, text) = (scope.trim(), text.trim());
+            if text.is_empty() {
+                return Err("a brief needs text".into());
+            }
+            let chars = text.chars().count();
+            if chars > limits.brief_max_chars {
+                return Err(format!(
+                    "a brief is at most {} characters and this one is {chars}; it is read at the start of every session, so cut it",
+                    limits.brief_max_chars
+                ));
+            }
+            let known: bool = tx
+                .query_row("SELECT EXISTS(SELECT 1 FROM turns WHERE scope = ?1 AND kind = 'turn')", [scope], |r| {
+                    r.get(0)
+                })
+                .map_err(|e| e.to_string())?;
+            if !known {
+                return Err(if scope.is_empty() {
+                    "no unscoped turns to brief; name the scope".to_string()
+                } else {
+                    format!("no turns in scope '{scope}'")
+                });
+            }
+            let sources = if source_ids.is_empty() { Vec::new() } else { load(source_ids)? };
+            for t in &sources {
+                if t.kind == TurnKind::Brief {
+                    return Err(format!("turn {} is a brief; briefs cannot be sources", t.id));
+                }
+                if t.scope != scope {
+                    return Err(format!("turn {} is in scope '{}', not '{scope}'", t.id, t.scope));
+                }
+            }
+            let previous = current_brief(tx, scope).map_err(sql)?;
+            if previous.as_ref().is_some_and(|(_, old)| old == text) {
+                return Err("the brief already says exactly this".into());
+            }
+            let previous = previous.map(|(uuid, _)| uuid);
+            let input = TurnInput {
+                session_id: brief_session(scope),
+                speaker: CURATOR_SPEAKER.to_string(),
+                text: text.to_string(),
+                ts: Some(limits.now),
+                uuid: Some(brief_uuid(scope, previous.as_deref(), text)),
+                scope: (!scope.is_empty()).then(|| scope.to_string()),
+            };
+            store::validate(&input).map_err(sql)?;
+            let uuids: Vec<String> = sources.iter().map(|t| t.uuid.clone()).collect();
+            let payload = serde_json::json!({ "scope": scope, "sources": uuids, "previous": previous });
+            Ok(Plan::Brief { input, payload })
         }
         CurationOp::RunEnd { summary, cursor } => {
             let max_id: i64 =

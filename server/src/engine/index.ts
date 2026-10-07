@@ -162,8 +162,10 @@ export class ZeroMemEngine {
     return report;
   }
 
-  listSessions(page?: { limit?: number; offset?: number }): Promise<SessionSummary[]> {
-    return check(sessionSummarySchema.array(), this.native.listSessions(page));
+  /** With `scope`, only the sessions holding turns in exactly that scope. */
+  listSessions(page?: { limit?: number; offset?: number; scope?: string }): Promise<SessionSummary[]> {
+    const { scope, ...rest } = page ?? {};
+    return check(sessionSummarySchema.array(), this.native.listSessions(rest, scope?.trim() || undefined));
   }
 
   sessionTurns(sessionId: string, page?: { limit?: number; offset?: number }): Promise<StoredTurn[]> {
@@ -268,6 +270,11 @@ export class ZeroMemEngine {
   /** Validate and store the curator settings; resolves to what was stored. */
   setCuratorConfig(config: CuratorConfig): Promise<CuratorConfig> {
     return check(curatorConfigSchema, this.native.setCuratorConfig({ ...config, token: config.token ?? undefined }));
+  }
+
+  /** The standing brief of a scope (`''` for the unscoped store), or null when it has none. */
+  brief(scope = ''): Promise<StoredTurn | null> {
+    return check(storedTurnSchema.nullable(), this.native.brief(scope));
   }
 
   /**

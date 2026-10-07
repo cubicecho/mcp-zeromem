@@ -168,6 +168,9 @@ pub struct HierarchyOptions {
     pub until: Option<i64>,
     /// Just this one session.
     pub session: Option<String>,
+    /// Only sessions holding turns in exactly this scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +204,7 @@ pub struct HierarchySnapshot {
 pub fn hierarchy(store: &Store, opts: &HierarchyOptions) -> Result<HierarchySnapshot> {
     let limit = (opts.limit.unwrap_or(50) as usize).clamp(1, HIERARCHY_MAX_SESSIONS) as u32;
     let offset = opts.offset.unwrap_or(0);
+    let scope = opts.scope.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let (summaries, total): (Vec<SessionSummary>, u64) = match &opts.session {
         Some(id) => {
             let one: Vec<SessionSummary> = store.session(id)?.into_iter().collect();
@@ -208,8 +212,8 @@ pub fn hierarchy(store: &Store, opts: &HierarchyOptions) -> Result<HierarchySnap
             (one, n)
         }
         None => (
-            store.list_sessions_between(opts.since, opts.until, limit, offset)?,
-            store.count_sessions_between(opts.since, opts.until)?,
+            store.list_sessions_between(opts.since, opts.until, scope, limit, offset)?,
+            store.count_sessions_between(opts.since, opts.until, scope)?,
         ),
     };
     let segments = |session_id: &str, level: Level| -> Result<Vec<HierarchySegment>> {

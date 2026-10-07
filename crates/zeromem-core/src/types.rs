@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 /// One utterance to remember. `ts` is milliseconds since the Unix epoch; when
 /// absent the store stamps "now". `uuid` is the dedup key — when absent it is
 /// derived from the content, so re-ingesting the same transcript is a no-op.
+/// `scope` says whose memory this is (`project:atlas`, `user:ben`); it is not
+/// part of the derived uuid, so the first write of a turn decides its scope.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TurnInput {
     pub session_id: String,
@@ -12,6 +14,8 @@ pub struct TurnInput {
     pub ts: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uuid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// A stored turn, as read back.
@@ -27,16 +31,21 @@ pub struct Turn {
     /// turn so results read as they always did.
     #[serde(default, skip_serializing_if = "TurnKind::is_turn")]
     pub kind: TurnKind,
+    /// Whose memory this is; empty, and left out, for an unscoped turn.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
 }
 
 /// What a stored turn is. Notes are turns in every index; the kind only
-/// changes how recall presents them.
+/// changes how recall presents them. A brief is the standing summary of a
+/// scope: stored like a turn, read with `ZeroMem::brief`, never recalled.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnKind {
     #[default]
     Turn,
     Note,
+    Brief,
 }
 
 impl TurnKind {
@@ -48,14 +57,15 @@ impl TurnKind {
         match self {
             TurnKind::Turn => "turn",
             TurnKind::Note => "note",
+            TurnKind::Brief => "brief",
         }
     }
 
     pub fn parse(s: &str) -> Self {
-        if s == "note" {
-            TurnKind::Note
-        } else {
-            TurnKind::Turn
+        match s {
+            "note" => TurnKind::Note,
+            "brief" => TurnKind::Brief,
+            _ => TurnKind::Turn,
         }
     }
 }
@@ -90,7 +100,22 @@ pub struct SessionSummary {
     pub turns: u32,
     pub first_ts: i64,
     pub last_ts: i64,
+    /// The scope its turns carry; left out when they carry none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
 }
+
+/// One scope and how much of the store it holds. The empty scope is the
+/// unscoped turns.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScopeSummary {
+    pub scope: String,
+    pub turns: u64,
+    pub sessions: u64,
+}
+
+/// Most scopes [`Stats`] lists.
+pub const MAX_LISTED_SCOPES: usize = 100;
 
 /// Most turns one session read returns, however it is asked for.
 pub const SESSION_WINDOW_MAX_TURNS: u32 = 200;
@@ -180,6 +205,10 @@ pub struct Stats {
     pub hidden: u64,
     #[serde(default)]
     pub notes: u64,
+    /// The scopes in use, largest first, up to [`MAX_LISTED_SCOPES`]. Empty
+    /// while nothing is scoped.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<ScopeSummary>,
 }
 
 /// Where a remote embedder's key comes from. The key itself never leaves

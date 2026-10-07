@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  BriefResponse,
   ClearReport,
   ClearScope,
   CurationActions,
@@ -31,6 +32,7 @@ import type {
   QueryTrace,
   RecallRequest,
   ServerStatus,
+  SessionsQuery,
   SessionsResponse,
   SessionTurnsResponse,
   SessionTurnsWithEntitiesResponse,
@@ -117,8 +119,11 @@ export function getStatus(): Promise<ServerStatus> {
 
 // --- sessions ---
 
-export function listSessions(page: PageQuery = {}): Promise<SessionsResponse> {
+export function listSessions(page: SessionsQuery = {}): Promise<SessionsResponse> {
   const params = new URLSearchParams();
+  if (page.scope) {
+    params.set('scope', page.scope);
+  }
   if (page.limit !== undefined) {
     params.set('limit', String(page.limit));
   }
@@ -241,6 +246,11 @@ export function getCurationActions(query: CurationActionsQuery = {}): Promise<Cu
 
 export function getCurationAliases(): Promise<CurationAliases> {
   return request('/api/curation/aliases');
+}
+
+/** The standing brief in force for a scope (`''` is the unscoped one). */
+export function getBrief(scope = ''): Promise<BriefResponse> {
+  return request(`/api/brief${queryString({ scope })}`);
 }
 
 export function undoCuration(body: UndoRequest): Promise<UndoReport> {

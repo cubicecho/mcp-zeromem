@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::types::Value;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use sha2::{Digest, Sha256};
 
@@ -30,20 +31,93 @@ use crate::entities::{self, EntityKind, Mention};
 use crate::error::{Error, Result};
 use crate::timeline::{self, Level, Segment, TurnRef};
 use crate::types::{
-    EdgeRow, EmbeddingRow, EntityStat, IngestOutcome, MentionRow, SegmentRow, SessionSummary, Turn, TurnInput, TurnKind,
+    EdgeRow, EmbeddingRow, EntityStat, IngestOutcome, MentionRow, ScopeSummary, SegmentRow, SessionSummary, Turn,
+    TurnInput, TurnKind,
 };
 
+/// v6 gave `turns` a `scope` (a column and an index, nothing derived);
 /// v5 changed extraction (paths, code symbols and env vars became kinds),
 /// so a store below it re-derives its entity tables once on open; v4 added curation (`turns.kind`, the flag, alias, blocklist and note
 /// tables, the action log); v3 gave `embeddings` an insertion sequence so
 /// backfilled vectors are picked up by readers; v2 was the last change to a
 /// derived table.
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 const REBUILD_BELOW: i64 = 5;
 const DB_FILE: &str = "zeromem.db";
 
 /// One stored vector with its position in insertion order.
 pub type EmbeddingAt = (i64, i64, Vec<f32>);
+
+/// Which turns a retrieval view may nominate. It is part of each view's
+/// query rather than a filter over its answer: a view hands back its best
+/// [`crate::retrieve::VIEW_LIMIT`], and in a large store those can all sit
+/// outside a small scope or a single session.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Reach<'a> {
+    pub exclude_session: Option<&'a str>,
+    pub session: Option<&'a str>,
+    pub since: Option<i64>,
+    pub until: Option<i64>,
+    /// Exactly this scope. `None` is every scope, the unscoped turns too.
+    pub scope: Option<&'a str>,
+}
+
+impl Reach<'_> {
+    /// Nothing is left out, so a view's query is the one it always was.
+    pub fn is_open(&self) -> bool {
+        self.exclude_session.is_none()
+            && self.session.is_none()
+            && self.since.is_none()
+            && self.until.is_none()
+            && self.scope.is_none()
+    }
+
+    pub fn keeps(&self, t: &Turn) -> bool {
+        self.exclude_session.is_none_or(|s| t.session_id != s)
+            && self.session.is_none_or(|s| t.session_id == s)
+            && self.since.is_none_or(|s| t.ts >= s)
+            && self.until.is_none_or(|u| t.ts <= u)
+            && self.scope.is_none_or(|s| t.scope == s)
+    }
+
+    /// The `WHERE` body over `turns`, its values appended to `args`.
+    fn conditions(&self, args: &mut Vec<Value>) -> String {
+        let mut parts: Vec<&str> = Vec::new();
+        if let Some(s) = self.exclude_session {
+            parts.push("session_id <> ?");
+            args.push(s.to_string().into());
+        }
+        if let Some(s) = self.session {
+            parts.push("session_id = ?");
+            args.push(s.to_string().into());
+        }
+        if let Some(s) = self.since {
+            parts.push("ts >= ?");
+            args.push(s.into());
+        }
+        if let Some(u) = self.until {
+            parts.push("ts <= ?");
+            args.push(u.into());
+        }
+        if let Some(s) = self.scope {
+            parts.push("scope = ?");
+            args.push(s.to_string().into());
+        }
+        if parts.is_empty() {
+            "1".to_string()
+        } else {
+            parts.join(" AND ")
+        }
+    }
+
+    /// ` AND <column> IN (…)` for a view keyed by turn id; empty when open.
+    fn clause(&self, column: &str, args: &mut Vec<Value>) -> String {
+        if self.is_open() {
+            return String::new();
+        }
+        format!(" AND {column} IN (SELECT id FROM turns WHERE {})", self.conditions(args))
+    }
+}
 
 /// One outcome per input, plus whether the vectors were dropped because
 /// the store's embedder is no longer the one they came from.
@@ -197,6 +271,7 @@ impl Store {
         )?;
         self.migrate_embeddings_to_v3()?;
         self.migrate_turn_kind()?;
+        self.migrate_turn_scope()?;
         let stored = self.meta_i64("schema_version")?;
         let mut needs_rebuild = false;
         if stored == 0 {
@@ -254,6 +329,24 @@ impl Store {
             log::info!("adding turns.kind for schema v4");
             self.conn.execute_batch("ALTER TABLE turns ADD COLUMN kind TEXT NOT NULL DEFAULT 'turn';")?;
         }
+        Ok(())
+    }
+
+    /// v6 gave `turns` a `scope`. Decided by the table's shape, like v3 and
+    /// v4; every turn already stored becomes unscoped, and nothing derived
+    /// depends on the column, so there is no rebuild.
+    fn migrate_turn_scope(&self) -> Result<()> {
+        let has_scope: bool = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(turns)")?;
+            let names = stmt.query_map([], |r| r.get::<_, String>(1))?;
+            let names: Vec<String> = names.collect::<rusqlite::Result<_>>()?;
+            names.iter().any(|n| n == "scope")
+        };
+        if !has_scope {
+            log::info!("adding turns.scope for schema v6");
+            self.conn.execute_batch("ALTER TABLE turns ADD COLUMN scope TEXT NOT NULL DEFAULT '';")?;
+        }
+        self.conn.execute_batch("CREATE INDEX IF NOT EXISTS turns_scope ON turns (scope, ts, id);")?;
         Ok(())
     }
 
@@ -495,7 +588,7 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns WHERE id = ?1",
+                "SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns WHERE id = ?1",
                 [id],
                 row_to_turn,
             )
@@ -503,8 +596,9 @@ impl Store {
     }
 
     pub fn turns_by_ids(&self, ids: &[i64]) -> Result<BTreeMap<i64, Turn>> {
-        let mut stmt =
-            self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns WHERE id = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns WHERE id = ?1")?;
         let mut out = BTreeMap::new();
         for id in ids {
             if let Some(t) = stmt.query_row([id], row_to_turn).optional()? {
@@ -530,26 +624,31 @@ impl Store {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM turns WHERE id > ?1", [id], |r| r.get::<_, i64>(0))? as u32)
     }
 
+    /// The newest thing said, which recency decays from. A brief is stamped
+    /// when it is written and says nothing new, so it does not count: writing
+    /// one must not age every turn in the store. Walks `turns_ts` from the end.
     pub fn latest_ts(&self) -> Result<i64> {
-        Ok(self.conn.query_row("SELECT COALESCE(MAX(ts), 0) FROM turns", [], |r| r.get(0))?)
+        let ts = self
+            .conn
+            .query_row("SELECT ts FROM turns WHERE kind != 'brief' ORDER BY ts DESC, id DESC LIMIT 1", [], |r| r.get(0))
+            .optional()?;
+        Ok(ts.unwrap_or(0))
     }
 
     pub fn list_sessions(&self, limit: u32, offset: u32) -> Result<Vec<SessionSummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, COUNT(*), MIN(ts), MAX(ts) FROM turns
+            "SELECT session_id, COUNT(*), MIN(ts), MAX(ts), MAX(scope) FROM turns
              GROUP BY session_id
              ORDER BY MAX(ts) DESC, session_id
              LIMIT ?1 OFFSET ?2",
         )?;
-        let rows = stmt.query_map(params![limit, offset], |r| {
-            Ok(SessionSummary { session_id: r.get(0)?, turns: r.get(1)?, first_ts: r.get(2)?, last_ts: r.get(3)? })
-        })?;
+        let rows = stmt.query_map(params![limit, offset], row_to_session)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub fn session_turns(&self, session_id: &str, limit: u32, offset: u32) -> Result<Vec<Turn>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
+            "SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns
              WHERE session_id = ?1 ORDER BY ts, id LIMIT ?2 OFFSET ?3",
         )?;
         let rows = stmt.query_map(params![session_id, limit, offset], row_to_turn)?;
@@ -566,7 +665,7 @@ impl Store {
         let mut earlier = Vec::new();
         if before > 0 {
             let mut stmt = self.conn.prepare(
-                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
+                "SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns
                  WHERE session_id = ?1 AND (ts < ?2 OR (ts = ?2 AND id < ?3))
                  ORDER BY ts DESC, id DESC LIMIT ?4",
             )?;
@@ -577,7 +676,7 @@ impl Store {
         let mut later = Vec::new();
         if after > 0 {
             let mut stmt = self.conn.prepare(
-                "SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns
+                "SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns
                  WHERE session_id = ?1 AND (ts > ?2 OR (ts = ?2 AND id > ?3))
                  ORDER BY ts, id LIMIT ?4",
             )?;
@@ -606,8 +705,9 @@ impl Store {
 
     /// Every turn, ordered by uuid.
     pub fn all_turns(&self) -> Result<Vec<Turn>> {
-        let mut stmt =
-            self.conn.prepare("SELECT id, uuid, session_id, speaker, text, ts, kind FROM turns ORDER BY uuid")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, uuid, session_id, speaker, text, ts, kind, scope FROM turns ORDER BY uuid")?;
         let rows = stmt.query_map([], row_to_turn)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -617,38 +717,57 @@ impl Store {
     /// BM25 over the full-text index. `terms` are OR-ed; the score is
     /// positive, larger is better.
     /// Hidden turns are left out unless `include_hidden`.
-    pub fn lexical_search(&self, terms: &[String], limit: usize, include_hidden: bool) -> Result<Vec<(i64, f64)>> {
+    /// `reach` narrows the search itself, so the `limit` best are the best
+    /// of what the caller may see.
+    pub fn lexical_search(
+        &self,
+        terms: &[String],
+        limit: usize,
+        include_hidden: bool,
+        reach: &Reach<'_>,
+    ) -> Result<Vec<(i64, f64)>> {
         if terms.is_empty() {
             return Ok(Vec::new());
         }
         let query = terms.iter().map(|t| format!("\"{}\"", t.replace('"', ""))).collect::<Vec<_>>().join(" OR ");
-        let mut stmt = self.conn.prepare(
+        let mut args: Vec<Value> = vec![query.into(), i64::from(include_hidden).into()];
+        let within = reach.clause("rowid", &mut args);
+        args.push((limit as i64).into());
+        let sql = format!(
             "SELECT rowid, -bm25(turns_fts) AS score FROM turns_fts
-             WHERE turns_fts MATCH ?1
-               AND (?3 OR rowid NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1))
-             ORDER BY score DESC, rowid DESC LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![query, limit as i64, include_hidden], |r| Ok((r.get(0)?, r.get(1)?)))?;
+             WHERE turns_fts MATCH ?
+               AND (? OR rowid NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1)){within}
+             ORDER BY score DESC, rowid DESC LIMIT ?"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     /// Turns mentioning any of `keys`, with the count of distinct keys each
     /// mentions. Larger counts first.
-    pub fn turns_mentioning(&self, keys: &[String], limit: usize, include_hidden: bool) -> Result<Vec<(i64, u32)>> {
+    pub fn turns_mentioning(
+        &self,
+        keys: &[String],
+        limit: usize,
+        include_hidden: bool,
+        reach: &Reach<'_>,
+    ) -> Result<Vec<(i64, u32)>> {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
         let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let mut args: Vec<Value> = keys.iter().map(|k| k.clone().into()).collect();
+        args.push(i64::from(include_hidden).into());
+        let within = reach.clause("turn_id", &mut args);
+        args.push((limit as i64).into());
         let sql = format!(
             "SELECT turn_id, COUNT(DISTINCT entity) AS n FROM turn_entities
              WHERE entity IN ({placeholders})
-               AND (? OR turn_id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1))
+               AND (? OR turn_id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1)){within}
              GROUP BY turn_id ORDER BY n DESC, turn_id DESC LIMIT ?"
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let mut args: Vec<rusqlite::types::Value> = keys.iter().map(|k| k.clone().into()).collect();
-        args.push(i64::from(include_hidden).into());
-        args.push((limit as i64).into());
         let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u32)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -759,36 +878,55 @@ impl Store {
 
     /// Sessions whose activity overlaps `[since, until]`, most recently
     /// active first. Either bound may be open.
+    /// `scope` keeps only the sessions holding a turn in it.
     pub fn list_sessions_between(
         &self,
         since: Option<i64>,
         until: Option<i64>,
+        scope: Option<&str>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<SessionSummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, COUNT(*), MIN(ts), MAX(ts) FROM turns
+            "SELECT session_id, COUNT(*), MIN(ts), MAX(ts), MAX(scope) FROM turns
+             WHERE ?5 IS NULL OR scope = ?5
              GROUP BY session_id
              HAVING (?1 IS NULL OR MAX(ts) >= ?1) AND (?2 IS NULL OR MIN(ts) <= ?2)
              ORDER BY MAX(ts) DESC, session_id
              LIMIT ?3 OFFSET ?4",
         )?;
-        let rows = stmt.query_map(params![since, until, limit, offset], |r| {
-            Ok(SessionSummary { session_id: r.get(0)?, turns: r.get(1)?, first_ts: r.get(2)?, last_ts: r.get(3)? })
-        })?;
+        let rows = stmt.query_map(params![since, until, limit, offset, scope], row_to_session)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     /// How many sessions overlap `[since, until]`.
-    pub fn count_sessions_between(&self, since: Option<i64>, until: Option<i64>) -> Result<u64> {
+    pub fn count_sessions_between(&self, since: Option<i64>, until: Option<i64>, scope: Option<&str>) -> Result<u64> {
         Ok(self.conn.query_row(
             "SELECT COUNT(*) FROM (
-                SELECT session_id FROM turns GROUP BY session_id
+                SELECT session_id FROM turns WHERE ?3 IS NULL OR scope = ?3 GROUP BY session_id
                 HAVING (?1 IS NULL OR MAX(ts) >= ?1) AND (?2 IS NULL OR MIN(ts) <= ?2)
              )",
-            params![since, until],
+            params![since, until, scope],
             |r| r.get::<_, i64>(0).map(|n| n as u64),
         )?)
+    }
+
+    /// The scopes in use with what each holds, largest first. Unscoped
+    /// turns are the empty scope, listed only beside a real one.
+    pub fn scopes(&self, limit: usize) -> Result<Vec<ScopeSummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT scope, COUNT(*), COUNT(DISTINCT session_id) FROM turns
+             GROUP BY scope ORDER BY COUNT(*) DESC, scope LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit as i64], |r| {
+            Ok(ScopeSummary {
+                scope: r.get(0)?,
+                turns: r.get::<_, i64>(1)? as u64,
+                sessions: r.get::<_, i64>(2)? as u64,
+            })
+        })?;
+        let scopes = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(if scopes.iter().all(|s| s.scope.is_empty()) { Vec::new() } else { scopes })
     }
 
     /// One session's summary, if it has any turns.
@@ -796,16 +934,10 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT session_id, COUNT(*), MIN(ts), MAX(ts) FROM turns WHERE session_id = ?1 GROUP BY session_id",
+                "SELECT session_id, COUNT(*), MIN(ts), MAX(ts), MAX(scope) FROM turns
+                 WHERE session_id = ?1 GROUP BY session_id",
                 [session_id],
-                |r| {
-                    Ok(SessionSummary {
-                        session_id: r.get(0)?,
-                        turns: r.get(1)?,
-                        first_ts: r.get(2)?,
-                        last_ts: r.get(3)?,
-                    })
-                },
+                row_to_session,
             )
             .optional()?)
     }
@@ -880,14 +1012,28 @@ impl Store {
 
     /// The ids of the turns in the most recent window of the store, across
     /// sessions, for temporal queries.
-    pub fn recent_turn_ids(&self, limit: usize, include_hidden: bool) -> Result<Vec<i64>> {
-        let mut stmt = self.conn.prepare(
+    pub fn recent_turn_ids(&self, limit: usize, include_hidden: bool, reach: &Reach<'_>) -> Result<Vec<i64>> {
+        let mut args: Vec<Value> = vec![i64::from(include_hidden).into()];
+        let within = reach.clause("id", &mut args);
+        args.push((limit as i64).into());
+        let sql = format!(
             "SELECT id FROM turns
-             WHERE ?2 OR id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1)
-             ORDER BY ts DESC, id DESC LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit as i64, include_hidden], |r| r.get(0))?;
+             WHERE (? OR id NOT IN (SELECT turn_id FROM turn_flags WHERE hidden = 1)){within}
+             ORDER BY ts DESC, id DESC LIMIT ?"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Every turn id inside `reach`, for the dense view: its index is in
+    /// memory and can only be narrowed by id.
+    pub fn turn_ids_within(&self, reach: &Reach<'_>) -> Result<HashSet<i64>> {
+        let mut args: Vec<Value> = Vec::new();
+        let conditions = reach.conditions(&mut args);
+        let mut stmt = self.conn.prepare(&format!("SELECT id FROM turns WHERE {conditions}"))?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<HashSet<_>>>()?)
     }
 
     // --- reads: embeddings --------------------------------------------------
@@ -1016,10 +1162,11 @@ pub(crate) fn insert_one(
     let uuid = input.uuid.clone().unwrap_or_else(|| derived_uuid(input));
     let ts = input.ts.unwrap_or_else(now_ms);
     let created_at = now_ms();
+    let scope = input.scope.as_deref().map(str::trim).unwrap_or_default();
     let inserted = tx.execute(
-        "INSERT OR IGNORE INTO turns (uuid, session_id, speaker, text, ts, created_at, kind)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![uuid, input.session_id, input.speaker, input.text, ts, created_at, kind.as_str()],
+        "INSERT OR IGNORE INTO turns (uuid, session_id, speaker, text, ts, created_at, kind, scope)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![uuid, input.session_id, input.speaker, input.text, ts, created_at, kind.as_str(), scope],
     )?;
     if inserted != 1 {
         let id: i64 = tx.query_row("SELECT id FROM turns WHERE uuid = ?1", [&uuid], |r| r.get(0))?;
@@ -1232,6 +1379,17 @@ pub(crate) fn row_to_turn(r: &rusqlite::Row<'_>) -> rusqlite::Result<Turn> {
         text: r.get(4)?,
         ts: r.get(5)?,
         kind: TurnKind::parse(&r.get::<_, String>(6)?),
+        scope: r.get(7)?,
+    })
+}
+
+fn row_to_session(r: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
+    Ok(SessionSummary {
+        session_id: r.get(0)?,
+        turns: r.get(1)?,
+        first_ts: r.get(2)?,
+        last_ts: r.get(3)?,
+        scope: r.get(4)?,
     })
 }
 
@@ -1310,7 +1468,14 @@ mod tests {
     use super::*;
 
     fn turn(session: &str, text: &str, ts: i64) -> TurnInput {
-        TurnInput { session_id: session.into(), speaker: "user".into(), text: text.into(), ts: Some(ts), uuid: None }
+        TurnInput {
+            session_id: session.into(),
+            speaker: "user".into(),
+            text: text.into(),
+            ts: Some(ts),
+            uuid: None,
+            scope: None,
+        }
     }
 
     fn open() -> (tempfile::TempDir, Store) {
@@ -1372,8 +1537,8 @@ mod tests {
             store.neighbours("maya okafor", 5).unwrap(),
             vec![("lisbon".into(), 1), ("project heron".into(), 1)]
         );
-        assert_eq!(store.turns_mentioning(&["lisbon".into()], 10, false).unwrap(), vec![(2, 1)]);
-        let hits = store.lexical_search(&["billing".into()], 10, false).unwrap();
+        assert_eq!(store.turns_mentioning(&["lisbon".into()], 10, false, &Reach::default()).unwrap(), vec![(2, 1)]);
+        let hits = store.lexical_search(&["billing".into()], 10, false, &Reach::default()).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 1);
         assert_eq!(store.count_segments(Level::Window).unwrap(), 1);
@@ -1390,7 +1555,7 @@ mod tests {
         assert_eq!(store.count_turns().unwrap(), 1);
         assert_eq!(store.entity_stat("maya okafor").unwrap().unwrap().turns, 1);
         assert!(store.entity_stat("lisbon").unwrap().is_none());
-        assert!(store.lexical_search(&["lisbon".into()], 10, false).unwrap().is_empty());
+        assert!(store.lexical_search(&["lisbon".into()], 10, false, &Reach::default()).unwrap().is_empty());
         assert_eq!(store.count_segments(Level::Window).unwrap(), 1);
         assert_eq!(store.delete_session("nope").unwrap(), 0);
         assert_eq!(store.generation().unwrap(), 1, "an empty delete invalidates nothing");
@@ -1466,7 +1631,7 @@ mod tests {
         assert_eq!(store.generation().unwrap(), stale + 2);
         assert_eq!(store.count_turns().unwrap(), 0);
         assert!(store.entity_stat("maya okafor").unwrap().is_none());
-        assert!(store.lexical_search(&["lisbon".into()], 10, false).unwrap().is_empty());
+        assert!(store.lexical_search(&["lisbon".into()], 10, false, &Reach::default()).unwrap().is_empty());
         assert_eq!(store.count_segments(Level::Window).unwrap(), 0);
         assert_eq!(store.embedder_spec().unwrap(), Some(EmbedderSpec::Hash), "meta stays");
     }
@@ -1557,5 +1722,40 @@ mod tests {
         assert_eq!(rows.iter().map(|r| r.1).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(rows[0].2, dense::hash_embed("t1"));
         assert_eq!(store.count_backlog("hash-384").unwrap(), 0);
+    }
+
+    /// A v5 file is today's store without `turns.scope` and its index, so
+    /// one is made by taking exactly those away.
+    #[test]
+    fn a_v5_store_gains_the_scope_column_without_a_rebuild() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let Opened { mut store, .. } = Store::open(dir.path()).unwrap();
+            insert(&mut store, &turn("a", "Maya Okafor owns the billing service.", 1_000));
+            insert(&mut store, &turn("b", "Kenji lives in Lisbon.", 2_000));
+            store
+                .conn
+                .execute_batch(
+                    "DROP INDEX turns_scope;
+                     ALTER TABLE turns DROP COLUMN scope;
+                     UPDATE meta SET value = '5' WHERE key = 'schema_version';",
+                )
+                .unwrap();
+        }
+        let Opened { mut store, needs_rebuild } = Store::open(dir.path()).unwrap();
+        assert!(!needs_rebuild, "a scope is a column on the turn; nothing derived changes");
+        assert_eq!(store.meta_i64("schema_version").unwrap(), SCHEMA_VERSION);
+        let turns = store.all_turns().unwrap();
+        assert_eq!(turns.len(), 2);
+        assert!(turns.iter().all(|t| t.scope.is_empty()), "old turns are unscoped");
+        assert_eq!(store.count_entities().unwrap(), 3, "the derived tables are as they were");
+        assert!(store.scopes(10).unwrap().is_empty());
+
+        let scoped = TurnInput { scope: Some("project:atlas".into()), ..turn("c", "Atlas ships on Friday.", 3_000) };
+        let id = insert(&mut store, &scoped).id();
+        let reach = Reach { scope: Some("project:atlas"), ..Reach::default() };
+        assert_eq!(store.recent_turn_ids(10, false, &reach).unwrap(), vec![id]);
+        assert_eq!(store.turn_ids_within(&reach).unwrap(), HashSet::from([id]));
+        assert_eq!(store.recent_turn_ids(10, false, &Reach::default()).unwrap().len(), 3);
     }
 }

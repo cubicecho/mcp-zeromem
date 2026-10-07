@@ -1,9 +1,10 @@
-import type { RecallRequest } from '@mcp-zeromem/shared';
+import type { Abstained, RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import { SearchIcon } from 'lucide-react';
+import { CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { FormField } from '@/components/form-field';
 import { EvidenceList } from '@/components/memory/evidence-list';
+import { ScopeSelect } from '@/components/memory/scope-select';
 import { TraceView } from '@/components/memory/trace-view';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
@@ -12,7 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useRecall, useRecallTrace } from '@/lib/queries';
+import { formatWindow } from '@/lib/format';
+import { useRecall, useRecallTrace, useServerStatus } from '@/lib/queries';
 
 export const Route = createFileRoute('/recall')({
   component: RecallPage,
@@ -27,6 +29,8 @@ export function RecallPage() {
   const [text, setText] = useState('');
   const [topK, setTopK] = useState(5);
   const [excludeSession, setExcludeSession] = useState('');
+  const [scope, setScope] = useState('');
+  const scopes = useServerStatus().data?.engine.scopes;
   const [submitted, setSubmitted] = useState<RecallRequest | null>(null);
   const [mode, setMode] = useState<'evidence' | 'trace'>('evidence');
   const result = useRecall(mode === 'evidence' ? submitted : null);
@@ -43,6 +47,7 @@ export function RecallPage() {
       top_k: topK,
       detail: 'full',
       ...(excludeSession.trim() ? { exclude_session: excludeSession.trim() } : {}),
+      ...(scope ? { scope } : {}),
     });
   };
 
@@ -93,6 +98,13 @@ export function RecallPage() {
               />
             }
           />
+          {scopes?.some((item) => item.scope !== '') && (
+            <FormField
+              className="w-64"
+              label="Scope"
+              control={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
+            />
+          )}
         </div>
       </form>
 
@@ -126,10 +138,40 @@ export function RecallPage() {
               <span>Entities: {result.data.route.profile.entities.join(', ')}</span>
             ) : null}
             {result.data.route?.profile.temporal && <Badge variant="secondary">temporal</Badge>}
+            {result.data.route?.profile.history && <Badge variant="secondary">history</Badge>}
+            {result.data.route?.profile.window && (
+              <Badge variant="secondary">{formatWindow(result.data.route.profile.window)}</Badge>
+            )}
           </div>
+          {result.data.abstained && <AbstainedNotice abstained={result.data.abstained} />}
           <EvidenceList evidence={result.data.evidence} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The engine declined to answer. The evidence under this is the closest it
+ * found, and without the notice a near miss reads like a hit.
+ */
+function AbstainedNotice({ abstained }: { abstained: Abstained }) {
+  const missing = abstained.missing ?? [];
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm"
+    >
+      <CircleSlashIcon className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+      <div className="flex flex-col gap-1">
+        <p className="font-medium">Memory does not hold the answer.</p>
+        <p className="text-muted-foreground">
+          {missing.length > 0
+            ? `No turn mentions ${missing.join(', ')}.`
+            : `Nothing matches this closely (best score ${abstained.best.toFixed(2)}).`}{' '}
+          The turns below are the closest, and are probably not the answer.
+        </p>
+      </div>
     </div>
   );
 }

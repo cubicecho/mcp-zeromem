@@ -117,6 +117,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": false,
         "text": "What is the Quill budget?",
@@ -146,7 +149,7 @@
     "took_ms": 0
   },
   "small-q0001:exclude_session": {
-    "considered": 39,
+    "considered": 42,
     "evidence": [
       {
         "confidence": 1.0,
@@ -177,6 +180,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": false,
         "text": "What is the Quill budget?",
@@ -197,7 +203,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 39,
+          "candidates": 42,
           "view": "dense",
           "weight": 0.4
         }
@@ -323,6 +329,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": false,
         "text": "What is the Quill budget?",
@@ -352,7 +361,13 @@
     "took_ms": 0
   },
   "small-q0001:since": {
-    "considered": 25,
+    "abstained": {
+      "best": 0.16095,
+      "missing": [
+        "quill"
+      ]
+    },
+    "considered": 27,
     "evidence": [
       {
         "confidence": 1.0,
@@ -360,8 +375,8 @@
           "10-20",
           "ferrous"
         ],
-        "role": "primary",
-        "score": 0.229928,
+        "role": "supporting",
+        "score": 0.16095,
         "sources": [
           "dense"
         ],
@@ -380,8 +395,8 @@
           "beatriz moura",
           "melbourne"
         ],
-        "role": "primary",
-        "score": 0.212981,
+        "role": "supporting",
+        "score": 0.149087,
         "sources": [
           "dense"
         ],
@@ -393,69 +408,15 @@
           "ts": 1736519069000,
           "uuid": "29cec22e-f855-4585-82bc-e0ae58b5e679"
         }
-      },
-      {
-        "confidence": 0.861739,
-        "entities": [
-          "i'll"
-        ],
-        "role": "primary",
-        "score": 0.198138,
-        "sources": [
-          "dense"
-        ],
-        "turn": {
-          "id": 53,
-          "session_id": "small-s0005",
-          "speaker": "user",
-          "text": "I'll send the rest after lunch.",
-          "ts": 1736519375000,
-          "uuid": "29b58098-a100-4b11-98a4-0ac37f5021a8"
-        }
-      },
-      {
-        "confidence": 0.803804,
-        "entities": [
-          "i'll"
-        ],
-        "role": "primary",
-        "score": 0.184817,
-        "sources": [
-          "dense"
-        ],
-        "turn": {
-          "id": 38,
-          "session_id": "small-s0004",
-          "speaker": "user",
-          "text": "I'll send the rest after lunch.",
-          "ts": 1736406159000,
-          "uuid": "d49d5107-75b1-4197-8866-7bbd381d92e7"
-        }
-      },
-      {
-        "confidence": 0.753262,
-        "entities": [
-          "i'll"
-        ],
-        "role": "primary",
-        "score": 0.173196,
-        "sources": [
-          "dense"
-        ],
-        "turn": {
-          "id": 29,
-          "session_id": "small-s0003",
-          "speaker": "user",
-          "text": "I'll send the rest after lunch.",
-          "ts": 1736289891000,
-          "uuid": "b394714c-ae84-4186-b3ad-6cd2da7c3368"
-        }
       }
     ],
     "query": "What is the Quill budget?",
     "route": {
       "profile": {
         "entities": [
+          "quill"
+        ],
+        "names": [
           "quill"
         ],
         "question": true,
@@ -478,7 +439,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 25,
+          "candidates": 27,
           "view": "dense",
           "weight": 0.4
         }
@@ -608,6 +569,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": true,
         "text": "What is the latest on this: What is the Quill budget?",
@@ -676,7 +640,7 @@
     "took_ms": 0
   },
   "small-q0001:until": {
-    "considered": 26,
+    "considered": 27,
     "evidence": [
       {
         "confidence": 1.0,
@@ -793,6 +757,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": false,
         "text": "What is the Quill budget?",
@@ -813,7 +780,7 @@
           "weight": 0.5
         },
         {
-          "candidates": 26,
+          "candidates": 27,
           "view": "dense",
           "weight": 0.4
         }
@@ -940,6 +907,9 @@
         "entities": [
           "quill"
         ],
+        "names": [
+          "quill"
+        ],
         "question": true,
         "temporal": false,
         "text": "What date is Quill's security review?",
@@ -1000,6 +970,9 @@
     "route": {
       "profile": {
         "entities": [
+          "mateo quiroga"
+        ],
+        "names": [
           "mateo quiroga"
         ],
         "question": true,
@@ -1124,24 +1097,25 @@
         }
       },
       {
-        "confidence": 0.667444,
+        "confidence": 0.629609,
         "entities": [
-          "10-20",
-          "ferrous"
+          "basalt",
+          "redis"
         ],
         "role": "supporting",
-        "score": 0.679996,
+        "score": 0.641449,
         "sources": [
           "lexical",
+          "entity",
           "dense"
         ],
         "turn": {
-          "id": 36,
-          "session_id": "small-s0004",
+          "id": 25,
+          "session_id": "small-s0003",
           "speaker": "user",
-          "text": "Still the case: Ferrous launch date is October 20.",
-          "ts": 1736405874000,
-          "uuid": "e27f8c34-79c5-40b7-b548-15299172ae38"
+          "text": "Basalt does scheduling with Redis.",
+          "ts": 1736289451000,
+          "uuid": "b23a7921-a9ad-44bc-94d6-88b4c8583242"
         }
       }
     ],
@@ -1149,6 +1123,9 @@
     "route": {
       "profile": {
         "entities": [
+          "basalt"
+        ],
+        "names": [
           "basalt"
         ],
         "question": true,
@@ -1207,13 +1184,13 @@
         }
       },
       {
-        "confidence": 0.560726,
+        "confidence": 0.392508,
         "entities": [
           "mateo quiroga",
           "melbourne"
         ],
         "role": "supporting",
-        "score": 0.571272,
+        "score": 0.39989,
         "sources": [
           "lexical",
           "dense"
@@ -1232,6 +1209,9 @@
     "route": {
       "profile": {
         "entities": [
+          "tomasz wierzbicki"
+        ],
+        "names": [
           "tomasz wierzbicki"
         ],
         "question": true,
@@ -1383,6 +1363,9 @@
         "entities": [
           "basalt"
         ],
+        "names": [
+          "basalt"
+        ],
         "question": true,
         "temporal": false,
         "text": "Which tool handles scheduling on Basalt?",
@@ -1532,6 +1515,9 @@
         "entities": [
           "basalt"
         ],
+        "names": [
+          "basalt"
+        ],
         "question": true,
         "temporal": false,
         "text": "Who is responsible for Basalt's data warehouse?",
@@ -1654,24 +1640,23 @@
         }
       },
       {
-        "confidence": 0.610459,
+        "confidence": 0.532378,
         "entities": [
-          "06-19",
-          "quill"
+          "project ferrous"
         ],
         "role": "supporting",
-        "score": 0.597588,
+        "score": 0.521153,
         "sources": [
           "lexical",
           "dense"
         ],
         "turn": {
-          "id": 16,
-          "session_id": "small-s0002",
+          "id": 30,
+          "session_id": "small-s0004",
           "speaker": "user",
-          "text": "Heads up, Quill security review date is June 19.",
-          "ts": 1736256196000,
-          "uuid": "a7881716-62df-4643-9f46-4c5293d0844c"
+          "text": "Quick sync on Project Ferrous before standup.",
+          "ts": 1736405229000,
+          "uuid": "970cdbef-1713-4cf9-aa97-a369de31f42b"
         }
       }
     ],
@@ -1679,6 +1664,9 @@
     "route": {
       "profile": {
         "entities": [
+          "ferrous"
+        ],
+        "names": [
           "ferrous"
         ],
         "question": true,
@@ -1829,6 +1817,9 @@
         "entities": [
           "basalt"
         ],
+        "names": [
+          "basalt"
+        ],
         "question": true,
         "temporal": false,
         "text": "What is the Basalt budget?",
@@ -1903,33 +1894,15 @@
           "ts": 1736518857000,
           "uuid": "b0e0bee6-6b39-49b8-a561-832893b1fdca"
         }
-      },
-      {
-        "confidence": 0.379813,
-        "entities": [
-          "$670k",
-          "basalt"
-        ],
-        "role": "supporting",
-        "score": 0.387408,
-        "sources": [
-          "entity",
-          "dense"
-        ],
-        "turn": {
-          "id": 51,
-          "session_id": "small-s0005",
-          "speaker": "user",
-          "text": "Still the case: Basalt has $670k to spend this quarter.",
-          "ts": 1736519232000,
-          "uuid": "e0b6dee2-ab69-4ef7-9656-d230ace35a12"
-        }
       }
     ],
     "query": "Where is Beatriz Moura based?",
     "route": {
       "profile": {
         "entities": [
+          "beatriz moura"
+        ],
+        "names": [
           "beatriz moura"
         ],
         "question": true,
