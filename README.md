@@ -483,6 +483,7 @@ npm run curate -- sweep --focus supersession    # one kind of lead
 npm run curate -- session --session <id>
 npm run curate -- notes
 npm run curate -- entities --entity "Kenji"
+npm run curate -- brief --scope project:atlas   # the standing brief; every scope that needs one without --scope
 npm run curate -- sweep --dry-run               # store served read-only: it reports, changes nothing
 ```
 
