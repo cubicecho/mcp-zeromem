@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "bin": {
-    "mcp-zeromem-stdio": "dist/stdio.js"
+    "mcp-zeromem-stdio": "dist/stdio.js",
+    "mcp-zeromem-curate": "dist/curate.js"
   },
   "scripts": {
     "dev": "DATA_DIR=../data PORT=3001 SECURE_LOCAL_NET=true node --env-file-if-exists=../.env --watch src/index.ts",
     "dev:stdio": "DATA_DIR=../data node --env-file-if-exists=../.env src/stdio.ts",
+    "dev:curate": "DATA_DIR=../data node --env-file-if-exists=../.env src/curate.ts",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

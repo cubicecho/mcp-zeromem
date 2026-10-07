@@ -401,6 +401,38 @@ for await (const message of query({
 }
 ```
 
+### A local model as the curator
+
+`mcp-zeromem-curate` is that script for a model you host: an MCP client that hands a
+curator prompt to any OpenAI-compatible `chat/completions` endpoint with tool calls
+(Lemonade, llama.cpp, Ollama, vLLM) and relays the model's calls until it stops. The
+server still runs no agent, and every rule the model follows is the prompt the server
+serves.
+
+```bash
+ZEROMEM_CURATOR_LLM_URL=http://framework.lan:13305/api/v1   # requests go to {URL}/chat/completions
+ZEROMEM_CURATOR_LLM_MODEL=qwen3.6-moe-35b-a3b-FLM
+
+npm run curate                                  # the full sweep
+npm run curate -- sweep --focus supersession    # one kind of lead
+npm run curate -- session --session <id>
+npm run curate -- notes
+npm run curate -- entities --entity "Kenji"
+npm run curate -- sweep --dry-run               # store served read-only: it reports, changes nothing
+```
+
+With `ZEROMEM_CURATOR_MCP_URL` (and `MCP_ZEROMEM_CURATOR_TOKEN`) it curates a running
+server over `/mcp`; without it, it opens the store under `DATA_DIR` in its own process,
+and a note it writes is embedded by the server's worker or `zm embedder drain`. Progress
+goes to stderr and a JSON report to stdout (`finished`, `closed`, steps, tool calls and
+errors, tokens). The exit code is 1 when the model ran out of `ZEROMEM_CURATOR_MAX_STEPS`
+(40) before finishing, so cron notices. A tool call the model gets wrong (a missing
+field, a string where a boolean belongs) comes back to it as the tool's error and it
+can correct itself; a long result is cut with a marker that says so.
+
+A small model is a worse curator than a large one, and nothing here checks its
+judgement. Start with `--dry-run`, then review the first real runs on the Curation page.
+
 Review a run on the Curation page. Undoing a run restores recall to what it was.
 
 ## How recall works
@@ -497,6 +529,47 @@ prints what it kept and what it could not place. The result lands in
 `target/eval/external/`; it is never committed and no floor reads it. The
 importer is tested against a hand-written sample in the published shape, not
 against the dataset itself.
+
+### Answering from memory, end to end
+
+The numbers above say the right turn was returned. `npm run eval:answers` asks
+whether a model can use it: it loads a harness corpus into a store of its own,
+gives a model the two memory reads (`zeromem_recall`, `zeromem_read_session`)
+and the labeled questions, and has a judge model compare each answer with the
+turns the labels grade 2. For a question the store cannot answer, the right
+reply is "I don't know."
+
+```bash
+ZEROMEM_EVAL_LLM_URL=http://framework.lan:13306/v1    # the model under test; it also grades,
+ZEROMEM_EVAL_LLM_MODEL=Qwen3.6-35B-A3B                # unless ZEROMEM_EVAL_JUDGE_LLM_* names another
+
+npm run eval:answers -- crates/zeromem-harness/fixtures/small
+npm run eval:answers -- crates/zeromem-harness/fixtures/large --limit 60 --out answers.json
+npm run eval:answers -- crates/zeromem-harness/fixtures/small --curate   # the curator model sweeps first
+```
+
+The report gives, per kind of question, how many were right, wrong, declined or
+cut off at the reply cap (`ZEROMEM_EVAL_LLM_MAX_TOKENS`, 4096) before the model
+answered, with the tool calls and prompt tokens an answer took. Both ends are
+models and the grader here is the model under test, so the number moves with the
+model and is recorded, never gated. `--curate` is the only measure there is of a
+model curator, as opposed to the oracle one in `tests/eval.rs`.
+
+One run, Qwen3.6-35B-A3B answering and grading, hash-384, 60 questions spread
+over the large corpus and its probes:
+
+| question | asked | right | wrong value | declined | cut off | prompt tokens / answer |
+| --- | --- | --- | --- | --- | --- | --- |
+| current value | 27 | 25 | 2 | 0 | 0 | 4,538 |
+| history ("before") | 11 | 6 | 2 | 0 | 3 | 4,897 |
+| as of a date | 17 | 8 | 3 | 3 | 3 | 8,877 |
+| not in the store | 5 | 4 | 0 | 4 | 1 | 23,390 |
+
+Both current-value misses named an older value of a fact that changed four or
+more times. A history question counts only the value just before the current
+one, so naming an earlier one is wrong. A question the store cannot answer
+costs five times the tokens of one it can, because the model keeps searching
+before it gives up.
 
 ### Comparing against upstream
 
