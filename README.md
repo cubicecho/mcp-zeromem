@@ -401,6 +401,38 @@ for await (const message of query({
 }
 ```
 
+### A local model as the curator
+
+`mcp-zeromem-curate` is that script for a model you host: an MCP client that hands a
+curator prompt to any OpenAI-compatible `chat/completions` endpoint with tool calls
+(Lemonade, llama.cpp, Ollama, vLLM) and relays the model's calls until it stops. The
+server still runs no agent, and every rule the model follows is the prompt the server
+serves.
+
+```bash
+ZEROMEM_CURATOR_LLM_URL=http://framework.lan:13305/api/v1   # requests go to {URL}/chat/completions
+ZEROMEM_CURATOR_LLM_MODEL=qwen3.6-moe-35b-a3b-FLM
+
+npm run curate                                  # the full sweep
+npm run curate -- sweep --focus supersession    # one kind of lead
+npm run curate -- session --session <id>
+npm run curate -- notes
+npm run curate -- entities --entity "Kenji"
+npm run curate -- sweep --dry-run               # store served read-only: it reports, changes nothing
+```
+
+With `ZEROMEM_CURATOR_MCP_URL` (and `MCP_ZEROMEM_CURATOR_TOKEN`) it curates a running
+server over `/mcp`; without it, it opens the store under `DATA_DIR` in its own process,
+and a note it writes is embedded by the server's worker or `zm embedder drain`. Progress
+goes to stderr and a JSON report to stdout (`finished`, `closed`, steps, tool calls and
+errors, tokens). The exit code is 1 when the model ran out of `ZEROMEM_CURATOR_MAX_STEPS`
+(40) before finishing, so cron notices. A tool call the model gets wrong (a missing
+field, a string where a boolean belongs) comes back to it as the tool's error and it
+can correct itself; a long result is cut with a marker that says so.
+
+A small model is a worse curator than a large one, and nothing here checks its
+judgement. Start with `--dry-run`, then review the first real runs on the Curation page.
+
 Review a run on the Curation page. Undoing a run restores recall to what it was.
 
 ## How recall works

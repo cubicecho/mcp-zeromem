@@ -55,6 +55,7 @@ scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-ha
 npm run build            # build:native → shared typecheck → server tsc → app vite build
 npm start                # node server/dist/index.js
 npm run stdio            # node server/dist/stdio.js (stdio MCP)
+npm run curate           # node server/dist/curate.js: one curation run by a local model (dev: npm run dev:curate)
 npm run build:docker     # docker build -t mcp-zeromem .
 docker compose up        # ./data mounted at /data, port 3200 on the host
 ```
@@ -129,6 +130,13 @@ and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is
 `format: text` keeps line breaks and clips only past `ZEROMEM_RECALL_TEXT_LIMIT` (`max_chars` per
 call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
 model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
+
+**The curator runner is a client, not part of the server.** `server/src/curate.ts`
+(`mcp-zeromem-curate`) connects as an MCP client, over `/mcp` or to a gateway it builds in-process
+on the store under `DATA_DIR`, fetches a curator prompt and drives an OpenAI-compatible model
+through it (`server/src/curator-agent/`). It holds no curation rule: a change to what the curator
+should do goes in `docs/curator-*.md`, never in the runner. Its tests script the model and use a
+real store.
 
 **Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
 verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,

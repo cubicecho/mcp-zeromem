@@ -26,6 +26,8 @@
     "build:docker": "docker build -t mcp-zeromem .",
     "start": "node --env-file-if-exists=.env server/dist/index.js",
     "stdio": "node --env-file-if-exists=.env server/dist/stdio.js",
+    "curate": "node --env-file-if-exists=.env server/dist/curate.js",
+    "dev:curate": "npm run dev:curate -w server --",
     "lint": "biome check . && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
     "format": "biome check --write . && cargo fmt --all",
     "typecheck": "tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p app/tsconfig.json",
