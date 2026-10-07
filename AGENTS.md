@@ -241,8 +241,8 @@ Labeled queries carry graded relevance (2 = states the current value, 1 = a supe
 `zeromem_harness::eval` turns a ranked list into recall@k / MRR / nDCG, and `tests/eval.rs`
 holds the floors — the quality gate. `probes.jsonl` holds the questions the queries cannot ask
 (`ask`: `history`, `as_of`, `abstain`), drawn from their own random stream so they never move a
-turn or a query; `PROBE_FLOORS` gates the first two before and after the oracle curator, and
-abstention and tokens per answer are recorded, not gated. `zm-harness import longmemeval` plus
+turn or a query; `PROBE_FLOORS` gates the first two before and after the oracle curator,
+`ABSTAIN_FLOORS` the third, and tokens per answer is recorded, not gated. `zm-harness import longmemeval` plus
 `ZEROMEM_EVAL_CORPUS=<dir>` scores an outside benchmark; that is recorded under
 `target/eval/external/` and never committed or gated. Raise a floor when retrieval improves; never lower one
 without saying why in the commit. `tests/golden.rs` snapshots full results for the small corpus
