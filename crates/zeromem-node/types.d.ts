@@ -26,6 +26,8 @@ export interface Stats {
   hidden: number;
   /** Curator notes. */
   notes: number;
+  /** Largest first; left out while every turn is unscoped. */
+  scopes?: ScopeSummary[];
 }
 
 export type EmbedderKind = 'onnx' | 'hash' | 'openai';
@@ -101,6 +103,15 @@ export interface SessionSummary {
   turns: number;
   first_ts: number;
   last_ts: number;
+  /** The scope its turns carry; left out when they carry none. */
+  scope?: string;
+}
+
+/** One scope and how much of the store it holds; the empty scope is the unscoped turns. */
+export interface ScopeSummary {
+  scope: string;
+  turns: number;
+  sessions: number;
 }
 
 /** One conversation in order: a whole session, or a window around one turn. */
@@ -128,6 +139,8 @@ export interface StoredTurn {
   ts: number;
   /** `note` for a curator's note; left out for an ordinary turn. */
   kind?: TurnKind;
+  /** Whose memory this is; left out for an unscoped turn. */
+  scope?: string;
 }
 
 export type ViewKind = 'lexical' | 'entity' | 'dense' | 'recent';

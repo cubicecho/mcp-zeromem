@@ -115,6 +115,34 @@ from stdin and remembers the transcript's user and assistant turns. Wire it to
 Set `ZEROMEM_SESSION_ID` on the server (or pass `exclude_session`) so recall
 does not hand the current conversation back to itself.
 
+### Scopes
+
+One store can hold several projects or people. A turn carries one free-form
+`scope` (`project:atlas`, `user:ben`); a turn without one is unscoped, which is
+every turn written before schema 6. Recall with a `scope` returns only that
+scope, matched exactly and never as a prefix; recall without one searches
+everything, as it always did.
+
+```bash
+zm ingest --scope project:atlas < atlas.jsonl      # for the lines that name none
+zm query "who owns billing" --scope project:atlas
+zm sessions --scope project:atlas
+zm hook --scope-from-cwd                           # scope = the basename of the hook's cwd
+```
+
+`ZEROMEM_SCOPE` is the default for all of the above and for `zeromem_recall`,
+`zeromem_remember` and `zeromem_ingest` on the server; pass `scope: ""` on a
+call to step outside it. `zeromem_stats` lists the scopes in the store.
+`zeromem_read_session` never applies the default, so a turn recall returned can
+always be expanded, and checks the scope only when asked to.
+
+The scope is not part of a turn's derived uuid: re-ingesting a transcript under
+a different scope is a duplicate, and the first write decides. A filter
+(`scope`, `session`, `since`, `until`, `exclude_session`) is applied inside each
+retrieval view, before its candidate cut, so a small scope in a large store is
+not crowded out by the turns around it. A curator note takes the scope of its
+sources and is refused when they span two.
+
 ## Tools
 
 | Tool | What it does |
@@ -176,6 +204,7 @@ The same operations are on the REST API the UI uses (`/api/status`,
 | `ZEROMEM_EMBEDDING_TIMEOUT_MS` | `5000` | Per-request timeout for the endpoint |
 | `ZEROMEM_MODELS` | `<DATA_DIR>/models` | Where the model is downloaded to (≈130 MB, once) |
 | `ZEROMEM_SESSION_ID` | — | Session left out of `zeromem_recall` by default |
+| `ZEROMEM_SCOPE` | — | Scope read and written when a call names none; see [Scopes](#scopes) |
 | `EVAL_HISTORY` | `docs/eval/history.jsonl` | The eval runs the Eval page charts |
 | `PORT` | `3000` | Listen port inside the container (published as 3200) |
 

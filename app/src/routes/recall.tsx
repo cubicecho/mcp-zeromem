@@ -4,6 +4,7 @@ import { SearchIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { FormField } from '@/components/form-field';
 import { EvidenceList } from '@/components/memory/evidence-list';
+import { ScopeSelect } from '@/components/memory/scope-select';
 import { TraceView } from '@/components/memory/trace-view';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
@@ -12,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useRecall, useRecallTrace } from '@/lib/queries';
+import { useRecall, useRecallTrace, useServerStatus } from '@/lib/queries';
 
 export const Route = createFileRoute('/recall')({
   component: RecallPage,
@@ -27,6 +28,8 @@ export function RecallPage() {
   const [text, setText] = useState('');
   const [topK, setTopK] = useState(5);
   const [excludeSession, setExcludeSession] = useState('');
+  const [scope, setScope] = useState('');
+  const scopes = useServerStatus().data?.engine.scopes;
   const [submitted, setSubmitted] = useState<RecallRequest | null>(null);
   const [mode, setMode] = useState<'evidence' | 'trace'>('evidence');
   const result = useRecall(mode === 'evidence' ? submitted : null);
@@ -43,6 +46,7 @@ export function RecallPage() {
       top_k: topK,
       detail: 'full',
       ...(excludeSession.trim() ? { exclude_session: excludeSession.trim() } : {}),
+      ...(scope ? { scope } : {}),
     });
   };
 
@@ -93,6 +97,13 @@ export function RecallPage() {
               />
             }
           />
+          {scopes?.some((item) => item.scope !== '') && (
+            <FormField
+              className="w-64"
+              label="Scope"
+              control={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
+            />
+          )}
         </div>
       </form>
 

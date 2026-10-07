@@ -28,6 +28,7 @@ fn turn(session: &str, uuid: &str, ts: i64, speaker: &str, text: &str) -> TurnIn
         text: text.into(),
         ts: Some(ts),
         uuid: Some(uuid.into()),
+        scope: None,
     }
 }
 

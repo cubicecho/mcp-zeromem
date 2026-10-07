@@ -24,7 +24,8 @@ export function EvidenceList({ evidence }: { evidence: Evidence[] }) {
               </Badge>
             ))}
             <span className="ml-auto">
-              {item.turn.session_id} · {item.turn.speaker} · {formatDateTime(item.turn.ts)}
+              {item.turn.session_id}
+              {item.turn.scope ? ` · ${item.turn.scope}` : ''} · {item.turn.speaker} · {formatDateTime(item.turn.ts)}
             </span>
           </div>
           <p className="whitespace-pre-wrap text-sm">{item.turn.text}</p>

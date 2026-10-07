@@ -3,6 +3,7 @@ import {
   pageQuerySchema,
   type SessionsResponse,
   type SessionTurnsResponse,
+  sessionsQuerySchema,
 } from '@mcp-zeromem/shared';
 import { Router } from 'express';
 import type { Config } from '../../config.ts';
@@ -20,7 +21,7 @@ export function createSessionsRouter(deps: SessionsDeps): Router {
 
   router.get('/', async (req, res, next) => {
     try {
-      const page = pageQuerySchema.parse(req.query);
+      const page = sessionsQuerySchema.parse(req.query);
       const body: SessionsResponse = { sessions: await deps.engine.listSessions(page) };
       res.json(body);
     } catch (err) {

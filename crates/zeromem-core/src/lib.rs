@@ -561,6 +561,7 @@ impl ZeroMem {
             curation_seq: self.store.curation_seq()?,
             hidden: self.store.count_hidden()?,
             notes: self.store.count_notes()?,
+            scopes: self.store.scopes(MAX_LISTED_SCOPES)?,
         })
     }
 
@@ -585,8 +586,13 @@ impl ZeroMem {
         })
     }
 
-    pub fn list_sessions(&self, limit: u32, offset: u32) -> Result<Vec<SessionSummary>> {
-        self.store.list_sessions(limit, offset)
+    /// Sessions, most recently active first. `scope` keeps the ones holding
+    /// turns in exactly that scope, counted and dated by those turns.
+    pub fn list_sessions(&self, limit: u32, offset: u32, scope: Option<&str>) -> Result<Vec<SessionSummary>> {
+        match scope.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(scope) => self.store.list_sessions_between(None, None, Some(scope), limit, offset),
+            None => self.store.list_sessions(limit, offset),
+        }
     }
 
     pub fn session_turns(&self, session_id: &str, limit: u32, offset: u32) -> Result<Vec<Turn>> {
@@ -895,7 +901,14 @@ mod tests {
     use super::*;
 
     fn turn(session: &str, text: &str, ts: i64) -> TurnInput {
-        TurnInput { session_id: session.into(), speaker: "user".into(), text: text.into(), ts: Some(ts), uuid: None }
+        TurnInput {
+            session_id: session.into(),
+            speaker: "user".into(),
+            text: text.into(),
+            ts: Some(ts),
+            uuid: None,
+            scope: None,
+        }
     }
 
     fn open(dir: &tempfile::TempDir) -> ZeroMem {

@@ -68,6 +68,8 @@ export const hierarchyOptionsSchema = z.object({
   until: z.coerce.number().int().optional(),
   /** Just this one session. */
   session: z.string().trim().min(1).optional(),
+  /** Only sessions in this scope. */
+  scope: z.string().trim().min(1).optional(),
 });
 export type HierarchyOptions = z.infer<typeof hierarchyOptionsSchema>;
 

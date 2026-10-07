@@ -31,6 +31,7 @@ import type {
   QueryTrace,
   RecallRequest,
   ServerStatus,
+  SessionsQuery,
   SessionsResponse,
   SessionTurnsResponse,
   SessionTurnsWithEntitiesResponse,
@@ -117,8 +118,11 @@ export function getStatus(): Promise<ServerStatus> {
 
 // --- sessions ---
 
-export function listSessions(page: PageQuery = {}): Promise<SessionsResponse> {
+export function listSessions(page: SessionsQuery = {}): Promise<SessionsResponse> {
   const params = new URLSearchParams();
+  if (page.scope) {
+    params.set('scope', page.scope);
+  }
   if (page.limit !== undefined) {
     params.set('limit', String(page.limit));
   }
