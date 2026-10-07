@@ -5,8 +5,10 @@ import { useState } from 'react';
 import { ActionButton } from '@/components/action-button';
 import { ConfirmButton } from '@/components/confirm-button';
 import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { ScopeSelect } from '@/components/memory/scope-select';
 import { PageHeader } from '@/components/page-header';
 import { QueryError, QueryState } from '@/components/query-state';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
@@ -18,7 +20,8 @@ export const Route = createFileRoute('/sessions')({
 });
 
 export function SessionsPage() {
-  const sessions = useSessions({ limit: 500 });
+  const [scope, setScope] = useState('');
+  const sessions = useSessions({ limit: 500, ...(scope ? { scope } : {}) });
   const status = useServerStatus();
   const [selected, setSelected] = useState<string | null>(null);
   const forget = useForgetSession();
@@ -42,6 +45,7 @@ export function SessionsPage() {
         className="px-0 pt-0"
         title="Sessions"
         description="Every conversation in the store, most recent first."
+        action={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
       />
 
       <QueryState
@@ -79,7 +83,14 @@ export function SessionsPage() {
                       className="cursor-pointer"
                       onClick={() => setSelected(session.session_id)}
                     >
-                      <TableCell className="font-mono text-xs">{session.session_id}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {session.session_id}
+                        {session.scope && (
+                          <Badge variant="outline" className="ml-2 font-sans">
+                            {session.scope}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{formatCount(session.turns)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDateTime(session.first_ts)}

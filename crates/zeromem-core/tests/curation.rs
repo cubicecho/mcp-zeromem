@@ -16,6 +16,7 @@ fn turn(session: &str, uuid: &str, ts: i64, text: &str) -> TurnInput {
         text: text.into(),
         ts: Some(ts),
         uuid: Some(uuid.into()),
+        scope: None,
     }
 }
 
@@ -315,6 +316,7 @@ fn the_limits_and_the_minimum_age_hold() {
         text: "just now".into(),
         ts: None,
         uuid: Some("c1".into()),
+        scope: None,
     })
     .unwrap();
     let young = id_of(&zm, "c1");

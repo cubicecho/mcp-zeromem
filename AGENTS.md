@@ -186,6 +186,17 @@ the theme.
 ingests per minute for the last hour; nothing is persisted. The Eval page reads the committed
 `docs/eval/history.jsonl` (`EVAL_HISTORY` overrides), appended by `scripts/record-eval.sh`.
 
+**A scope is a filter pushed into the views, not a post-filter.** A turn carries one free-form
+`scope` (`turns.scope`, `''` = unscoped, skipped in JSON when empty); it is matched exactly, and it
+is not hashed into `derived_uuid`, so the first write of a turn decides its scope. `store::Reach`
+holds everything that narrows a recall (`scope`, `session`, `since`, `until`, `exclude_session`)
+and every view takes it into its SQL — the dense view through `turn_ids_within` — because a filter
+applied after `VIEW_LIMIT` starves a small scope in a large store
+(`tests/scope.rs::a_small_scope_is_not_starved`). An open `Reach` adds no clause, so an unfiltered
+query runs the SQL it always ran. `ZEROMEM_SCOPE` (`config.scope`) is the default for recall,
+remember and ingest; an explicit blank opts out, and `zeromem_read_session` never applies it. A
+note takes its sources' scope and cannot span two.
+
 **The harness comes before the feature.** `crates/zeromem-core/tests/oracle.rs` asserts that a
 store loaded from disk equals one rebuilt from the same turns, and `properties.rs` holds the
 proptest invariants (order independence, idempotent ingest, delete-then-reingest). Every derived

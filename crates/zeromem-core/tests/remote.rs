@@ -11,7 +11,14 @@ use zeromem_core::dense::{EmbedderChoice, EmbedderSpec, RemoteSpec};
 use zeromem_core::{Error, OpenOptions, QueryOptions, TurnInput, ZeroMem};
 
 fn turn(session: &str, text: &str, ts: i64) -> TurnInput {
-    TurnInput { session_id: session.into(), speaker: "user".into(), text: text.into(), ts: Some(ts), uuid: None }
+    TurnInput {
+        session_id: session.into(),
+        speaker: "user".into(),
+        text: text.into(),
+        ts: Some(ts),
+        uuid: None,
+        scope: None,
+    }
 }
 
 fn remote(server: &MockServer) -> RemoteSpec {

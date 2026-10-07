@@ -5,6 +5,7 @@ import {
   queryResultSchema,
   queryTraceSchema,
   recallOptionsSchema,
+  scopeSchema,
   sessionSummarySchema,
   statsSchema,
   storedTurnSchema,
@@ -35,6 +36,10 @@ export const pageQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 export type PageQuery = z.infer<typeof pageQuerySchema>;
+
+/** `GET /api/sessions` query: a page, optionally of one scope. */
+export const sessionsQuerySchema = pageQuerySchema.extend({ scope: scopeSchema.optional() });
+export type SessionsQuery = z.infer<typeof sessionsQuerySchema>;
 
 /** `GET /api/sessions` */
 export const sessionsResponseSchema = z.object({ sessions: z.array(sessionSummarySchema) });

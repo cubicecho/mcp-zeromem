@@ -28,6 +28,10 @@ fn turn() -> impl Strategy<Value = TurnInput> {
             text,
             ts: Some(ts),
             uuid: None,
+            // Scope is not part of the derived uuid, so it follows the
+            // session: a per-turn draw would make the first write win and
+            // the order matter.
+            scope: (session == "alpha").then(|| "project:alpha".to_string()),
         })
 }
 
@@ -125,7 +129,7 @@ proptest! {
         let (_d, mut zm) = open_temp();
         zm.ingest_many(&turns).unwrap();
         let snapshot = zm.snapshot().unwrap();
-        let sessions = zm.list_sessions(1000, 0).unwrap();
+        let sessions = zm.list_sessions(1000, 0, None).unwrap();
         let mut seen = 0usize;
         for s in &sessions {
             let got = zm.session_turns(&s.session_id, 1000, 0).unwrap();
@@ -145,7 +149,14 @@ proptest! {
 fn a_turn_without_a_timestamp_is_stamped_now() {
     let (_d, mut zm) = open_temp();
     let before = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
-    let t = TurnInput { session_id: "s".into(), speaker: "user".into(), text: "hello".into(), ts: None, uuid: None };
+    let t = TurnInput {
+        session_id: "s".into(),
+        speaker: "user".into(),
+        text: "hello".into(),
+        ts: None,
+        uuid: None,
+        scope: None,
+    };
     zm.ingest_turn(&t).unwrap();
     let stored = &zm.session_turns("s", 10, 0).unwrap()[0];
     assert!(stored.ts >= before && stored.ts <= before + 60_000, "{}", stored.ts);

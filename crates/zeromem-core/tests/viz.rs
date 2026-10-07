@@ -95,6 +95,7 @@ fn projection_is_cached_until_the_store_changes_and_overlays_a_query() {
         text: "An unrelated remark about Kestrel.".into(),
         ts: Some(1),
         uuid: None,
+        scope: None,
     })
     .unwrap();
     let after = zm.projection(&opts, None).unwrap();
