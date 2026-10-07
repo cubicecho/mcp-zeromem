@@ -87,6 +87,52 @@ pub fn summarise(k: usize, scores: &[QueryScore]) -> Summary {
     }
 }
 
+/// How well a ranker knows it has nothing: scored over questions the corpus
+/// never answers, against questions it does.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Abstention {
+    /// How many unanswerable questions were asked.
+    pub queries: usize,
+    /// The share of them that came back with evidence anyway. Lower is better.
+    pub answered: f64,
+    /// The chance that an answerable question's best score beats an
+    /// unanswerable one's: 1 means a threshold on the score separates them
+    /// perfectly, 0.5 that the score says nothing.
+    pub auc: f64,
+}
+
+/// `answerable` and `unanswerable` are the best score each question's
+/// evidence carried, `None` when it came back empty.
+pub fn abstention(answerable: &[Option<f64>], unanswerable: &[Option<f64>]) -> Abstention {
+    let answered = unanswerable.iter().filter(|s| s.is_some()).count();
+    let mut wins = 0.0;
+    for a in answerable {
+        for u in unanswerable {
+            let (a, u) = (a.unwrap_or(0.0), u.unwrap_or(0.0));
+            wins += if a > u {
+                1.0
+            } else if a == u {
+                0.5
+            } else {
+                0.0
+            };
+        }
+    }
+    let pairs = (answerable.len() * unanswerable.len()).max(1) as f64;
+    Abstention {
+        queries: unanswerable.len(),
+        answered: answered as f64 / unanswerable.len().max(1) as f64,
+        auc: wins / pairs,
+    }
+}
+
+/// What a piece of evidence costs the model that reads it, at the usual
+/// four characters to a token. An estimate, and the same one for every run,
+/// which is all a trend needs.
+pub fn estimate_tokens(text: &str) -> usize {
+    text.chars().count().div_ceil(4)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +191,23 @@ mod tests {
     }
 
     #[test]
+    fn abstention_counts_answers_and_separation() {
+        let a = abstention(&[Some(0.9), Some(0.8)], &[None, Some(0.1)]);
+        assert_eq!(a, Abstention { queries: 2, answered: 0.5, auc: 1.0 });
+        let a = abstention(&[Some(0.5)], &[Some(0.5), Some(0.7)]);
+        assert_eq!(a.answered, 1.0);
+        assert_eq!(a.auc, 0.25);
+    }
+
+    #[test]
+    fn tokens_round_up() {
+        assert_eq!(estimate_tokens(""), 0);
+        assert_eq!(estimate_tokens("abcd"), 1);
+        assert_eq!(estimate_tokens("abcde"), 2);
+        assert_eq!(estimate_tokens("Kraków"), 2);
+    }
+
+    #[test]
     fn evaluate_averages_over_queries() {
         let queries = vec![
             Query {
@@ -153,6 +216,7 @@ mod tests {
                 query: "?".into(),
                 latest_session_id: "s".into(),
                 relevant: rel(&[("a", 2)]),
+                ask: Default::default(),
             },
             Query {
                 id: "q2".into(),
@@ -160,6 +224,7 @@ mod tests {
                 query: "?".into(),
                 latest_session_id: "s".into(),
                 relevant: rel(&[("b", 2)]),
+                ask: Default::default(),
             },
         ];
         let summary = evaluate(&queries, 3, |q| if q.id == "q1" { ranked(&["a"]) } else { ranked(&["z"]) });

@@ -13,6 +13,8 @@
 //! - [`fixtures`]: the committed JSONL under `fixtures/`, regenerated with
 //!   `cargo run -p zeromem-harness -- gen` and checked for freshness by this
 //!   crate's own tests.
+//! - [`import`]: an outside benchmark converted to the same shape, for a
+//!   local run that nothing gates.
 //!
 //! The crate does not depend on `zeromem-core`; the engine's tests depend on
 //! it. Turns are emitted in the engine's JSONL ingest shape.
@@ -21,4 +23,5 @@ pub mod compare;
 pub mod corpus;
 pub mod eval;
 pub mod fixtures;
+pub mod import;
 pub mod rng;
