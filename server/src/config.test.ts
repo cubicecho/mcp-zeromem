@@ -8,6 +8,7 @@ describe('loadConfig', () => {
     expect(config).toEqual({
       dataDir: '/tmp/zm',
       port: 4000,
+      keepAliveTimeoutMs: 75_000,
       authToken: 'secret',
       readOnly: false,
       recallTextLimit: 2000,
@@ -20,6 +21,14 @@ describe('loadConfig', () => {
       curatorToken: null,
       curator: false,
     });
+  });
+
+  it('reads the keep-alive timeout, 0 included, and names the variable when it is nonsense', () => {
+    const env = { DATA_DIR: '/tmp/zm', SECURE_LOCAL_NET: '1' };
+    expect(loadConfig({ ...env, HTTP_KEEP_ALIVE_TIMEOUT_MS: '120000' }).keepAliveTimeoutMs).toBe(120_000);
+    expect(loadConfig({ ...env, HTTP_KEEP_ALIVE_TIMEOUT_MS: '0' }).keepAliveTimeoutMs).toBe(0);
+    expect(() => loadConfig({ ...env, HTTP_KEEP_ALIVE_TIMEOUT_MS: 'soon' })).toThrow(/HTTP_KEEP_ALIVE_TIMEOUT_MS/);
+    expect(() => loadConfig({ ...env, HTTP_KEEP_ALIVE_TIMEOUT_MS: '-1' })).toThrow(/HTTP_KEEP_ALIVE_TIMEOUT_MS/);
   });
 
   it('reads the recall text limit and names the variable when it is nonsense', () => {

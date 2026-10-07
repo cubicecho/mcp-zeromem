@@ -240,6 +240,7 @@ The same operations are on the REST API the UI uses (`/api/status`,
 | `ZEROMEM_SCOPE` | — | Scope read and written when a call names none; see [Scopes](#scopes) |
 | `EVAL_HISTORY` | `docs/eval/history.jsonl` | The eval runs the Eval page charts |
 | `PORT` | `3000` | Listen port inside the container (published as 3200) |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | `75000` | How long an idle client connection stays open (Node's own default is 5 s). Keep it above the idle timeout of any reverse proxy in front; `0` never closes one |
 
 `GET /api/status` is unauthenticated liveness and is what the healthcheck polls.
 It carries `embedder`, `embedder_is_fallback`, `embedder_active` and

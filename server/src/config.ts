@@ -13,6 +13,8 @@ const configSchema = z.object({
   /** Where the store lives; also exported to the engine as its home. */
   dataDir: z.string().min(1),
   port: z.number().int().positive(),
+  /** How long an idle client connection stays open, in ms; Node's own 5 s is shorter than the gap between tool calls. 0 never closes one. */
+  keepAliveTimeoutMs: z.number().int().nonnegative(),
   /** Bearer token guarding /mcp and the mutating REST routes; null when auth is off. */
   authToken: z.string().min(1).nullable(),
   /** Hide the write tools from the MCP listing and refuse the REST writes. */
@@ -117,6 +119,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, options: LoadOp
   const parsed = configSchema.safeParse({
     dataDir: path.resolve(envValue(env, 'DATA_DIR') ?? './data'),
     port: Number(envValue(env, 'PORT') ?? 3000),
+    // Above the 60 s nginx and ALB hold an idle upstream connection, so the proxy never reuses one closing here.
+    keepAliveTimeoutMs: Number(envValue(env, 'HTTP_KEEP_ALIVE_TIMEOUT_MS') ?? 75_000),
     authToken: envValue(env, 'MCP_ZEROMEM_TOKEN') ?? null,
     readOnly: envBoolean(env, 'ZEROMEM_READ_ONLY', false),
     recallTextLimit: Number(envValue(env, 'ZEROMEM_RECALL_TEXT_LIMIT') ?? 2000),
@@ -217,6 +221,7 @@ function envKeyFor(path: string[]): string {
 const ENV_KEYS: Record<string, string> = {
   dataDir: 'DATA_DIR',
   port: 'PORT',
+  keepAliveTimeoutMs: 'HTTP_KEEP_ALIVE_TIMEOUT_MS',
   authToken: 'MCP_ZEROMEM_TOKEN',
   readOnly: 'ZEROMEM_READ_ONLY',
   recallTextLimit: 'ZEROMEM_RECALL_TEXT_LIMIT',
