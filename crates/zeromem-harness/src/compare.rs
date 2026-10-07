@@ -151,6 +151,7 @@ mod tests {
                 query: "who".into(),
                 latest_session_id: "s".into(),
                 relevant: vec![Relevance { uuid: "a".into(), grade: 2 }],
+                ask: Default::default(),
             },
             Query {
                 id: "q2".into(),
@@ -158,6 +159,7 @@ mod tests {
                 query: "what".into(),
                 latest_session_id: "s".into(),
                 relevant: vec![Relevance { uuid: "b".into(), grade: 2 }],
+                ask: Default::default(),
             },
         ];
         let left =

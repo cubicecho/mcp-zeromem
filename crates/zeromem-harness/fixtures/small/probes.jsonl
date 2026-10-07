@@ -1,0 +1,4 @@
+{"id":"small-p0001","kind":"date","query":"When was Quill's security review previously scheduled?","latest_session_id":"small-s0002","relevant":[{"uuid":"5fc5f2e0-0305-48bc-b3af-f883add980d0","grade":1},{"uuid":"f1612911-4292-4d30-a01e-c6dc1041b7a1","grade":2},{"uuid":"a7881716-62df-4643-9f46-4c5293d0844c","grade":1}],"ask":"history"}
+{"id":"small-p0002","kind":"location","query":"Where is Yuki Tanaka based?","latest_session_id":"","relevant":[],"ask":"abstain"}
+{"id":"small-p0003","kind":"tool","query":"Which tool handles scheduling on Ferrous?","latest_session_id":"","relevant":[],"ask":"abstain"}
+{"id":"small-p0004","kind":"owner","query":"Who owns the ingest pipeline on Lantern?","latest_session_id":"","relevant":[],"ask":"abstain"}

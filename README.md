@@ -486,14 +486,49 @@ the labeled fixtures):
 
 | corpus | hash-384 | bge-small-en-v1.5 |
 | --- | --- | --- |
-| small (10 queries) | 0.90 / 0.83 / 0.84 | 0.90 / 0.90 / 0.90 |
-| large (323 queries) | 0.71 / 0.90 / 0.67 | 0.88 / 0.97 / 0.82 |
+| small (10 queries) | 1.00 / 0.88 / 0.92 | 1.00 / 0.93 / 0.94 |
+| large (266 queries) | 0.86 / 0.95 / 0.78 | 0.95 / 0.99 / 0.86 |
+| transcript (446 queries) | 0.91 / 0.95 / 0.84 | 0.95 / 0.98 / 0.89 |
 
 The floors in `tests/eval.rs` sit a little under these; raising them is how
 retrieval improvements are locked in. With `ZEROMEM_EMBEDDING_URL` and
 `ZEROMEM_EMBEDDING_MODEL` set the eval also scores that endpoint, recorded but
 never gated, so `scripts/record-eval.sh` gives your model its own line on the
 Eval page.
+
+Those queries all ask for the current value of a fact. Each corpus also has
+`probes.jsonl`, the questions they cannot ask, scored by the same test with
+the hash embedder and written to `target/eval/probes/`:
+
+| probe | what it asks | large, hash-384 | after an oracle curator |
+| --- | --- | --- | --- |
+| `history` | the value before the last change | 0.89 / 0.96 / 0.68 | 0.53 / 0.96 / 0.29 |
+| `as_of` | the value in force in a named month | 0.75 / 0.85 / 0.58 | 0.46 / 0.85 / 0.26 |
+| `abstain` | a fact the corpus never states | answered 100%, AUC 0.80 | |
+
+`history` and `as_of` have floors. The curated column is the cost of
+supersession today: the replacement is shown in place of the turn the question
+was after. Abstention is recorded, not gated. Recall always returns its best
+hits, so every unanswerable question is answered; the AUC says how far the top
+score alone could tell the two kinds apart (0.5 is chance). The same run
+reports tokens per answer, the evidence text of a top-5 recall at four
+characters a token: 71 on the large corpus.
+
+To score a benchmark from outside the repo, convert it and name the directory:
+
+```bash
+cargo run -q -p zeromem-harness -- import longmemeval longmemeval_s.json --out target/longmemeval
+ZEROMEM_EVAL_CORPUS=target/longmemeval ZEROMEM_SKIP_ONNX=1 \
+  cargo test -p zeromem-core --test eval an_external_corpus -- --nocapture
+```
+
+The importer merges every question's sessions into one store, grades the turns
+the file marks as holding the answer 2 (or the whole answer session 1 when
+none is marked) and writes unanswerable questions as `abstain` probes. It
+prints what it kept and what it could not place. The result lands in
+`target/eval/external/`; it is never committed and no floor reads it. The
+importer is tested against a hand-written sample in the published shape, not
+against the dataset itself.
 
 ### Answering from memory, end to end
 

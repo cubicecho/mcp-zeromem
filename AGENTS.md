@@ -194,7 +194,12 @@ fixtures under `crates/zeromem-harness/fixtures/` are generated, not hand-writte
 `corpus.rs`, run `npm run fixtures:gen`, commit both — `fixtures_are_fresh` fails otherwise.
 Labeled queries carry graded relevance (2 = states the current value, 1 = a superseded one);
 `zeromem_harness::eval` turns a ranked list into recall@k / MRR / nDCG, and `tests/eval.rs`
-holds the floors — the quality gate. Raise a floor when retrieval improves; never lower one
+holds the floors — the quality gate. `probes.jsonl` holds the questions the queries cannot ask
+(`ask`: `history`, `as_of`, `abstain`), drawn from their own random stream so they never move a
+turn or a query; `PROBE_FLOORS` gates the first two before and after the oracle curator, and
+abstention and tokens per answer are recorded, not gated. `zm-harness import longmemeval` plus
+`ZEROMEM_EVAL_CORPUS=<dir>` scores an outside benchmark; that is recorded under
+`target/eval/external/` and never committed or gated. Raise a floor when retrieval improves; never lower one
 without saying why in the commit. `tests/golden.rs` snapshots full results for the small corpus
 (`UPDATE_GOLDEN=1` rewrites them after an intended ranking change). `zm-harness compare`
 scores two rankers' answers against the labels and each other (top-k overlap, Spearman); that

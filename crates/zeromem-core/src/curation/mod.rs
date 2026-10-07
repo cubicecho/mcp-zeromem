@@ -806,10 +806,8 @@ impl Store {
                 uuids.push(n.to_string());
             }
             uuids.extend(payload_uuids(&a.payload));
-            for key in ["by"] {
-                if let Some(u) = a.payload[key].as_str() {
-                    uuids.push(u.to_string());
-                }
+            if let Some(u) = a.payload["by"].as_str() {
+                uuids.push(u.to_string());
             }
             if let Some(sources) = a.payload["sources"].as_array() {
                 uuids.extend(sources.iter().filter_map(|v| v.as_str().map(str::to_string)));

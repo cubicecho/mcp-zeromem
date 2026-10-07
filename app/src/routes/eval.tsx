@@ -179,6 +179,10 @@ export function EvalDashboard() {
                 <TableHead className="text-right">MRR</TableHead>
                 <TableHead className="text-right">nDCG@{k}</TableHead>
                 <TableHead className="text-right">Missed</TableHead>
+                <TableHead className="text-right">History nDCG</TableHead>
+                <TableHead className="text-right">As-of nDCG</TableHead>
+                <TableHead className="text-right">Abstain AUC</TableHead>
+                <TableHead className="text-right">Tokens / answer</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -201,6 +205,18 @@ export function EvalDashboard() {
                   <TableCell className="text-right tabular-nums">{formatPercent(r.mrr)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatPercent(r.ndcg_at_k)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCount(r.missed)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {optional(r.history_ndcg_at_k, formatPercent)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {optional(r.as_of_ndcg_at_k, formatPercent)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {optional(r.abstain_auc, (v) => v.toFixed(2))}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {optional(r.tokens_per_answer, (v) => formatCount(Math.round(v)))}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -210,12 +226,19 @@ export function EvalDashboard() {
           <p className="text-xs text-muted-foreground">
             Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
             <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends
-            one line per profile × embedder.
+            one line per profile × embedder. History and as-of nDCG score the probes that ask for an earlier value;
+            abstain AUC is how well the top score tells an answerable question from one the corpus never answers (0.5 is
+            chance); tokens per answer estimates the evidence text handed back. A dash means the run did not measure it.
           </p>
         }
       />
     </div>
   );
+}
+
+/** A metric older recordings do not carry. */
+function optional(value: number | undefined, format: (value: number) => string): string {
+  return value === undefined ? '—' : format(value);
 }
 
 function EvalPage() {
