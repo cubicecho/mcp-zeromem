@@ -139,6 +139,10 @@ export interface Profile {
   entities: string[];
   temporal: boolean;
   question: boolean;
+  /** The question asks what held before the current value; absent when it does not. */
+  history?: boolean;
+  /** The period the question names, `[start, end)` in Unix milliseconds. */
+  window?: { start: number; end: number };
 }
 
 export interface ViewSummary {
@@ -163,6 +167,8 @@ export interface Evidence {
   entities?: string[];
   /** The newer turn that restates this one; its score was halved. */
   superseded_by?: number;
+  /** When this turn stopped holding: the `ts` of the turn that superseded it. */
+  valid_until?: number;
   /** Hidden by curation; only with `include_hidden`. */
   hidden?: boolean;
   /** For a note: the source turns collapsed under it. */

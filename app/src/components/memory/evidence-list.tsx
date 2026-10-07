@@ -1,6 +1,6 @@
 import type { Evidence } from '@mcp-zeromem/shared';
 import { Badge } from '@/components/ui/badge';
-import { formatDateTime, formatPercent } from '@/lib/format';
+import { formatDateTime, formatDay, formatPercent } from '@/lib/format';
 
 /** Recall evidence, best first: the turn, who said it and when, and how sure the engine is. */
 export function EvidenceList({ evidence }: { evidence: Evidence[] }) {
@@ -23,6 +23,12 @@ export function EvidenceList({ evidence }: { evidence: Evidence[] }) {
                 {source}
               </Badge>
             ))}
+            {item.superseded_by !== undefined && (
+              <Badge variant="outline" title="A newer turn states the current value">
+                superseded{item.valid_until === undefined ? '' : ` ${formatDay(item.valid_until)}`} by #
+                {item.superseded_by}
+              </Badge>
+            )}
             <span className="ml-auto">
               {item.turn.session_id} · {item.turn.speaker} · {formatDateTime(item.turn.ts)}
             </span>

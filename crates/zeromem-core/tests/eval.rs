@@ -302,26 +302,37 @@ struct ProbeFloor {
     ndcg_at_5: f64,
 }
 
-/// What recall does today with a question it was not built for, a little
-/// under the measured numbers like `FLOORS`. These start low on purpose: they
-/// are the baseline the temporal work has to raise, and nDCG is the one to
-/// watch, since it alone tells the wanted value from the other ones.
+/// Questions about the past, a little under the measured numbers like
+/// `FLOORS`. nDCG is the one to watch, since it alone tells the wanted value
+/// from the other ones.
 ///
-/// The curated rows are the finding: once the oracle has superseded every
-/// old value, `retrieve::hand_over` gives the old turn's place to its
-/// replacement, so a question about the past is answered with the present
-/// and nDCG falls by more than half. Supersession has to learn which
-/// questions are about history before these rows can rise.
+/// Before recall could tell these questions from ones about the present,
+/// the curated rows were the finding: `retrieve::hand_over` gave each old
+/// turn's place to its replacement, so the past was answered with the
+/// present and nDCG sat at 0.27 (history) and 0.23 (as-of) on `large`.
+/// `Profile::past` now switches the hand-over off and `fuse::Clock` scores
+/// by the period asked about, which is what lifted them.
+///
+/// The as-of rows barely differ curated or not: the oracle supersedes every
+/// old value by the newest statement of the current one, so each
+/// `valid_until` is later than almost any month a probe asks about and says
+/// little the timestamps did not. A curator that chains its supersessions
+/// value by value would separate the two rows.
+///
+/// As-of recall on `large` stayed where it was (0.73) while its nDCG went
+/// 0.55 -> 0.65. Recall counts a statement of any value, so the later
+/// values a period question now ranks below what held then are hits it
+/// loses from the top five; that trade is the feature.
 #[rustfmt::skip]
 const PROBE_FLOORS: &[ProbeFloor] = &[
-    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: false, recall_at_5: 0.87, mrr: 0.94, ndcg_at_5: 0.66 },
-    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: false, recall_at_5: 0.73, mrr: 0.83, ndcg_at_5: 0.55 },
-    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: true, recall_at_5: 0.51, mrr: 0.94, ndcg_at_5: 0.27 },
-    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: true, recall_at_5: 0.44, mrr: 0.83, ndcg_at_5: 0.23 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: false, recall_at_5: 0.88, mrr: 0.96, ndcg_at_5: 0.76 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: false, recall_at_5: 0.84, mrr: 0.91, ndcg_at_5: 0.73 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: true, recall_at_5: 0.51, mrr: 0.96, ndcg_at_5: 0.32 },
-    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: true, recall_at_5: 0.53, mrr: 0.92, ndcg_at_5: 0.35 },
+    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: false, recall_at_5: 0.88, mrr: 0.95, ndcg_at_5: 0.67 },
+    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: false, recall_at_5: 0.73, mrr: 0.85, ndcg_at_5: 0.63 },
+    ProbeFloor { profile: &LARGE, ask: Ask::History, curated: true, recall_at_5: 0.88, mrr: 0.98, ndcg_at_5: 0.78 },
+    ProbeFloor { profile: &LARGE, ask: Ask::AsOf, curated: true, recall_at_5: 0.73, mrr: 0.85, ndcg_at_5: 0.63 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: false, recall_at_5: 0.89, mrr: 0.97, ndcg_at_5: 0.78 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: false, recall_at_5: 0.86, mrr: 0.95, ndcg_at_5: 0.83 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::History, curated: true, recall_at_5: 0.88, mrr: 0.98, ndcg_at_5: 0.84 },
+    ProbeFloor { profile: &TRANSCRIPT, ask: Ask::AsOf, curated: true, recall_at_5: 0.86, mrr: 0.95, ndcg_at_5: 0.83 },
 ];
 
 /// One ask's metrics over the probes, on the store as it stands.
@@ -345,6 +356,8 @@ fn score_probes(zm: &mut ZeroMem, probes: &[Query], ask: Ask) -> (Summary, Vec<O
 /// say "nothing" yet, and the number is here so that shows.
 #[test]
 fn probes_clear_their_floors() {
+    // Every miss is reported, not just the first: the rows move together.
+    let mut misses: Vec<String> = Vec::new();
     for profile in [&SMALL, &LARGE, &TRANSCRIPT] {
         let corpus = corpus(profile);
         let dir = tempfile::tempdir().unwrap();
@@ -376,9 +389,15 @@ fn probes_clear_their_floors() {
                         continue;
                     }
                     let at = format!("{} / {name} {label}", profile.name);
-                    assert!(summary.recall_at_k >= floor.recall_at_5, "{at}: recall@5 {:.3}", summary.recall_at_k);
-                    assert!(summary.mrr >= floor.mrr, "{at}: mrr {:.3}", summary.mrr);
-                    assert!(summary.ndcg_at_k >= floor.ndcg_at_5, "{at}: ndcg@5 {:.3}", summary.ndcg_at_k);
+                    for (metric, got, want) in [
+                        ("recall@5", summary.recall_at_k, floor.recall_at_5),
+                        ("mrr", summary.mrr, floor.mrr),
+                        ("ndcg@5", summary.ndcg_at_k, floor.ndcg_at_5),
+                    ] {
+                        if got < want {
+                            misses.push(format!("{at}: {metric} {got:.3} is under {want}"));
+                        }
+                    }
                 }
                 by_ask.insert(label, summary);
             }
@@ -399,6 +418,7 @@ fn probes_clear_their_floors() {
         fs::write(out.join(format!("{}-{name}.json", profile.name)), serde_json::to_string_pretty(&body).unwrap())
             .unwrap();
     }
+    assert!(misses.is_empty(), "{}", misses.join("\n"));
 }
 
 /// Score a corpus from outside the repo: `ZEROMEM_EVAL_CORPUS` names a

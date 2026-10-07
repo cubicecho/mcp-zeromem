@@ -5,7 +5,7 @@ import { EvidenceList } from '@/components/memory/evidence-list';
 import { Badge } from '@/components/ui/badge';
 import { Legend } from '@/components/viz/legend';
 import { Swatch } from '@/components/viz/tooltip';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatWindow } from '@/lib/format';
 import { excerpt, seriesColor } from '@/lib/viz';
 
 /** Each retrieval view keeps one palette slot on every page that shows it. */
@@ -86,6 +86,8 @@ export function TraceView({ trace }: { trace: QueryTrace }) {
                 <dd className="flex flex-wrap gap-1">
                   <Badge variant={trace.profile.question ? 'default' : 'outline'}>question</Badge>
                   <Badge variant={trace.profile.temporal ? 'default' : 'outline'}>temporal</Badge>
+                  <Badge variant={trace.profile.history ? 'default' : 'outline'}>history</Badge>
+                  {trace.profile.window && <Badge>{formatWindow(trace.profile.window)}</Badge>}
                 </dd>
               </div>
             </dl>

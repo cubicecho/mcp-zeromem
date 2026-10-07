@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatWindow } from '@/lib/format';
 import { useRecall, useRecallTrace } from '@/lib/queries';
 
 export const Route = createFileRoute('/recall')({
@@ -126,6 +127,10 @@ export function RecallPage() {
               <span>Entities: {result.data.route.profile.entities.join(', ')}</span>
             ) : null}
             {result.data.route?.profile.temporal && <Badge variant="secondary">temporal</Badge>}
+            {result.data.route?.profile.history && <Badge variant="secondary">history</Badge>}
+            {result.data.route?.profile.window && (
+              <Badge variant="secondary">{formatWindow(result.data.route.profile.window)}</Badge>
+            )}
           </div>
           <EvidenceList evidence={result.data.evidence} />
         </div>

@@ -146,6 +146,17 @@ plus the curator tools and prompt) and nothing under `/api`; `expose_to_all` (or
 for stdio) gives every client that scope. New `Turn` and `Evidence` fields are skipped when empty, so
 the goldens do not move. In recall a superseded turn hands its fused score to its replacement (`retrieve::hand_over`), pulling it in when no view nominated it; the oracle curator in `tests/eval.rs` must raise nDCG on the large corpus, so a change that makes curation hurt ranking fails there.
 
+**The past is a preference, not a filter.** `profile::asks_history` and `retrieve::window::parse`
+read "before"/"used to" and a named period (`March 2025`, `last week`) from the question with no
+model; `Profile::past()` then switches the hand-over and the recent view off, and `fuse::Clock`
+scales a candidate's rank score when it was replaced (history) or in force during the period
+(window: `ts` before its end, `valid_until` after its start). Scaling, never adding: an added bonus
+lifts every turn from the period over the one that answers. `fuse::settle_ties` reorders exact
+lexical ties by the same preference, because a fact restated with one word changed ties and views
+break ties newest-first. `Evidence.valid_until` is derived from `curation_flags()` at query time —
+no table, so `Snapshot` is unchanged. `tests/temporal.rs` is the behaviour, `PROBE_FLOORS` in
+`tests/eval.rs` the gate; `WINDOW_BOOST`/`HISTORY_BOOST` carry the sweep that chose them.
+
 **Tests use a real store.** `server/src/test-support.ts` opens the engine in a temp directory;
 nothing mocks the addon or SQLite. App tests mock only `src/lib/api.ts` (`vi.spyOn(api, …)`);
 pages that use `Link` render through `app/src/test-support.tsx`'s `renderPage`, a one-route
