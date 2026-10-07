@@ -111,4 +111,43 @@ describe('RecallPage', () => {
     expect(screen.getByText('2025-04-01 – 2025-04-30')).toBeInTheDocument();
     expect(screen.getByText(/superseded 2025-06-02 by #\s*4/)).toBeInTheDocument();
   });
+
+  it('says when memory does not hold the answer, above the turns that came closest', async () => {
+    vi.spyOn(api, 'recall').mockResolvedValue({
+      query: 'who owns billing on Quill?',
+      abstained: { missing: ['quill'], best: 0.62 },
+      evidence: [
+        {
+          turn: {
+            id: 1,
+            uuid: 'u1',
+            session_id: 's1',
+            speaker: 'user',
+            text: 'Maya owns billing on Heron.',
+            ts: 1_700_000_000_000,
+          },
+          score: 0.62,
+          confidence: 1,
+          role: 'supporting',
+        },
+      ],
+      considered: 3,
+      took_ms: 1,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <RecallPage />
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Query'), 'who owns billing on Quill?');
+    await user.click(screen.getByRole('button', { name: /recall/i }));
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('Memory does not hold the answer.');
+    expect(notice).toHaveTextContent('No turn mentions quill.');
+    expect(screen.getByText('Maya owns billing on Heron.')).toBeInTheDocument();
+  });
 });

@@ -105,6 +105,11 @@ fn month(word: &str) -> Option<u32> {
     MONTHS.iter().find(|(m, _)| *m == w).map(|(_, n)| *n)
 }
 
+/// A month or a weekday, spelled out or abbreviated: a word that says when.
+pub(crate) fn is_calendar_word(word: &str) -> bool {
+    month(word).is_some() || !looks_like_name_start(word)
+}
+
 fn day(word: &str) -> Option<u32> {
     let w = word.trim_end_matches([',', '.']);
     let w = w

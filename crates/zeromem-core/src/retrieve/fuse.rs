@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::anchor::{factor, Page};
 use super::route::{ViewKind, RECENCY_TEMPORAL};
 use super::window::Window;
 use super::ViewTrace;
@@ -120,6 +121,19 @@ pub struct Fused {
     pub sources: Vec<ViewKind>,
     pub ts: i64,
     pub uuid: String,
+    /// The share of what the question names that this turn, or a turn it
+    /// replaced, mentions; the score is already scaled for it. See
+    /// [`super::anchor`].
+    #[serde(default = "whole", skip_serializing_if = "is_whole")]
+    pub anchor: f64,
+}
+
+fn whole() -> f64 {
+    1.0
+}
+
+fn is_whole(share: &f64) -> bool {
+    *share >= 1.0
 }
 
 /// Reorder each run of candidates the lexical view scored the same by what
@@ -147,7 +161,7 @@ pub fn settle_ties(views: &mut [ViewTrace], turns: &BTreeMap<i64, Turn>, clock: 
     }
 }
 
-pub fn fuse(views: &[ViewTrace], turns: &BTreeMap<i64, Turn>, clock: Clock<'_>) -> Vec<Fused> {
+pub fn fuse(views: &[ViewTrace], turns: &BTreeMap<i64, Turn>, clock: Clock<'_>, names: &[String]) -> Vec<Fused> {
     let best_possible: f64 = views.iter().map(|v| v.weight / (RRF_K + 1.0)).sum();
     let mut acc: BTreeMap<i64, (f64, Vec<ViewKind>)> = BTreeMap::new();
     for v in views {
@@ -162,8 +176,9 @@ pub fn fuse(views: &[ViewTrace], turns: &BTreeMap<i64, Turn>, clock: Clock<'_>) 
         .filter_map(|(id, (raw, sources))| {
             let turn = turns.get(&id)?;
             let rank_part = if best_possible > 0.0 { raw / best_possible } else { 0.0 };
-            let score = round6(clock.score(rank_part, id, turn.ts));
-            Some(Fused { id, score, sources, ts: turn.ts, uuid: turn.uuid.clone() })
+            let anchor = if names.is_empty() { 1.0 } else { Page::new(&turn.text).share(names) };
+            let score = round6(clock.score(rank_part, id, turn.ts) * factor(anchor));
+            Some(Fused { id, score, sources, ts: turn.ts, uuid: turn.uuid.clone(), anchor })
         })
         .collect();
     out.sort_by(order);
@@ -208,7 +223,7 @@ mod tests {
             ViewTrace { view: ViewKind::Lexical, weight: 1.0, candidates: vec![(1, 9.0), (2, 8.0)] },
             ViewTrace { view: ViewKind::Entity, weight: 1.0, candidates: vec![(2, 1.0), (3, 1.0)] },
         ];
-        let fused = fuse(&views, &turns, Clock::Now { weight: 0.0, latest_ts: 0 });
+        let fused = fuse(&views, &turns, Clock::Now { weight: 0.0, latest_ts: 0 }, &[]);
         assert_eq!(fused.iter().map(|f| f.id).collect::<Vec<_>>(), vec![2, 1, 3]);
         assert_eq!(fused[0].sources, vec![ViewKind::Lexical, ViewKind::Entity]);
         assert!(fused[0].score < 1.0 && fused[0].score > 0.9);
@@ -219,9 +234,9 @@ mod tests {
         let sixty_days = (2.0 * HALF_LIFE_MS) as i64;
         let turns: BTreeMap<i64, Turn> = [(1, turn(1, 0)), (2, turn(2, sixty_days))].into();
         let views = vec![ViewTrace { view: ViewKind::Entity, weight: 1.0, candidates: vec![(1, 1.0), (2, 1.0)] }];
-        let fused = fuse(&views, &turns, Clock::Now { weight: 0.3, latest_ts: sixty_days });
+        let fused = fuse(&views, &turns, Clock::Now { weight: 0.3, latest_ts: sixty_days }, &[]);
         assert_eq!(fused[0].id, 2, "rank says 1 by a hair, recency says 2 by a lot");
-        let tiebreak = fuse(&views, &turns, Clock::Now { weight: 0.02, latest_ts: sixty_days });
+        let tiebreak = fuse(&views, &turns, Clock::Now { weight: 0.02, latest_ts: sixty_days }, &[]);
         assert_eq!(tiebreak[0].id, 1, "the tie-break weight does not overturn a rank difference");
     }
 
@@ -239,7 +254,7 @@ mod tests {
         let views = level(&[1, 2, 3]);
         let valid_until: BTreeMap<i64, i64> = [(1, 40 * day)].into();
         let ids = |window: Window, valid_until: &BTreeMap<i64, i64>| -> Vec<i64> {
-            fuse(&views, &turns, Clock::Window { window, valid_until }).iter().map(|f| f.id).collect()
+            fuse(&views, &turns, Clock::Window { window, valid_until }, &[]).iter().map(|f| f.id).collect()
         };
         let then = Window { start: 50 * day, end: 80 * day };
         assert_eq!(ids(then, &valid_until), vec![2, 3, 1], "2 held then; 1 had been replaced; 3 came after");
@@ -256,7 +271,7 @@ mod tests {
         let valid_until: BTreeMap<i64, i64> = [(1, 40 * day), (2, 90 * day)].into();
         let ids = |valid_until: &BTreeMap<i64, i64>| -> Vec<i64> {
             let clock = Clock::History { valid_until, latest_ts: 90 * day };
-            fuse(&views, &turns, clock).iter().map(|f| f.id).collect()
+            fuse(&views, &turns, clock, &[]).iter().map(|f| f.id).collect()
         };
         assert_eq!(ids(&valid_until), vec![2, 1, 3], "the value just before the present one, then the one before it");
         assert_eq!(ids(&BTreeMap::new()), vec![3, 2, 1], "with nothing replaced, the tie goes to the newer as ever");
@@ -296,6 +311,6 @@ mod tests {
     fn filtered_turns_do_not_appear() {
         let turns: BTreeMap<i64, Turn> = [(1, turn(1, 0))].into();
         let views = vec![ViewTrace { view: ViewKind::Lexical, weight: 1.0, candidates: vec![(1, 9.0), (2, 8.0)] }];
-        assert_eq!(fuse(&views, &turns, Clock::Now { weight: 0.0, latest_ts: 0 }).len(), 1);
+        assert_eq!(fuse(&views, &turns, Clock::Now { weight: 0.0, latest_ts: 0 }, &[]).len(), 1);
     }
 }

@@ -146,6 +146,18 @@ through it (`server/src/curator-agent/`). It holds no curation rule: a change to
 should do goes in `docs/curator-*.md`, never in the runner. Its tests script the model and use a
 real store.
 
+**Recall may decline, and says so.** `retrieve/anchor.rs` takes the question's names (its
+entity keys, less dates, quantities and calendar words); `fuse` scales each candidate by
+`1 − MISS_PENALTY × (share of names its text misses)` and records the share as `Fused.anchor`.
+When the best kept hit misses a name or scores under `ABSTAIN_BELOW`, the result carries
+`abstained`, `evidence` is cut to the `CLOSEST` turns as `supporting`, and `format: text` leads
+with an `[abstained]` line, because a model handed near misses with no verdict answers from them.
+An heir inherits the anchor of the turn it replaced (`hand_over`). `abstained` and `anchor` are
+skipped when there is nothing to say, so an answered query's JSON is what it was. `ABSTAIN_FLOORS`
+in `tests/eval.rs` cap both errors: unanswerable probes still answered, and answerable queries
+withheld. A change to either constant is a ranking change: re-measure, and move the floors and
+goldens with it.
+
 **Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
 verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,
 `_notes`, `_entities` and `_brief` one job each, and `server/src/gateway/prompts.ts` adds only a

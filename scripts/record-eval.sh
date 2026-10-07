@@ -48,6 +48,7 @@ for f in "$root"/target/eval/*-*.json; do
     history_ndcg_at_k: ($p.by_ask.history | if (.queries // 0) > 0 then .ndcg_at_k else null end),
     as_of_ndcg_at_k: ($p.by_ask.as_of | if (.queries // 0) > 0 then .ndcg_at_k else null end),
     abstain_answered: $p.abstention.answered,
+    abstain_withheld: $p.abstention.withheld,
     abstain_auc: $p.abstention.auc
   } | with_entries(select(.value != null))' "$f" >> "$history"
   appended=$((appended + 1))

@@ -14,6 +14,11 @@ pub struct Profile {
     pub tokens: Vec<String>,
     /// Entity keys the question mentions, in order, without repeats.
     pub entities: Vec<String>,
+    /// The entities a turn has to mention to be about this question.
+    /// Filled in by the run, once the store has resolved the lowercase
+    /// ones; see [`super::anchor`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
     /// Asks about the present or the recent past.
     pub temporal: bool,
     /// Asks what held before the present value: `who owned it before?`.
@@ -170,7 +175,7 @@ pub fn profile(query: &str) -> Profile {
             .iter()
             .any(|q| lower.starts_with(q) && lower[q.len()..].starts_with(' '));
     let history = asks_history(&lower);
-    Profile { text, tokens, entities: keys, temporal, history, window: None, question }
+    Profile { text, tokens, entities: keys, names: Vec::new(), temporal, history, window: None, question }
 }
 
 /// Whole-word containment of a (possibly multi-word) phrase.

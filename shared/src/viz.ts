@@ -242,8 +242,10 @@ export const evalRunSchema = z.object({
   history_ndcg_at_k: z.number().min(0).max(1).optional(),
   /** nDCG over the probes that ask for the value in force in a named month (hash rows only). */
   as_of_ndcg_at_k: z.number().min(0).max(1).optional(),
-  /** Share of unanswerable probes that came back with evidence anyway; lower is better. */
+  /** Share of unanswerable probes that recall did not decline; lower is better. */
   abstain_answered: z.number().min(0).max(1).optional(),
+  /** Share of answerable queries that recall declined by mistake; lower is better. */
+  abstain_withheld: z.number().min(0).max(1).optional(),
   /** How well the top score separates answerable from unanswerable questions; 0.5 is chance. */
   abstain_auc: z.number().min(0).max(1).optional(),
 });

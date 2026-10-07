@@ -548,6 +548,23 @@ remain the way to cut. Every hit that was replaced carries `superseded_by` and
 `valid_until`, the timestamp of the turn that replaced it; its own `ts` is when
 it started to hold. `format: text` writes that into the hit's header.
 
+Recall can also say that memory does not hold the answer. The names in a
+question (its entities, less dates, quantities and calendar words) are what it
+is about, so a turn that mentions none of them is unlikely to answer it: each
+candidate's fused score is scaled by `1 − 0.3 × (the share of names its text
+does not mention)`, which moves the turn about the right project above one
+that only shares the question's other words. When the best hit still misses a
+name, or scores under 0.5, the result carries `abstained` (`missing` lists the
+names nobody mentioned, `best` the top score), `evidence` is cut to the closest
+two turns, all `supporting`, and `format: text` leads with an `[abstained]`
+line. A question that names nothing is never declined, and neither is an empty
+result. The check has three limits worth knowing. A name written in lower case
+is not seen as a name. A turn that answers without repeating the name ("she
+moved it to Friday") loses up to 30% of its score, though the turn a curator
+put in its place inherits its standing. And a name check cannot tell a store
+that knows the project but not the asked fact from one that knows both, so
+those questions are still answered.
+
 ## Numbers
 
 Hash embedder, one core, `npm run bench` (`cargo run --release --example
@@ -568,8 +585,8 @@ the labeled fixtures):
 | corpus | hash-384 | bge-small-en-v1.5 |
 | --- | --- | --- |
 | small (10 queries) | 1.00 / 0.88 / 0.92 | 1.00 / 0.93 / 0.94 |
-| large (266 queries) | 0.86 / 0.95 / 0.78 | 0.95 / 0.99 / 0.86 |
-| transcript (446 queries) | 0.91 / 0.95 / 0.84 | 0.95 / 0.98 / 0.89 |
+| large (266 queries) | 0.90 / 0.97 / 0.83 | 0.98 / 1.00 / 0.89 |
+| transcript (446 queries) | 0.94 / 0.98 / 0.89 | 0.98 / 1.00 / 0.92 |
 
 The floors in `tests/eval.rs` sit a little under these; raising them is how
 retrieval improvements are locked in. With `ZEROMEM_EMBEDDING_URL` and
@@ -583,17 +600,17 @@ the hash embedder and written to `target/eval/probes/`:
 
 | probe | what it asks | large, hash-384 | after an oracle curator |
 | --- | --- | --- | --- |
-| `history` | the value before the last change | 0.89 / 0.96 / 0.68 | 0.53 / 0.96 / 0.29 |
-| `as_of` | the value in force in a named month | 0.75 / 0.85 / 0.58 | 0.46 / 0.85 / 0.26 |
-| `abstain` | a fact the corpus never states | answered 100%, AUC 0.80 | |
+| `history` | the value before the last change | 0.93 / 0.96 / 0.70 | 0.94 / 0.99 / 0.82 |
+| `as_of` | the value in force in a named month | 0.81 / 0.91 / 0.71 | 0.81 / 0.91 / 0.71 |
+| `abstain` | a fact the corpus never states | answered 19%, withheld 2%, AUC 0.97 | withheld 2% |
 
-`history` and `as_of` have floors. The curated column is the cost of
-supersession today: the replacement is shown in place of the turn the question
-was after. Abstention is recorded, not gated. Recall always returns its best
-hits, so every unanswerable question is answered; the AUC says how far the top
-score alone could tell the two kinds apart (0.5 is chance). The same run
-reports tokens per answer, the evidence text of a top-5 recall at four
-characters a token: 71 on the large corpus.
+All three have floors. For `abstain`, *answered* is the share of the 58
+unanswerable questions recall did not decline, *withheld* the share of the 266
+answerable ones it declined by mistake, and the AUC says how far the top score
+alone tells the two kinds apart (0.5 is chance). The questions still answered
+name a project the corpus does talk about and ask for a fact it never states
+about it. The same run reports tokens per answer, the evidence text of a top-5
+recall at four characters a token: 71 on the large corpus.
 
 To score a benchmark from outside the repo, convert it and name the directory:
 
