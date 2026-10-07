@@ -48,6 +48,7 @@ npm run test:rust        # cargo test --workspace (oracle, properties, golden, e
 npm run fixtures:gen     # regenerate crates/zeromem-harness/fixtures/ after changing the generator
 npm run bench            # cold open / RSS / recall latency at 1k, 10k, 50k turns → target/bench/
 scripts/record-eval.sh   # run the eval harness and append a row per corpus × embedder to docs/eval/history.jsonl
+npm run eval:answers -- <corpus-dir>  # a model answers the labeled questions from memory; a judge grades it (needs ZEROMEM_EVAL_LLM_*)
 npm run routes:gen -w app # regenerate app/src/routeTree.gen.ts (also done by the Vite plugin in dev)
 scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-harness compare`
 
@@ -55,6 +56,7 @@ scripts/rank.sh large    # our ranked answers to the labeled queries, for `zm-ha
 npm run build            # build:native → shared typecheck → server tsc → app vite build
 npm start                # node server/dist/index.js
 npm run stdio            # node server/dist/stdio.js (stdio MCP)
+npm run curate           # node server/dist/curate.js: one curation run by a local model (dev: npm run dev:curate)
 npm run build:docker     # docker build -t mcp-zeromem .
 docker compose up        # ./data mounted at /data, port 3200 on the host
 ```
@@ -130,6 +132,20 @@ and the goldens move; `tests/context.rs::context_does_not_change_the_ranking` is
 call), and a clip always carries the `zeromem_read_session` call that returns the rest, because a
 model handed an unmarked fragment concludes memory is incomplete and searches the web instead.
 
+**Retrieval is gated; answers are only recorded.** `server/src/answer-eval.ts` loads a harness
+corpus into a temp store, gives a model the two memory reads (`zeromem_recall`,
+`zeromem_read_session`) and the labeled questions, and has a judge model compare each answer with
+the grade-2 turns (`server/src/answer-eval/`). Both ends are models, so the number moves with the
+model and never gates a commit: a retrieval change is still proved in `tests/eval.rs`. `--curate`
+runs the curator model's sweep first, which is the only measure of a model curator there is.
+
+**The curator runner is a client, not part of the server.** `server/src/curate.ts`
+(`mcp-zeromem-curate`) connects as an MCP client, over `/mcp` or to a gateway it builds in-process
+on the store under `DATA_DIR`, fetches a curator prompt and drives an OpenAI-compatible model
+through it (`server/src/curator-agent/`). It holds no curation rule: a change to what the curator
+should do goes in `docs/curator-*.md`, never in the runner. Its tests script the model and use a
+real store.
+
 **Curation never deletes.** The curator (an outside agent; every `docs/curator-*.md` is served
 verbatim as an MCP prompt — `zeromem_curate` the full sweep, `zeromem_curate_session`,
 `_notes`, `_entities` and `_brief` one job each, and `server/src/gateway/prompts.ts` adds only a
@@ -145,6 +161,17 @@ reports `token_source`. The curator token opens `/mcp` with the curator scope (t
 plus the curator tools and prompt) and nothing under `/api`; `expose_to_all` (or `ZEROMEM_CURATOR`
 for stdio) gives every client that scope. New `Turn` and `Evidence` fields are skipped when empty, so
 the goldens do not move. In recall a superseded turn hands its fused score to its replacement (`retrieve::hand_over`), pulling it in when no view nominated it; the oracle curator in `tests/eval.rs` must raise nDCG on the large corpus, so a change that makes curation hurt ranking fails there.
+
+**The past is a preference, not a filter.** `profile::asks_history` and `retrieve::window::parse`
+read "before"/"used to" and a named period (`March 2025`, `last week`) from the question with no
+model; `Profile::past()` then switches the hand-over and the recent view off, and `fuse::Clock`
+scales a candidate's rank score when it was replaced (history) or in force during the period
+(window: `ts` before its end, `valid_until` after its start). Scaling, never adding: an added bonus
+lifts every turn from the period over the one that answers. `fuse::settle_ties` reorders exact
+lexical ties by the same preference, because a fact restated with one word changed ties and views
+break ties newest-first. `Evidence.valid_until` is derived from `curation_flags()` at query time —
+no table, so `Snapshot` is unchanged. `tests/temporal.rs` is the behaviour, `PROBE_FLOORS` in
+`tests/eval.rs` the gate; `WINDOW_BOOST`/`HISTORY_BOOST` carry the sweep that chose them.
 
 **A brief is a turn nobody recalls.** `CurationOp::Brief` writes a `kind = 'brief'` turn into the
 session `brief_session(scope)` (`zeromem-brief`, `zeromem-brief:<scope>`); `ZeroMem::brief(scope)`
@@ -200,7 +227,12 @@ fixtures under `crates/zeromem-harness/fixtures/` are generated, not hand-writte
 `corpus.rs`, run `npm run fixtures:gen`, commit both — `fixtures_are_fresh` fails otherwise.
 Labeled queries carry graded relevance (2 = states the current value, 1 = a superseded one);
 `zeromem_harness::eval` turns a ranked list into recall@k / MRR / nDCG, and `tests/eval.rs`
-holds the floors — the quality gate. Raise a floor when retrieval improves; never lower one
+holds the floors — the quality gate. `probes.jsonl` holds the questions the queries cannot ask
+(`ask`: `history`, `as_of`, `abstain`), drawn from their own random stream so they never move a
+turn or a query; `PROBE_FLOORS` gates the first two before and after the oracle curator, and
+abstention and tokens per answer are recorded, not gated. `zm-harness import longmemeval` plus
+`ZEROMEM_EVAL_CORPUS=<dir>` scores an outside benchmark; that is recorded under
+`target/eval/external/` and never committed or gated. Raise a floor when retrieval improves; never lower one
 without saying why in the commit. `tests/golden.rs` snapshots full results for the small corpus
 (`UPDATE_GOLDEN=1` rewrites them after an intended ranking change). `zm-harness compare`
 scores two rankers' answers against the labels and each other (top-k overlap, Spearman); that

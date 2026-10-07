@@ -236,6 +236,16 @@ export const evalRunSchema = z.object({
   mrr: z.number().min(0).max(1),
   ndcg_at_k: z.number().min(0).max(1),
   missed: count,
+  /** Estimated tokens of evidence text one answer hands the model; absent from runs before it was measured. */
+  tokens_per_answer: z.number().min(0).optional(),
+  /** nDCG over the probes that ask for the value before the last change (hash rows only). */
+  history_ndcg_at_k: z.number().min(0).max(1).optional(),
+  /** nDCG over the probes that ask for the value in force in a named month (hash rows only). */
+  as_of_ndcg_at_k: z.number().min(0).max(1).optional(),
+  /** Share of unanswerable probes that came back with evidence anyway; lower is better. */
+  abstain_answered: z.number().min(0).max(1).optional(),
+  /** How well the top score separates answerable from unanswerable questions; 0.5 is chance. */
+  abstain_auc: z.number().min(0).max(1).optional(),
 });
 export type EvalRun = z.infer<typeof evalRunSchema>;
 

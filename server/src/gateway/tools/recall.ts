@@ -15,7 +15,9 @@ const DEFAULT_TEXT_LIMIT = 2000;
  *
  * A block keeps the turn's own line breaks — a numbered list that arrives as a
  * paragraph reads as a truncated answer — and, under `context`, carries the
- * neighbouring turns of its session around it.
+ * neighbouring turns of its session around it. A hit that was later replaced
+ * says so in its header, with the date, so a model reading the block cannot
+ * take an old value for the current one.
  */
 export function formatEvidenceText(evidence: readonly Evidence[], limit = DEFAULT_TEXT_LIMIT): string {
   const ordered = [
@@ -27,15 +29,24 @@ export function formatEvidenceText(evidence: readonly Evidence[], limit = DEFAUL
 
 function formatBlock(item: Evidence, limit: number): string {
   const { role, turn } = item;
-  const date = new Date(turn.ts).toISOString().slice(0, 10);
   // The scope is named only when the turn has one, so an unscoped store reads as it always did.
   const scope = turn.scope ? `, scope ${turn.scope}` : '';
-  const header = `[${role}] ${date} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id}${scope})`;
+  const header = `[${role}] ${day(turn.ts)} ${turn.speaker} (session ${turn.session_id}, turn ${turn.id}${scope}${replaced(item)})`;
   return [
     ...(item.before ?? []).map((neighbour) => neighbourLine('before', neighbour, limit)),
     `${header}: ${body(turn, limit)}`,
     ...(item.after ?? []).map((neighbour) => neighbourLine('after', neighbour, limit)),
   ].join('\n');
+}
+
+function day(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function replaced(item: Evidence): string {
+  if (item.superseded_by === undefined) return '';
+  const when = item.valid_until === undefined ? '' : ` ${day(item.valid_until)}`;
+  return `, superseded${when} by turn ${item.superseded_by}`;
 }
 
 /** A neighbour is in the hit's own session, so it repeats only what varies: who, which turn. */
@@ -83,8 +94,11 @@ export function recallTools(engine: ZeroMemEngine, config: Config): ToolDefiniti
       description: [
         'Retrieve the past conversation turns that bear on a question, best first, with no LLM in the loop.',
         'Recall fuses a lexical (BM25), an entity-graph and a dense-vector view and, for questions about',
-        'time ("last week", "yesterday"), a recency view; each evidence item carries a score, a confidence',
+        'the present ("latest", "currently"), a recency view; each evidence item carries a score, a confidence',
         'relative to the best hit, and a role: `primary` (answers it) or `supporting` (context).',
+        'A question about the past is read as one: "before" or "used to" ranks the value that was replaced first,',
+        'and a named period ("in March 2025", "2025-03-14", "last week", "3 days ago") ranks what held then.',
+        'A hit that curation knows was replaced carries `superseded_by` and `valid_until`, when it stopped holding.',
         'Ask in natural language and name the people, projects or things involved — entities are what the graph keys on.',
         'Use `detail: "full"` to see which views were used and which entities each hit matched — this is',
         'the explanation, and asking again would re-run retrieval against a corpus that may have moved.',

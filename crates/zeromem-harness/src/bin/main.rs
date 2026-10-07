@@ -1,5 +1,6 @@
-//! `zm-harness` — regenerate the committed fixtures, print a corpus, or
-//! compare two rankers' answers to the labeled queries.
+//! `zm-harness` — regenerate the committed fixtures, print a corpus,
+//! compare two rankers' answers to the labeled queries, or convert an
+//! outside benchmark to the corpus shape.
 
 use std::path::PathBuf;
 
@@ -7,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use zeromem_harness::compare::{self, Ranked};
 use zeromem_harness::corpus::{self, Profile};
-use zeromem_harness::fixtures;
+use zeromem_harness::{fixtures, import};
 
 #[derive(Parser)]
 #[command(name = "zm-harness", about = "zeromem test harness: fixtures and metrics")]
@@ -26,6 +27,9 @@ enum Command {
         profile: String,
         #[arg(long)]
         queries: bool,
+        /// The history, as-of and unanswerable questions instead.
+        #[arg(long, conflicts_with = "queries")]
+        probes: bool,
     },
     /// Score two rankers' answers to a profile's labeled queries, against
     /// the labels and against each other. Each file holds one
@@ -40,6 +44,18 @@ enum Command {
         /// Print the full comparison as JSON instead of a table.
         #[arg(long)]
         json: bool,
+    },
+    /// Convert a benchmark file you downloaded into `turns.jsonl`,
+    /// `queries.jsonl` and `probes.jsonl` under a directory of your own.
+    /// The result is for a local run (`ZEROMEM_EVAL_CORPUS=<dir>`): nothing
+    /// here is committed and no floor reads it.
+    Import {
+        /// The only format read today: `longmemeval`.
+        format: String,
+        file: PathBuf,
+        /// Where to write; created if missing.
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
@@ -62,10 +78,19 @@ fn main() -> Result<()> {
                 eprintln!("wrote {}", path.display());
             }
         }
-        Command::Show { profile: name, queries } => {
+        Command::Show { profile: name, queries, probes } => {
             let corpus = corpus::generate(profile(&name)?);
-            let (turns, qs) = fixtures::render(&corpus)?;
-            print!("{}", if queries { qs } else { turns });
+            let (turns, qs, ps) = fixtures::render(&corpus)?;
+            print!(
+                "{}",
+                if probes {
+                    ps
+                } else if queries {
+                    qs
+                } else {
+                    turns
+                }
+            );
         }
         Command::Compare { profile: name, left, right, k, json } => {
             let corpus = fixtures::load(profile(&name)?)?;
@@ -86,6 +111,21 @@ fn main() -> Result<()> {
                     None => println!("spearman n/a: no query shares two items"),
                 }
             }
+        }
+        Command::Import { format, file, out } => {
+            if format != "longmemeval" {
+                anyhow::bail!("no importer for {format}; try longmemeval");
+            }
+            let text = std::fs::read_to_string(&file).with_context(|| format!("reading {}", file.display()))?;
+            let (corpus, report) =
+                import::longmemeval(&text).with_context(|| format!("importing {}", file.display()))?;
+            let (turns, queries, probes) = fixtures::render(&corpus)?;
+            std::fs::create_dir_all(&out).with_context(|| format!("creating {}", out.display()))?;
+            for (name, body) in [("turns.jsonl", turns), ("queries.jsonl", queries), ("probes.jsonl", probes)] {
+                let path = out.join(name);
+                std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
+            }
+            println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
     Ok(())

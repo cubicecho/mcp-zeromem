@@ -49,6 +49,44 @@ describe('EvalDashboard', () => {
     expect(screen.getAllByRole('cell', { name: '88%' })).toHaveLength(1);
   });
 
+  it('shows the probe numbers a run carries and a dash where it has none', async () => {
+    const base = {
+      recorded_at: '2026-10-07T00:00:00Z',
+      commit: 'ccccccc',
+      profile: 'large',
+      k: 5,
+      queries: 266,
+      recall_at_k: 0.86,
+      mrr: 0.95,
+      ndcg_at_k: 0.78,
+      missed: 3,
+    };
+    vi.spyOn(api, 'getEvalHistory').mockResolvedValue({
+      source: 'docs/eval/history.jsonl',
+      runs: [
+        {
+          ...base,
+          embedder: 'hash-384',
+          tokens_per_answer: 71.2,
+          history_ndcg_at_k: 0.68,
+          as_of_ndcg_at_k: 0.58,
+          abstain_answered: 1,
+          abstain_auc: 0.8,
+        },
+        { ...base, embedder: 'bge-small-en-v1.5' },
+      ],
+    });
+    mount();
+
+    expect(await screen.findByRole('columnheader', { name: 'History nDCG' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '68%' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '58%' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '0.80' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '71' })).toBeInTheDocument();
+    // The run without probes shows a dash in each of the four columns.
+    expect(screen.getAllByRole('cell', { name: '—' })).toHaveLength(4);
+  });
+
   it('points at the recording script when the history is empty', async () => {
     vi.spyOn(api, 'getEvalHistory').mockResolvedValue({ source: 'docs/eval/history.jsonl', runs: [] });
     mount();

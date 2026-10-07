@@ -12,6 +12,7 @@
 //! that.
 
 pub mod curation;
+pub mod dates;
 pub mod dense;
 pub mod entities;
 pub mod error;

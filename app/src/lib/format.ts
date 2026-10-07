@@ -43,3 +43,15 @@ export function formatDateTime(ms: number): string {
 export function formatPercent(x: number): string {
   return `${Math.round(x * 100)}%`;
 }
+
+/** A UTC calendar date, `2025-03-14`: what the engine means by a day. */
+export function formatDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** A `[start, end)` period as its first and last UTC day, or the one day it is. */
+export function formatWindow(window: { start: number; end: number }): string {
+  const first = formatDay(window.start);
+  const last = formatDay(window.end - 1);
+  return first === last ? first : `${first} – ${last}`;
+}
