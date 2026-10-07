@@ -15,6 +15,8 @@
 //! Sessions are given ids, turns are given explicit uuids and millisecond
 //! timestamps, and all of it is a pure function of the [`Profile`].
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::rng::Rng;
@@ -40,6 +42,45 @@ pub struct Query {
     /// excludes the current session should still find earlier statements.
     pub latest_session_id: String,
     pub relevant: Vec<Relevance>,
+    /// What the question wants. Left out for `current`, so the queries the
+    /// floors were set on read as they always did.
+    #[serde(default, skip_serializing_if = "Ask::is_current")]
+    pub ask: Ask,
+}
+
+/// What a question wants of a fact. `queries.jsonl` holds only `current`;
+/// the other three are the probes in `probes.jsonl`, which measure what
+/// "the current value" cannot: whether recall can go back, and whether it
+/// knows when it has nothing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Ask {
+    /// The value that holds now. Grade 2 states it, grade 1 an older one.
+    #[default]
+    Current,
+    /// The value before the last change. Grade 2 states that one, grade 1
+    /// any other, the current value included.
+    History,
+    /// The value in force during a named month. Grade 2 states it.
+    AsOf,
+    /// A fact the corpus never states. Nothing is relevant; the right
+    /// answer is no answer.
+    Abstain,
+}
+
+impl Ask {
+    pub fn is_current(&self) -> bool {
+        *self == Ask::Current
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Ask::Current => "current",
+            Ask::History => "history",
+            Ask::AsOf => "as_of",
+            Ask::Abstain => "abstain",
+        }
+    }
 }
 
 /// Graded relevance: 2 states the current value, 1 states a superseded one.
@@ -53,6 +94,10 @@ pub struct Relevance {
 pub struct Corpus {
     pub turns: Vec<Turn>,
     pub queries: Vec<Query>,
+    /// Questions about history, a point in time, and facts never stated.
+    /// Kept apart from `queries` so everything measured on those — the
+    /// floors, the goldens, the upstream comparison — is untouched by them.
+    pub probes: Vec<Query>,
 }
 
 /// How the turns are written. The facts, the labels and the queries are the
@@ -467,6 +512,45 @@ struct Generator<'p> {
 /// 2025-01-06T09:00:00Z, a Monday.
 const EPOCH_MS: i64 = 1_736_154_000_000;
 
+/// Folded into the seed for the probes' own stream.
+const PROBE_STREAM: u64 = 0x50_52_4F_42_45;
+/// One unanswerable question for every this many answerable ones…
+const ABSTAIN_ONE_IN: usize = 4;
+/// …and never fewer than this, so the small corpus has some.
+const ABSTAIN_AT_LEAST: usize = 3;
+
+pub(crate) const DAY_MS: i64 = 86_400_000;
+
+/// Days from 1970-01-01 to a civil date, UTC.
+pub(crate) fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    month_start(year * 12 + month - 1) / DAY_MS + day - 1
+}
+
+/// A calendar month as `year * 12 + (month - 1)`, UTC.
+fn month_of(ts_ms: i64) -> i64 {
+    // Civil-from-days, after Howard Hinnant's public-domain algorithm.
+    let z = ts_ms.div_euclid(DAY_MS) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    year * 12 + month - 1
+}
+
+/// The first millisecond of a month counted as [`month_of`] counts them.
+fn month_start(month: i64) -> i64 {
+    let (y, m) = (month.div_euclid(12), month.rem_euclid(12) + 1);
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    (era * 146_097 + doe - 719_468) * DAY_MS
+}
+
 impl<'p> Generator<'p> {
     fn new(profile: &'p Profile) -> Self {
         Generator {
@@ -488,7 +572,8 @@ impl<'p> Generator<'p> {
             self.clock_ms += self.rng.range(2, 36) as i64 * 3_600_000;
         }
         let queries = self.queries();
-        Corpus { turns: self.turns, queries }
+        let probes = self.probes(queries.len());
+        Corpus { turns: self.turns, queries, probes }
     }
 
     fn session(&mut self, session_id: &str) {
@@ -807,9 +892,201 @@ impl<'p> Generator<'p> {
                 query: self.question(fact.key),
                 latest_session_id: fact.latest_session.clone(),
                 relevant,
+                ask: Ask::Current,
             });
         }
         out
+    }
+
+    /// The probes, drawn from a stream of their own: the turns and the
+    /// `current` queries are already generated and must not move when a
+    /// probe is added or rephrased.
+    fn probes(&mut self, answerable: usize) -> Vec<Query> {
+        self.rng = Rng::new(self.profile.seed ^ PROBE_STREAM);
+        let said_at: HashMap<String, i64> = self.turns.iter().map(|t| (t.uuid.clone(), t.ts)).collect();
+        let facts = self.facts.clone();
+        let mut drafts: Vec<(Ask, Key, String, &Fact, Vec<Relevance>)> = Vec::new();
+        for fact in &facts {
+            if fact.values.len() < 2 {
+                continue;
+            }
+            let graded = |wanted: usize| -> Vec<Relevance> {
+                fact.statements
+                    .iter()
+                    .map(|(uuid, v)| Relevance { uuid: uuid.clone(), grade: if *v == wanted { 2 } else { 1 } })
+                    .collect()
+            };
+            let previous = fact.values.len() - 2;
+            drafts.push((Ask::History, fact.key, self.history_question(fact.key), fact, graded(previous)));
+
+            // When each value was first stated; a value holds until the next one is.
+            let starts: Vec<i64> = (0..fact.values.len())
+                .map(|v| fact.statements.iter().filter(|(_, i)| *i == v).map(|(u, _)| said_at[u]).min())
+                .map(|ts| ts.expect("every value was stated when it was introduced"))
+                .collect();
+            let mut held: Vec<(usize, i64)> = Vec::new();
+            for v in 0..previous + 1 {
+                let (from, to) = (starts[v], starts[v + 1]);
+                for month in month_of(from)..=month_of(to - 1) {
+                    // Only this value was in force at any point of the month.
+                    let whole = (v == 0 || from <= month_start(month)) && to >= month_start(month + 1);
+                    if whole {
+                        held.push((v, month));
+                    }
+                }
+            }
+            if !held.is_empty() {
+                let (v, month) = *self.rng.pick(&held);
+                let when = format!("{} {}", MONTHS[month.rem_euclid(12) as usize], month.div_euclid(12));
+                drafts.push((Ask::AsOf, fact.key, self.as_of_question(fact.key, &when), fact, graded(v)));
+            }
+        }
+
+        let mut out: Vec<Query> = Vec::new();
+        for (ask, key, query, fact, relevant) in drafts {
+            out.push(Query {
+                id: format!("{}-p{:04}", self.profile.name, out.len() + 1),
+                kind: key.kind.name().to_string(),
+                query,
+                latest_session_id: fact.latest_session.clone(),
+                relevant,
+                ask,
+            });
+        }
+
+        let mut unstated: Vec<Key> =
+            self.every_key().into_iter().filter(|k| !facts.iter().any(|f| f.key == *k)).collect();
+        self.rng.shuffle(&mut unstated);
+        unstated.truncate((answerable / ABSTAIN_ONE_IN).max(ABSTAIN_AT_LEAST));
+        for key in unstated {
+            out.push(Query {
+                id: format!("{}-p{:04}", self.profile.name, out.len() + 1),
+                kind: key.kind.name().to_string(),
+                query: self.question(key),
+                latest_session_id: String::new(),
+                relevant: Vec::new(),
+                ask: Ask::Abstain,
+            });
+        }
+        out
+    }
+
+    /// Every key this profile could have stated a fact about.
+    fn every_key(&self) -> Vec<Key> {
+        let kinds: &[Kind] = if self.profile.register == Register::Transcript { &Kind::TRANSCRIPT } else { &Kind::ALL };
+        let mut out = Vec::new();
+        for &kind in kinds {
+            let (subjects, parts) = match kind {
+                Kind::Owner | Kind::Env | Kind::File | Kind::Symbol => (PROJECTS.len(), COMPONENTS.len()),
+                Kind::Date => (PROJECTS.len(), MILESTONES.len()),
+                Kind::Tool => (PROJECTS.len(), PURPOSES.len()),
+                Kind::Location => (PEOPLE.len(), 1),
+                Kind::Budget => (PROJECTS.len(), 1),
+            };
+            for a in 0..subjects {
+                for b in 0..parts {
+                    out.push(Key { kind, a, b });
+                }
+            }
+        }
+        out
+    }
+
+    fn history_question(&mut self, key: Key) -> String {
+        let q = match key.kind {
+            Kind::Owner => self
+                .rng
+                .pick(&["Who owned the {component} on {project} before?", "Who used to own {project}'s {component}?"])
+                .replace("{component}", COMPONENTS[key.b]),
+            Kind::Date => self
+                .rng
+                .pick(&[
+                    "What was the {project} {milestone} date before it changed?",
+                    "When was {project}'s {milestone} previously scheduled?",
+                ])
+                .replace("{milestone}", MILESTONES[key.b]),
+            Kind::Location => self
+                .rng
+                .pick(&["Where was {person} based before?", "Which city did {person} previously work from?"])
+                .replace("{person}", PEOPLE[key.a]),
+            Kind::Tool => self
+                .rng
+                .pick(&[
+                    "What did {project} use for {purpose} before?",
+                    "Which tool previously handled {purpose} on {project}?",
+                ])
+                .replace("{purpose}", PURPOSES[key.b]),
+            Kind::Env => self
+                .rng
+                .pick(&["What was {subject} set to before?", "Where did {subject} previously point?"])
+                .replace("{subject}", &key.subject()),
+            Kind::File => self
+                .rng
+                .pick(&["Who changed {subject} before the latest change?", "Who previously touched {subject}?"])
+                .replace("{subject}", &key.subject()),
+            Kind::Symbol => self
+                .rng
+                .pick(&["What did {subject} write to before?", "Where did {subject} previously land its output?"])
+                .replace("{subject}", &key.subject()),
+            Kind::Budget => (*self.rng.pick(&[
+                "What was the {project} budget before it changed?",
+                "How much could {project} spend previously?",
+            ]))
+            .to_string(),
+        };
+        self.render_question(key, &q)
+    }
+
+    fn as_of_question(&mut self, key: Key, when: &str) -> String {
+        let q = match key.kind {
+            Kind::Owner => self
+                .rng
+                .pick(&[
+                    "Who owned the {component} on {project} in {when}?",
+                    "Who was responsible for {project}'s {component} in {when}?",
+                ])
+                .replace("{component}", COMPONENTS[key.b]),
+            Kind::Date => self
+                .rng
+                .pick(&[
+                    "What was the {project} {milestone} date as of {when}?",
+                    "In {when}, when was {project}'s {milestone} scheduled?",
+                ])
+                .replace("{milestone}", MILESTONES[key.b]),
+            Kind::Location => self
+                .rng
+                .pick(&["Where was {person} based in {when}?", "Which city did {person} work from in {when}?"])
+                .replace("{person}", PEOPLE[key.a]),
+            Kind::Tool => self
+                .rng
+                .pick(&[
+                    "What did {project} use for {purpose} in {when}?",
+                    "Which tool handled {purpose} on {project} in {when}?",
+                ])
+                .replace("{purpose}", PURPOSES[key.b]),
+            Kind::Env => self
+                .rng
+                .pick(&["What was {subject} set to in {when}?", "Where did {subject} point in {when}?"])
+                .replace("{subject}", &key.subject()),
+            Kind::File => self
+                .rng
+                .pick(&["Who had last changed {subject} as of {when}?", "In {when}, who had touched {subject} last?"])
+                .replace("{subject}", &key.subject()),
+            Kind::Symbol => self
+                .rng
+                .pick(&["What did {subject} write to in {when}?", "Where did {subject} land its output in {when}?"])
+                .replace("{subject}", &key.subject()),
+            Kind::Budget => (*self
+                .rng
+                .pick(&["What was the {project} budget in {when}?", "How much could {project} spend as of {when}?"]))
+            .to_string(),
+        };
+        self.render_question(key, &q.replace("{when}", when))
+    }
+
+    fn render_question(&self, key: Key, q: &str) -> String {
+        let project = PROJECTS[key.a.min(PROJECTS.len() - 1)];
+        self.profile.register.render_question(&q.replace("{project}", project))
     }
 
     fn question(&mut self, key: Key) -> String {
@@ -898,6 +1175,48 @@ mod tests {
                 }
                 assert!(corpus.turns.iter().any(|t| t.session_id == q.latest_session_id));
             }
+        }
+    }
+
+    #[test]
+    fn probes_are_labeled_for_what_they_ask() {
+        for profile in PROFILES {
+            let corpus = generate(profile);
+            let uuids: HashSet<_> = corpus.turns.iter().map(|t| t.uuid.as_str()).collect();
+            let current: HashSet<_> =
+                corpus.queries.iter().flat_map(|q| &q.relevant).filter(|r| r.grade == 2).map(|r| &r.uuid).collect();
+            assert!(corpus.queries.iter().all(|q| q.ask == Ask::Current));
+            let ids: HashSet<_> = corpus.probes.iter().map(|q| &q.id).collect();
+            assert_eq!(ids.len(), corpus.probes.len(), "{}: duplicate probe id", profile.name);
+            for q in &corpus.probes {
+                assert!(q.relevant.iter().all(|r| uuids.contains(r.uuid.as_str())), "{}: {}", profile.name, q.id);
+                match q.ask {
+                    Ask::Current => panic!("{}: {} is not a probe", profile.name, q.id),
+                    Ask::Abstain => assert!(q.relevant.is_empty(), "{}: {} has an answer", profile.name, q.id),
+                    Ask::History | Ask::AsOf => {
+                        let wanted: Vec<_> = q.relevant.iter().filter(|r| r.grade == 2).collect();
+                        assert!(!wanted.is_empty(), "{}: {} wants nothing", profile.name, q.id);
+                        // The answer is an older value, never the one that holds now.
+                        assert!(wanted.iter().all(|r| !current.contains(&r.uuid)), "{}: {}", profile.name, q.id);
+                        assert!(q.relevant.iter().any(|r| r.grade == 1), "{}: {} never changed", profile.name, q.id);
+                    }
+                }
+            }
+            assert!(corpus.probes.iter().any(|q| q.ask == Ask::Abstain), "{}", profile.name);
+            assert!(corpus.probes.iter().any(|q| q.ask == Ask::History), "{}", profile.name);
+        }
+        assert!(generate(&LARGE).probes.iter().filter(|q| q.ask == Ask::AsOf).count() > 50);
+    }
+
+    #[test]
+    fn months_round_trip() {
+        // 2025-01-06T09:00:00Z, the corpus epoch.
+        assert_eq!(month_of(EPOCH_MS), 2025 * 12);
+        assert_eq!(month_start(2025 * 12), 1_735_689_600_000);
+        assert_eq!(month_start(2025 * 12 + 2), 1_740_787_200_000);
+        for month in (1999 * 12)..(2031 * 12) {
+            assert_eq!(month_of(month_start(month)), month);
+            assert_eq!(month_of(month_start(month + 1) - 1), month);
         }
     }
 
