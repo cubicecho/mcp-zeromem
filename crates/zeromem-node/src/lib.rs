@@ -267,6 +267,9 @@ pub struct CuratorConfigInput {
     pub token: Option<String>,
     #[napi(js_name = "expose_to_all")]
     pub expose_to_all: bool,
+    /// Longest standing brief the curator may write, in characters.
+    #[napi(js_name = "brief_max_chars")]
+    pub brief_max_chars: u32,
 }
 
 impl From<CuratorConfigInput> for CuratorConfig {
@@ -277,6 +280,7 @@ impl From<CuratorConfigInput> for CuratorConfig {
             min_age_ms: c.min_age_ms,
             token: c.token,
             expose_to_all: c.expose_to_all,
+            brief_max_chars: c.brief_max_chars,
         }
     }
 }
@@ -558,6 +562,12 @@ impl Engine {
         let config = CuratorConfig::from(config);
         with_engine(&self.inner, move |zm| zm.set_curator_config(&config).map(|c| serde_json::to_value(c).unwrap()))
             .await
+    }
+
+    /// The standing brief of a scope (`""` for the unscoped store), or null.
+    #[napi(ts_return_type = "Promise<StoredTurn | null>")]
+    pub async fn brief(&self, scope: String) -> Result<serde_json::Value> {
+        with_engine(&self.inner, move |zm| zm.brief(&scope).map(|t| serde_json::to_value(t).unwrap())).await
     }
 
     /// Apply a batch of reversible curation actions in one transaction.

@@ -32,6 +32,7 @@ export const queryKeys = {
   curationRuns: (page: PageQuery = {}) => ['curation', 'runs', page] as const,
   curationActions: (runId: string) => ['curation', 'actions', runId] as const,
   curationAliases: ['curation', 'aliases'] as const,
+  brief: (scope: string) => ['curation', 'brief', scope] as const,
 };
 
 // --- queries ---
@@ -185,6 +186,10 @@ export function useCurationActions(runId: string | null) {
 
 export function useCurationAliases() {
   return useQuery({ queryKey: queryKeys.curationAliases, queryFn: api.getCurationAliases });
+}
+
+export function useBrief(scope: string) {
+  return useQuery({ queryKey: queryKeys.brief(scope), queryFn: () => api.getBrief(scope) });
 }
 
 // --- mutations ---

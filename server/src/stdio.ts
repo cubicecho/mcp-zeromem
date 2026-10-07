@@ -31,7 +31,9 @@ async function main(): Promise<void> {
 
   // ZEROMEM_CURATOR=true, or "expose to every client" on the Settings page, adds the curator tools.
   const curator = config.curator || (await engine.curatorConfig()).expose_to_all;
-  const server = createGatewayServer({ engine, config, curator });
+  // Read once: a stdio process is one session, and the brief is what it starts with.
+  const brief = await engine.brief(config.scope ?? '');
+  const server = createGatewayServer({ engine, config, curator, brief });
   await server.connect(new StdioServerTransport());
   console.error(
     `mcp-zeromem stdio ready (store: ${config.dataDir}${config.readOnly ? ', read-only' : ''}${curator ? ', curator' : ''})`,

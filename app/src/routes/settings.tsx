@@ -656,7 +656,7 @@ function Curator({ readOnly }: { readOnly: boolean }) {
               </p>
               <CuratorToken settings={settings.data} readOnly={readOnly} />
               <CuratorLimits
-                key={`${settings.data.max_per_call}-${settings.data.max_per_run}-${settings.data.min_age_ms}-${settings.data.expose_to_all}`}
+                key={`${settings.data.max_per_call}-${settings.data.max_per_run}-${settings.data.min_age_ms}-${settings.data.brief_max_chars}-${settings.data.expose_to_all}`}
                 settings={settings.data}
                 readOnly={readOnly}
               />
@@ -679,6 +679,7 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
     max_per_call: settings.max_per_call,
     max_per_run: settings.max_per_run,
     min_age_ms: settings.min_age_ms,
+    brief_max_chars: settings.brief_max_chars,
     expose_to_all: settings.expose_to_all,
   };
 
@@ -794,6 +795,7 @@ interface LimitValues {
   perCall: number | null;
   perRun: number | null;
   minAgeHours: number | null;
+  briefMaxChars: number | null;
   exposeToAll: boolean;
 }
 
@@ -810,6 +812,7 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
     perCall: settings.max_per_call,
     perRun: settings.max_per_run,
     minAgeHours: settings.min_age_ms / HOUR_MS,
+    briefMaxChars: settings.brief_max_chars,
     exposeToAll: settings.expose_to_all,
   };
   const form = useAppForm({
@@ -821,6 +824,7 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
             max_per_call: value.perCall ?? settings.max_per_call,
             max_per_run: value.perRun ?? settings.max_per_run,
             min_age_ms: Math.round((value.minAgeHours ?? 0) * HOUR_MS),
+            brief_max_chars: value.briefMaxChars ?? settings.brief_max_chars,
             expose_to_all: value.exposeToAll,
           },
           { onSuccess: () => toast.success('Curator settings saved.'), onError: toastApiError },
@@ -838,9 +842,9 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
     >
       <Section
         title="Limits"
-        description="The minimum age keeps a live conversation from being curated under the person having it. Actions beyond a limit are refused and reported to the curator."
+        description="The minimum age keeps a live conversation from being curated under the person having it. Actions beyond a limit are refused and reported to the curator, and so is a standing brief longer than its limit: a brief is loaded at the start of every session, so its length is paid each time."
       />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <NumberField
           form={form}
           name="perCall"
@@ -868,6 +872,23 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
           disabled={readOnly}
           validators={{
             onChange: ({ value }) => (value === null || value < 0 ? 'Zero or more hours.' : undefined),
+          }}
+        />
+        <NumberField
+          form={form}
+          name="briefMaxChars"
+          label="Longest brief (characters)"
+          min={CURATOR_LIMITS.briefMinChars}
+          max={CURATOR_LIMITS.briefMaxChars}
+          disabled={readOnly}
+          validators={{
+            onChange: ({ value }) =>
+              value === null ||
+              !Number.isInteger(value) ||
+              value < CURATOR_LIMITS.briefMinChars ||
+              value > CURATOR_LIMITS.briefMaxChars
+                ? `A whole number from ${formatCount(CURATOR_LIMITS.briefMinChars)} to ${formatCount(CURATOR_LIMITS.briefMaxChars)}.`
+                : undefined,
           }}
         />
       </div>

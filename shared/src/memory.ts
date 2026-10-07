@@ -157,7 +157,7 @@ export const sessionSummarySchema = z.object({
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 
 /** `note` is a curator's consolidated note; an ordinary turn leaves the field out. */
-export const turnKindSchema = z.enum(['turn', 'note']);
+export const turnKindSchema = z.enum(['turn', 'note', 'brief']);
 export type TurnKind = z.infer<typeof turnKindSchema>;
 
 export const storedTurnSchema = z.object({

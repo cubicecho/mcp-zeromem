@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { errorMiddleware } from './api/error-middleware.ts';
+import { createBriefRouter } from './api/routes/brief.ts';
 import { createCurationRouter } from './api/routes/curation.ts';
 import { createIngestRouter } from './api/routes/ingest.ts';
 import { createRecallRouter } from './api/routes/recall.ts';
@@ -49,6 +50,7 @@ export function buildApp(deps: AppDeps): express.Express {
   app.use('/api/recall', auth, createRecallRouter(engine));
   app.use('/api/ingest', auth, createIngestRouter({ engine, config }));
   app.use('/api/viz', auth, createVizRouter({ engine, evalHistoryPath: deps.evalHistoryPath }));
+  app.use('/api/brief', auth, createBriefRouter({ engine, config }));
   app.use('/api/curation', auth, createCurationRouter({ engine, config }));
   app.use('/api/settings', auth, createSettingsRouter({ engine, config, worker: deps.worker, curatorSettings }));
   app.use('/mcp', mcpAuth, createMcpRouter({ engine, config, curatorSettings }));

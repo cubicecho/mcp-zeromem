@@ -272,6 +272,11 @@ export class ZeroMemEngine {
     return check(curatorConfigSchema, this.native.setCuratorConfig({ ...config, token: config.token ?? undefined }));
   }
 
+  /** The standing brief of a scope (`''` for the unscoped store), or null when it has none. */
+  brief(scope = ''): Promise<StoredTurn | null> {
+    return check(storedTurnSchema.nullable(), this.native.brief(scope));
+  }
+
   /**
    * Apply reversible curation actions in one transaction. Each is checked on
    * its own; a rejected one is reported and does not stop the rest. The

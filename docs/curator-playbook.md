@@ -17,6 +17,7 @@ little recall quality. A wrong one hides something a person later needs.
 | `alias` | Two names for one entity. The alias folds into the canonical name in the entity index. | `{op: "alias", alias: "Maya", canonical: "Maya Okafor", reason}` |
 | `block` | An "entity" the extractor got wrong, such as a capitalised common word. | `{op: "block", entity: "Sure", reason}` |
 | `note` | A long, old episode worth one paragraph. The note is recalled like a turn, and its sources collapse under it. | `{op: "note", session_id, text, source_ids: [..], reason}` |
+| `brief` | The standing brief of a scope: what a new session should know before it asks. Never recalled; the newest one is in force. A job of its own, see the `zeromem_curate_brief` prompt. | `{op: "brief", scope, text, source_ids: [..], reason}` |
 | `run_end` | Closing the run: it records your summary and moves the cursor. | `{op: "run_end", summary, cursor?}` |
 
 `unalias` and `unblock` reverse their pairs.

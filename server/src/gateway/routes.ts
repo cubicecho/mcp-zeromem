@@ -1,4 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { Router } from 'express';
 import type { Scope } from '../auth.ts';
 import type { CuratorSettingsStore } from '../curator.ts';
@@ -26,7 +27,9 @@ export function createMcpRouter(deps: McpRouterDeps): Router {
   router.all('/', async (req, res) => {
     const scope = (res.locals.scope as Scope | undefined) ?? 'default';
     const curator = scope === 'curator' || (await deps.curatorSettings.config()).expose_to_all;
-    const server = createGatewayServer({ engine: deps.engine, config: deps.config, curator });
+    // Only `initialize` carries the server's instructions, so only it pays for the read.
+    const brief = isInitializeRequest(req.body) ? await deps.engine.brief(deps.config.scope ?? '') : null;
+    const server = createGatewayServer({ engine: deps.engine, config: deps.config, curator, brief });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

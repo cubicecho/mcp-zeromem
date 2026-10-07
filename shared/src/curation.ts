@@ -5,8 +5,8 @@ import { mentionSchema } from './viz.ts';
 
 /**
  * Curation: reversible edits an agent (or a person) makes to what recall
- * sees. Nothing here deletes a turn: hide, supersede, alias, block and note
- * are recorded in an action log and every one can be undone.
+ * sees. Nothing here deletes a turn: hide, supersede, alias, block, note and
+ * brief are recorded in an action log and every one can be undone.
  */
 
 const count = z.number().int().nonnegative();
@@ -22,6 +22,7 @@ export const curatorConfigSchema = z.object({
   min_age_ms: count,
   token: z.string().nullable(),
   expose_to_all: z.boolean(),
+  brief_max_chars: z.number().int().positive(),
 });
 export type CuratorConfig = z.infer<typeof curatorConfigSchema>;
 
@@ -35,6 +36,8 @@ export const curatorSettingsSchema = z.object({
   min_age_ms: count,
   /** Every MCP client gets the curator tools, not only the curator token. */
   expose_to_all: z.boolean(),
+  /** Longest standing brief the curator may write, in characters. */
+  brief_max_chars: z.number().int().positive(),
   token_set: z.boolean(),
   /** `env` (MCP_ZEROMEM_CURATOR_TOKEN) overrides `store`. */
   token_source: apiKeySourceSchema,
@@ -45,7 +48,13 @@ export const curatorSettingsSchema = z.object({
 });
 export type CuratorSettings = z.infer<typeof curatorSettingsSchema>;
 
-export const CURATOR_LIMITS = { maxPerCall: 1000, maxPerRun: 100_000, tokenMinLength: 16 } as const;
+export const CURATOR_LIMITS = {
+  maxPerCall: 1000,
+  maxPerRun: 100_000,
+  tokenMinLength: 16,
+  briefMinChars: 200,
+  briefMaxChars: 8000,
+} as const;
 
 /** `PUT /api/settings/curator` — the whole settings object; `token` absent keeps the stored one. */
 export const curatorSettingsUpdateSchema = z.object({
@@ -53,6 +62,7 @@ export const curatorSettingsUpdateSchema = z.object({
   max_per_run: z.number().int().min(1).max(CURATOR_LIMITS.maxPerRun),
   min_age_ms: z.number().int().min(0),
   expose_to_all: z.boolean(),
+  brief_max_chars: z.number().int().min(CURATOR_LIMITS.briefMinChars).max(CURATOR_LIMITS.briefMaxChars),
   /** A new token, null to clear it, absent to keep it. */
   token: z.string().trim().min(CURATOR_LIMITS.tokenMinLength).nullable().optional(),
 });
@@ -91,6 +101,14 @@ const noteOp = z.object({
   text: z.string().describe('The note: the lasting facts of the source turns, in plain sentences.'),
   source_ids: turnIds.describe('The turns the note stands for.'),
 });
+const briefOp = z.object({
+  op: z.literal('brief'),
+  scope: z.string().default('').describe('The scope the brief is for; empty for the unscoped store.'),
+  text: z
+    .string()
+    .describe('The standing brief: what a new session in this scope should know before it asks, in plain sentences.'),
+  source_ids: z.array(turnId).max(1000).default([]).describe('Turns the brief draws on, all in this scope.'),
+});
 const runEndOp = z.object({
   op: z.literal('run_end'),
   summary: z.string().default('').describe('What the run did, in a sentence or two.'),
@@ -110,6 +128,7 @@ export const curationOpSchema = z.discriminatedUnion('op', [
   blockOp,
   unblockOp,
   noteOp,
+  briefOp,
   runEndOp,
 ]);
 export type CurationOp = z.infer<typeof curationOpSchema>;
@@ -127,6 +146,7 @@ export const curationActionSchema = z.discriminatedUnion('op', [
   withReason(blockOp),
   withReason(unblockOp),
   withReason(noteOp),
+  withReason(briefOp),
   withReason(runEndOp),
 ]);
 export type CurationAction = z.infer<typeof curationActionSchema>;
@@ -137,6 +157,7 @@ export const actionResultSchema = z.object({
   ok: z.boolean(),
   action_id: z.number().int().optional(),
   note_id: z.number().int().optional(),
+  brief_id: z.number().int().optional(),
   error: z.string().optional(),
 });
 export type ActionResult = z.infer<typeof actionResultSchema>;
@@ -236,7 +257,7 @@ export type CurationAliases = z.infer<typeof curationAliasesSchema>;
 
 // --- candidates -----------------------------------------------------------------
 
-export const candidateKindSchema = z.enum(['duplicates', 'noise', 'aliases', 'supersession', 'consolidation']);
+export const candidateKindSchema = z.enum(['duplicates', 'noise', 'aliases', 'supersession', 'consolidation', 'brief']);
 export type CandidateKind = z.infer<typeof candidateKindSchema>;
 
 export const candidateTurnSchema = z.object({
@@ -272,6 +293,14 @@ export const candidatePageSchema = z.object({
 export type CandidatePage = z.infer<typeof candidatePageSchema>;
 
 // --- REST -----------------------------------------------------------------------
+
+/** `GET /api/brief` — `scope` absent is the server's own scope, empty the unscoped store. */
+export const briefQuerySchema = z.object({ scope: z.string().trim().max(200).optional() });
+export type BriefQuery = z.infer<typeof briefQuerySchema>;
+
+/** The standing brief in force for a scope; null when none has been written. */
+export const briefResponseSchema = z.object({ scope: z.string(), brief: storedTurnSchema.nullable() });
+export type BriefResponse = z.infer<typeof briefResponseSchema>;
 
 /** `GET /api/curation/actions` */
 export const curationActionsQuerySchema = pageQuerySchema.extend({ run_id: z.string().min(1).optional() });

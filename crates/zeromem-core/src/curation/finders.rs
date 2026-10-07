@@ -8,7 +8,8 @@
 //! hidden or superseded turns and turns younger than the configured age.
 //! A page stops at `limit` candidates or after a bounded scan and reports
 //! `scanned_through`, the id to resume from. Aliases and consolidation rank
-//! keys and episodes instead and page with `offset`.
+//! keys and episodes instead and page with `offset`, and so does the brief
+//! finder, which ranks scopes.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -37,6 +38,8 @@ pub enum CandidateKind {
     Supersession,
     /// A long, old episode no note stands for yet.
     Consolidation,
+    /// A scope with no standing brief, or one many turns behind.
+    Brief,
 }
 
 impl CandidateKind {
@@ -47,6 +50,7 @@ impl CandidateKind {
             "aliases" => CandidateKind::Aliases,
             "supersession" => CandidateKind::Supersession,
             "consolidation" => CandidateKind::Consolidation,
+            "brief" => CandidateKind::Brief,
             _ => return None,
         })
     }
@@ -76,6 +80,10 @@ const SCAN_DUPLICATES: usize = 500;
 /// An episode is worth a note once it has this many turns and is this old.
 pub const CONSOLIDATE_MIN_TURNS: u32 = 8;
 pub const CONSOLIDATE_MIN_AGE_MS: i64 = 7 * DAY_MS;
+/// A brief is behind once this many turns arrived in its scope after it.
+pub const BRIEF_STALE_TURNS: u32 = 50;
+/// The newest turns of the scope a brief candidate shows: where to start reading.
+const BRIEF_SAMPLE_TURNS: usize = 5;
 const TEXT_CHARS: usize = 300;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -167,6 +175,7 @@ pub fn find(
         CandidateKind::Consolidation => {
             consolidation(store, since, cutoff.min(now - CONSOLIDATE_MIN_AGE_MS), limit, offset)?
         }
+        CandidateKind::Brief => briefs(store, since, limit, offset)?,
     };
     Ok(CandidatePage { kind, since_turn_id: since, candidates, scanned_through, more })
 }
@@ -610,6 +619,68 @@ fn consolidation(
         });
     }
     Ok((out, scanned_through, false))
+}
+
+// --- brief -----------------------------------------------------------------------
+
+/// Scopes worth a brief: those with none first, then those whose brief is
+/// furthest behind. The cursor plays no part: a brief is about the scope as
+/// it stands, not about what arrived since the last run.
+fn briefs(store: &Store, since: i64, limit: usize, offset: usize) -> Result<(Vec<Candidate>, i64, bool)> {
+    let mut stmt = store.conn.prepare(
+        "SELECT s.scope, s.turns, b.ts,
+                (SELECT COUNT(*) FROM turns t WHERE t.scope = s.scope AND t.kind = 'turn' AND t.ts > b.ts)
+         FROM (SELECT scope, COUNT(*) AS turns FROM turns WHERE kind = 'turn' GROUP BY scope) s
+         LEFT JOIN (SELECT scope, MAX(ts) AS ts FROM turns WHERE kind = 'brief' GROUP BY scope) b ON b.scope = s.scope",
+    )?;
+    type Row = (String, u32, Option<i64>, u32);
+    let rows: Vec<Row> =
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<rusqlite::Result<_>>()?;
+    let mut ranked: Vec<(f64, String, String)> = rows
+        .into_iter()
+        .filter_map(|(scope, turns, brief_ts, newer)| {
+            let name = if scope.is_empty() { "the unscoped store".to_string() } else { format!("scope '{scope}'") };
+            match brief_ts {
+                None => Some((1.0, scope, format!("{name} has {turns} turns and no brief"))),
+                Some(_) if newer >= BRIEF_STALE_TURNS => {
+                    let score = round3((f64::from(newer) / f64::from(4 * BRIEF_STALE_TURNS)).min(0.99));
+                    Some((score, scope, format!("{name} has {newer} turns newer than its brief")))
+                }
+                Some(_) => None,
+            }
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    let more = ranked.len() > offset + limit;
+    let sql = format!(
+        "SELECT t.id, t.session_id, t.speaker, t.text, t.ts FROM turns t
+         WHERE t.scope = ?1 AND {ELIGIBLE} ORDER BY t.ts DESC, t.id DESC LIMIT ?2"
+    );
+    let mut newest = store.conn.prepare_cached(&sql)?;
+    let mut out = Vec::new();
+    for (score, scope, reason) in ranked.into_iter().skip(offset).take(limit) {
+        let mut turns: Vec<ScanTurn> = newest
+            .query_map(params![scope, BRIEF_SAMPLE_TURNS as i64], |r| {
+                Ok(ScanTurn {
+                    id: r.get(0)?,
+                    session_id: r.get(1)?,
+                    speaker: r.get(2)?,
+                    text: r.get(3)?,
+                    ts: r.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        turns.reverse();
+        out.push(Candidate {
+            kind: CandidateKind::Brief,
+            score,
+            turns: turns.iter().map(ScanTurn::candidate).collect(),
+            entities: Vec::new(),
+            reason,
+            suggested: CurationOp::Brief { scope, text: String::new(), source_ids: Vec::new() },
+        });
+    }
+    Ok((out, since, more))
 }
 
 fn round3(x: f64) -> f64 {

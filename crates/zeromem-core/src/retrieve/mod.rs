@@ -37,7 +37,7 @@ use crate::entities;
 use crate::error::Result;
 use crate::store::{Reach, Store};
 use crate::text;
-use crate::types::Turn;
+use crate::types::{Turn, TurnKind};
 
 pub use calibrate::{Calibrated, Role, DROP_BELOW, PRIMARY_AT};
 pub use fuse::{Fused, RRF_K};
@@ -217,7 +217,8 @@ struct Filter<'a> {
 
 impl Filter<'_> {
     fn keeps(&self, t: &Turn) -> bool {
-        self.hidden.is_none_or(|h| !h.contains(&t.id)) && self.reach.keeps(t)
+        // A brief is read whole at session start, never as evidence.
+        t.kind != TurnKind::Brief && self.hidden.is_none_or(|h| !h.contains(&t.id)) && self.reach.keeps(t)
     }
 }
 
