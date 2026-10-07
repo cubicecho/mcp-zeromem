@@ -286,6 +286,10 @@ export const profileSchema = z.object({
   entities: z.array(z.string()),
   temporal: z.boolean(),
   question: z.boolean(),
+  /** The question asks what held before the current value; absent when it does not. */
+  history: z.boolean().optional(),
+  /** The period the question names, `[start, end)` in Unix milliseconds. */
+  window: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -311,6 +315,8 @@ export const evidenceSchema = z.object({
   entities: z.array(z.string()).optional(),
   /** The newer turn that restates this one; its score was halved. */
   superseded_by: z.number().int().optional(),
+  /** When this turn stopped holding: the `ts` of the turn that superseded it. Its own `ts` is when it started. */
+  valid_until: z.number().int().optional(),
   /** Hidden by curation; only with `include_hidden`. */
   hidden: z.boolean().optional(),
   /** For a note, the source turns collapsed under it. */

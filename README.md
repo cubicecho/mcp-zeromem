@@ -318,7 +318,7 @@ reason and can be undone from the Curation page. Purging is left to a human
 | Op | Effect on recall |
 | --- | --- |
 | `hide` / `unhide` | The turn is left out of recall (still shown, flagged, in session reads) |
-| `supersede` | The old turn hands its score to its replacement, which is recalled in its place even when it shares few words with the question; the old turn is halved and folds away when both make the answer. Temporal questions ("what did … used to …") are left alone |
+| `supersede` | The old turn hands its score to its replacement, which is recalled in its place even when it shares few words with the question; the old turn is halved and folds away when both make the answer. A question about the past ("who owned … before", "… in March 2025") is left alone: the old turn is what it wants, and comes back with `valid_until`, the date its replacement was said |
 | `alias` / `unalias` | Mentions of the alias count as the canonical entity in the graph and entity stats |
 | `block` / `unblock` | The name is not an entity at all |
 | `note` | A new turn (`kind: note`, speaker `zeromem-curator`) summarising source turns; when both make the list the sources fold under the note |
@@ -495,6 +495,22 @@ by reciprocal rank. The fused list is calibrated: candidates under 0.35 are
 dropped, those at 0.7 or above are `primary`, the rest `supporting`. With
 `detail: full` the result carries the route and per-turn sources; the
 `/api/recall/trace` endpoint (and `zm query --trace`) returns every stage.
+
+A question about the past is read as one, from its words alone. `before`,
+`previously`, `used to`, `formerly`, `originally` and the like set
+`profile.history`: the value curation knows was replaced ranks first, the most
+recently replaced ahead of older ones. A named period sets `profile.window` —
+`2025-03-14`, `2025-03`, `March 2025`, `14 March 2025`, `in 2024`,
+`yesterday`, `last week|month|year`, `3 days ago` — in UTC calendar units,
+relative phrases counted from the newest turn in the store; what was in force
+then ranks first: said before the period ended and not replaced before it
+began, the latest such statement ahead of earlier ones. A bare month (`in
+March`) is not read, since it names an event's date as often as the time
+something was said. Both are preferences in the fusion, not filters, so a
+store nobody curated still answers from timestamps alone and `since`/`until`
+remain the way to cut. Every hit that was replaced carries `superseded_by` and
+`valid_until`, the timestamp of the turn that replaced it; its own `ts` is when
+it started to hold. `format: text` writes that into the hit's header.
 
 ## Numbers
 

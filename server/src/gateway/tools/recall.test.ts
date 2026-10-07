@@ -35,6 +35,16 @@ describe('formatEvidenceText', () => {
     );
   });
 
+  it('says when a hit was replaced, and by which turn', () => {
+    const replaced = hit('primary', 'Tomas owns billing.', { superseded_by: 7, valid_until: Date.UTC(2026, 9, 2, 8) });
+    expect(formatEvidenceText([replaced])).toBe(
+      '[primary] 2026-09-10 user (session s1, turn 1, superseded 2026-10-02 by turn 7): Tomas owns billing.',
+    );
+    expect(formatEvidenceText([hit('primary', 'x', { superseded_by: 7 })])).toContain(
+      '(session s1, turn 1, superseded by turn 7)',
+    );
+  });
+
   it('puts primary hits first and keeps rank order within each role', () => {
     const blocks = formatEvidenceText([
       hit('supporting', 'one'),

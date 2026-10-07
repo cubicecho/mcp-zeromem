@@ -11,15 +11,21 @@
 //! run with the intermediate state left in, not a second implementation.
 //!
 //! Curation shapes the run without changing any view: hidden turns are
-//! never nominated; outside a temporal question a superseded turn hands its
-//! fused score to the turn that replaced it, is halved itself, and drops out
-//! when its replacement is kept; and a turn drops out under a kept note that
-//! stands for it.
+//! never nominated; a superseded turn hands its fused score to the turn that
+//! replaced it, is halved itself, and drops out when its replacement is
+//! kept; and a turn drops out under a kept note that stands for it.
+//!
+//! A question about the past (`Profile::past`: it asks what held before, or
+//! names a period) reverses the middle one. The superseded turn is then the
+//! answer, so it keeps its score, stays beside its replacement, and
+//! `fuse::Clock` prefers it; every superseded hit says when it stopped
+//! holding (`Evidence::valid_until`).
 
 pub mod calibrate;
 pub mod fuse;
 pub mod profile;
 pub mod route;
+pub mod window;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -37,6 +43,7 @@ pub use calibrate::{Calibrated, Role, DROP_BELOW, PRIMARY_AT};
 pub use fuse::{Fused, RRF_K};
 pub use profile::Profile;
 pub use route::{ViewKind, ViewPlan};
+pub use window::Window;
 
 /// How much of the answer to return.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,9 +121,13 @@ pub struct Evidence {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<String>,
     /// A newer turn restates this one. Kept only when that turn is not in
-    /// the answer, or the question is about history.
+    /// the answer, or the question is about the past.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub superseded_by: Option<i64>,
+    /// When this turn stopped holding: the timestamp of the turn that
+    /// superseded it. The turn's own `ts` is when it started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<i64>,
     /// Hidden by curation; only with `include_hidden`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
@@ -215,6 +226,7 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     let top_k = opts.top_k.unwrap_or(DEFAULT_TOP_K).clamp(1, MAX_TOP_K) as usize;
     let detail = opts.detail.unwrap_or_default();
     let mut profile = profile::profile(query);
+    profile.window = window::parse(&profile.text, ctx.latest_ts);
     resolve_known_entities(ctx.store, &mut profile)?;
     let plan = route::plan(&profile, ctx);
     let include_hidden = opts.include_hidden.unwrap_or(false);
@@ -249,12 +261,14 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
     }
 
     // Fuse and calibrate.
-    let recency_weight = route::recency_weight(&profile);
-    let mut fused = fuse::fuse(&views, &turns, recency_weight, ctx.latest_ts);
-    if !profile.temporal && fused.iter().any(|f| flags.superseded_by.contains_key(&f.id)) {
+    let valid_until = valid_until(ctx.store, &turns, &flags)?;
+    let clock = route::clock(&profile, ctx.latest_ts, &valid_until);
+    fuse::settle_ties(&mut views, &turns, clock);
+    let mut fused = fuse::fuse(&views, &turns, clock);
+    if !profile.past() && !valid_until.is_empty() {
         hand_over(ctx.store, &mut fused, &mut turns, &flags, &filter)?;
     }
-    let Calibrated { kept, dropped } = collapse(&fused, top_k, &flags, profile.temporal);
+    let Calibrated { kept, dropped } = collapse(&fused, top_k, &flags, profile.past());
 
     let mut evidence = Vec::with_capacity(kept.len());
     for item in kept {
@@ -273,6 +287,7 @@ pub fn run(ctx: &mut Context<'_>, query: &str, opts: &QueryOptions) -> Result<Qu
         evidence.push(Evidence {
             hidden: flags.hidden.contains(&item.id),
             superseded_by: kept_by,
+            valid_until: valid_until.get(&item.id).copied(),
             covers,
             turn,
             score: item.score,
@@ -364,6 +379,22 @@ fn take_neighbours(
     out
 }
 
+/// When each superseded candidate stopped holding: the timestamp of the turn
+/// that replaced it. Empty, at no cost, in a store nobody has curated.
+fn valid_until(store: &Store, turns: &BTreeMap<i64, Turn>, flags: &Flags) -> Result<BTreeMap<i64, i64>> {
+    let replaced: Vec<(i64, i64)> =
+        turns.keys().filter_map(|id| flags.superseded_by.get(id).map(|by| (*id, *by))).collect();
+    if replaced.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let mut missing: Vec<i64> = replaced.iter().map(|(_, by)| *by).filter(|by| !turns.contains_key(by)).collect();
+    missing.sort_unstable();
+    missing.dedup();
+    let fetched = store.turns_by_ids(&missing)?;
+    let said_at = |id: &i64| turns.get(id).or_else(|| fetched.get(id)).map(|t| t.ts);
+    Ok(replaced.into_iter().filter_map(|(id, by)| said_at(&by).map(|ts| (id, ts))).collect())
+}
+
 /// A superseded turn hands its score to the turn that replaced it: the
 /// views found the old statement, and the curator said the new one is what
 /// it now reads. The replacement scores at least as well as what it
@@ -437,7 +468,7 @@ fn hand_over(
 /// Calibrate, then fold superseded turns into the turn that supersedes
 /// them and sources into the note that stands for them, when both made the
 /// answer; recalibrate over what is left so the freed places refill.
-fn collapse(fused: &[Fused], top_k: usize, flags: &Flags, temporal: bool) -> Calibrated {
+fn collapse(fused: &[Fused], top_k: usize, flags: &Flags, past: bool) -> Calibrated {
     let mut calibrated = calibrate::calibrate(fused, top_k);
     if flags.superseded_by.is_empty() && flags.covered_by.is_empty() {
         return calibrated;
@@ -450,9 +481,12 @@ fn collapse(fused: &[Fused], top_k: usize, flags: &Flags, temporal: bool) -> Cal
         // Best first, so of two turns pointing at each other the better stays.
         for k in &calibrated.kept {
             let alive = |id: &i64| kept.contains(id) && !removed.contains(id);
-            let reason = match flags.superseded_by.get(&k.id) {
-                Some(by) if !temporal && alive(by) => Some(format!("superseded by {by}")),
-                _ => flags
+            // Anything later in the chain will do: when A gave way to B and
+            // B to C, A folds under C even though B has folded already.
+            let heir = || successors(flags, k.id).find(|by| alive(by));
+            let reason = match heir().filter(|_| !past) {
+                Some(by) => Some(format!("superseded by {by}")),
+                None => flags
                     .covered_by
                     .get(&k.id)
                     .and_then(|notes| notes.iter().find(|n| alive(n)))
@@ -472,6 +506,16 @@ fn collapse(fused: &[Fused], top_k: usize, flags: &Flags, temporal: bool) -> Cal
     collapsed.append(&mut calibrated.dropped);
     calibrated.dropped = collapsed;
     calibrated
+}
+
+/// The turns that superseded `id`, nearest first, to the end of its chain.
+fn successors(flags: &Flags, id: i64) -> impl Iterator<Item = i64> + '_ {
+    let mut at = id;
+    // Bounded by the number of flags, so a cycle cannot loop.
+    (0..flags.superseded_by.len()).map_while(move |_| {
+        at = *flags.superseded_by.get(&at).filter(|next| **next != at)?;
+        Some(at)
+    })
 }
 
 /// Shrink a trace to what `query` returns.
