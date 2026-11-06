@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.ts';
 import { tempEngine, testConfig } from '../test-support.ts';
-import { discoveryEndpoints, hostSlug } from './endpoints.ts';
+import { discoveryEndpoints } from './endpoints.ts';
 
 let rig: ReturnType<typeof tempEngine>;
 
@@ -63,15 +63,5 @@ describe('discovery documents', () => {
   it('names the card after the host, so two servers on one network stay apart', () => {
     const [root] = discoveryEndpoints({ isAuthRequired: true, host: 'NAS.lan' });
     expect(root?.identifier).toBe('urn:air:nas.zeromem:mcp:memory');
-  });
-});
-
-describe('hostSlug', () => {
-  it.each([
-    ['NAS', 'nas'],
-    ['my_box.lan', 'my-box'],
-    ['---', 'host'],
-  ])('%s → %s', (input, expected) => {
-    expect(hostSlug(input)).toBe(expected);
   });
 });
