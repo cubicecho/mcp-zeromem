@@ -1,6 +1,7 @@
 import {
   CURATOR_LIMITS,
   type CuratorSettings,
+  type DiscoverySettings,
   type EmbedderKind,
   type EmbedderProbe,
   type EmbedderSettings,
@@ -49,6 +50,7 @@ import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import {
   useClearStore,
   useCuratorSettings,
+  useDiscoverySettings,
   useEmbedderSettings,
   useGenerateCuratorToken,
   useReembed,
@@ -56,6 +58,7 @@ import {
   useSetEmbedder,
   useTestEmbedder,
   useUpdateCuratorSettings,
+  useUpdateDiscoverySettings,
 } from '@/lib/queries';
 import { toastApiError } from '@/lib/toast';
 
@@ -75,6 +78,7 @@ const KIND_LABELS: Record<EmbedderKind, string> = {
  * clear the whole memory. Every change is written into the store, so the
  * stdio server and the host's `zm` hooks follow it on their next read; the
  * server's worker re-embeds in the background, which the progress bar tracks.
+ * The curator and the LAN announcement are set here too.
  */
 export function SettingsPage() {
   const settings = useEmbedderSettings();
@@ -117,6 +121,8 @@ export function SettingsPage() {
       )}
 
       <Curator readOnly={readOnly} />
+
+      <NetworkDiscovery readOnly={readOnly} />
 
       {status.data && <StoredData status={status.data} readOnly={readOnly} />}
     </div>
@@ -913,6 +919,90 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
       {readOnly ? (
         <p className="text-sm text-muted-foreground">
           This server is read-only (ZEROMEM_READ_ONLY), so the curator settings cannot be changed from here.
+        </p>
+      ) : (
+        <div>
+          <form.AppForm>
+            <form.Subscribe selector={(state) => state.isDefaultValue}>
+              {(unchanged) => <form.SubmitButton disabled={unchanged || update.isPending} />}
+            </form.Subscribe>
+          </form.AppForm>
+        </div>
+      )}
+    </form>
+  );
+}
+
+/** Network discovery: the documents that describe /mcp, and the switch that announces the server on the LAN. */
+function NetworkDiscovery({ readOnly }: { readOnly: boolean }) {
+  const settings = useDiscoverySettings();
+  return (
+    <CardLayout
+      title="Network discovery"
+      description={
+        <>
+          The server always describes its MCP endpoint at{' '}
+          <span className="font-mono">/.well-known/ai-catalog.json</span>. Advertising also announces it over mDNS (
+          <span className="font-mono">_mcp._tcp</span>), so tools on the same network, such as mcp-router, find it
+          without its address.
+        </>
+      }
+      content={
+        <>
+          {settings.isPending && <Skeleton className="h-16 w-full" />}
+          {settings.error && (
+            <QueryError what="the discovery settings" error={settings.error} onRetry={() => settings.refetch()} />
+          )}
+          {settings.data && (
+            <DiscoveryForm key={String(settings.data.lan_advertise)} settings={settings.data} readOnly={readOnly} />
+          )}
+        </>
+      }
+    />
+  );
+}
+
+/** The advertise switch and its Save button; read-only servers show the switch disabled. */
+function DiscoveryForm({ settings, readOnly }: { settings: DiscoverySettings; readOnly: boolean }) {
+  const update = useUpdateDiscoverySettings();
+  const form = useAppForm({
+    defaultValues: { lanAdvertise: settings.lan_advertise },
+    onSubmit: ({ value }) =>
+      update
+        .mutateAsync(
+          { lan_advertise: value.lanAdvertise },
+          {
+            onSuccess: (saved) =>
+              toast.success(saved.lan_advertise ? 'Advertising on the local network.' : 'Stopped advertising.'),
+            onError: toastApiError,
+          },
+        )
+        .catch(() => {}),
+  });
+
+  return (
+    <form
+      aria-label="Network discovery"
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
+    >
+      <SwitchField
+        form={form}
+        name="lanAdvertise"
+        label="Advertise on the local network"
+        description={
+          settings.loopback_only
+            ? 'This server listens on a loopback address (HOST), so no other machine can reach it and it is never announced.'
+            : 'Anything on this network can then see that the server is here. Connecting still needs the bearer token when auth is on.'
+        }
+        disabled={readOnly}
+      />
+      {readOnly ? (
+        <p className="text-sm text-muted-foreground">
+          This server is read-only (ZEROMEM_READ_ONLY), so network discovery cannot be changed from here.
         </p>
       ) : (
         <div>

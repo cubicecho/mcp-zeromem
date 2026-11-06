@@ -18,6 +18,8 @@ import {
   curationAliasesSchema,
   curationRunsSchema,
   curatorConfigSchema,
+  type DiscoveryConfig,
+  discoveryConfigSchema,
   type EmbedderChoice,
   type EmbedderProbe,
   type EmbedderSettings,
@@ -62,7 +64,7 @@ import {
   type UndoReport,
   undoReportSchema,
 } from '@mcp-zeromem/shared';
-import type { ZodType, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import { Metrics } from '../metrics.ts';
 
 /**
@@ -272,6 +274,27 @@ export class ZeroMemEngine {
     return check(curatorConfigSchema, this.native.setCuratorConfig({ ...config, token: config.token ?? undefined }));
   }
 
+  // --- discovery --------------------------------------------------------------
+
+  /**
+   * Reads whether the HTTP server should announce itself on the LAN.
+   *
+   * @returns The stored settings, or the defaults when none are stored.
+   */
+  discoveryConfig(): Promise<DiscoveryConfig> {
+    return check(discoveryConfigSchema, this.native.discoveryConfig());
+  }
+
+  /**
+   * Stores the discovery settings.
+   *
+   * @param config - The whole settings object.
+   * @returns What was stored.
+   */
+  setDiscoveryConfig(config: DiscoveryConfig): Promise<DiscoveryConfig> {
+    return check(discoveryConfigSchema, this.native.setDiscoveryConfig(config));
+  }
+
   /** The standing brief of a scope (`''` for the unscoped store), or null when it has none. */
   brief(scope = ''): Promise<StoredTurn | null> {
     return check(storedTurnSchema.nullable(), this.native.brief(scope));
@@ -350,7 +373,7 @@ export class ZeroMemEngine {
   }
 }
 
-async function check<T>(schema: ZodType<T, ZodTypeDef, unknown>, result: Promise<unknown>): Promise<T> {
+async function check<T>(schema: ZodType<T, unknown>, result: Promise<unknown>): Promise<T> {
   const value = await result;
   const parsed = schema.safeParse(value);
   if (!parsed.success) {

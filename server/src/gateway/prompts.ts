@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { type ZodRawShape, z } from 'zod';
+import { z } from 'zod';
 
 /** Each prompt is a doc first; the prompt serves it verbatim so the two cannot drift. */
 const DOCS_DIR = path.resolve(import.meta.dirname, '../../../docs');
@@ -38,7 +38,8 @@ interface CuratorPrompt {
   description: string;
   /** The file under `docs/` this prompt serves. */
   doc: string;
-  argsSchema: ZodRawShape;
+  /** Every argument is a string, so the callback's arguments type as strings. */
+  argsSchema: Record<string, z.ZodType<string | undefined>>;
   /** What this call, rather than the procedure, is about; appended as a section. */
   thisRun: (args: Record<string, string | undefined>) => string | null;
 }

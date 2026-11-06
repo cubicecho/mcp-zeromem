@@ -59,7 +59,7 @@ const responseSchema = z.object({
                 function: z.object({
                   name: z.string(),
                   // Some servers hand the arguments back already parsed.
-                  arguments: z.union([z.string(), z.record(z.unknown())]).nullish(),
+                  arguments: z.union([z.string(), z.record(z.string(), z.unknown())]).nullish(),
                 }),
               }),
             )

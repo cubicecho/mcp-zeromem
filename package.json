@@ -46,13 +46,5 @@
     "concurrently": "^9.1.2",
     "typescript": "^5.9.3",
     "vitest": "^3.2.0"
-  },
-  "overrides": {
-    "@modelcontextprotocol/sdk": {
-      "zod": "^3.25.0"
-    },
-    "zod-to-json-schema": {
-      "zod": "^3.25.0"
-    }
   }
 }
