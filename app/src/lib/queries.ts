@@ -1,6 +1,7 @@
 import type {
   ClearScope,
   CuratorSettingsUpdate,
+  DiscoverySettingsUpdate,
   EmbedderChangeRequest,
   GraphOptions,
   GrowthOptions,
@@ -29,6 +30,7 @@ export const queryKeys = {
   evalHistory: ['viz', 'eval'] as const,
   embedderSettings: ['settings', 'embedder'] as const,
   curatorSettings: ['settings', 'curator'] as const,
+  discoverySettings: ['settings', 'discovery'] as const,
   curationRuns: (page: PageQuery = {}) => ['curation', 'runs', page] as const,
   curationActions: (runId: string) => ['curation', 'actions', runId] as const,
   curationAliases: ['curation', 'aliases'] as const,
@@ -165,6 +167,15 @@ export function useCuratorSettings() {
   return useQuery({ queryKey: queryKeys.curatorSettings, queryFn: api.getCuratorSettings });
 }
 
+/**
+ * Reads whether the server announces itself on the LAN.
+ *
+ * @returns The query.
+ */
+export function useDiscoverySettings() {
+  return useQuery({ queryKey: queryKeys.discoverySettings, queryFn: api.getDiscoverySettings });
+}
+
 // --- curation ---
 
 /** The curator runs on someone else's schedule, so the log is polled like the status. */
@@ -283,6 +294,19 @@ export function useUpdateCuratorSettings() {
   return useMutation({
     mutationFn: (body: CuratorSettingsUpdate) => api.updateCuratorSettings(body),
     onSuccess: (settings) => client.setQueryData(queryKeys.curatorSettings, settings),
+  });
+}
+
+/**
+ * Turns the LAN announcement on or off, and keeps the cached settings in step.
+ *
+ * @returns The mutation.
+ */
+export function useUpdateDiscoverySettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DiscoverySettingsUpdate) => api.updateDiscoverySettings(body),
+    onSuccess: (settings) => client.setQueryData(queryKeys.discoverySettings, settings),
   });
 }
 

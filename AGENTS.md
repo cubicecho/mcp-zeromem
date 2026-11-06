@@ -231,6 +231,17 @@ query runs the SQL it always ran. `ZEROMEM_SCOPE` (`config.scope`) is the defaul
 remember and ingest; an explicit blank opts out, and `zeromem_read_session` never applies it. A
 note takes its sources' scope and cannot span two.
 
+**Discovery is public; the announcement is opt-in.** `server/src/discovery/endpoints.ts` builds
+the Server Card of `/mcp` and `app.ts` serves it with the AI Catalog at
+`/.well-known/ai-catalog.json` through `@cubicecho/mcp-discovery`'s `discoveryMiddleware`, mounted
+**ahead of every auth guard** because the documents are public: a card says `Authorization` is
+required when auth is on and never carries a token. The mDNS announcement (`_mcp._tcp`) follows
+`meta.discovery_config.lan_advertise` (default false, `PUT /api/settings/discovery`).
+`DiscoverySettingsStore` keeps the last value for `createAdvertiser`'s synchronous `isWanted` and
+calls `onChange` on every write, so a toggle applies without a restart; a loopback `HOST` is never
+announced. `index.ts` syncs the advertiser after `listen` and closes it first on shutdown so the
+goodbye goes out. The library needs zod 4, which is why `shared/` and `server/` are on it.
+
 **The harness comes before the feature.** `crates/zeromem-core/tests/oracle.rs` asserts that a
 store loaded from disk equals one rebuilt from the same turns, and `properties.rs` holds the
 proptest invariants (order independence, idempotent ingest, delete-then-reingest). Every derived

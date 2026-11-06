@@ -306,6 +306,33 @@ vectorless for the worker rather than silently substituting the hash embedder.
 A remote endpoint that starts failing trips a breaker for 30 s so a recall
 under load never waits out the timeout call after call.
 
+## Network discovery
+
+The server describes its MCP endpoint so other tools, such as
+[mcp-router](https://github.com/cubicecho/mcp-router), can find it without
+being given the URL:
+
+- `GET /.well-known/ai-catalog.json` is an [AI Catalog](https://github.com/Agent-Card/ai-catalog)
+  listing `/mcp`.
+- `GET /mcp/server-card` is its [MCP Server Card](https://modelcontextprotocol.io/seps/2127-mcp-server-cards):
+  `io.github.cubicecho.zeromem.<host>/memory`, with the URL the request came in on.
+
+Both are public, with no token needed. They say whether `/mcp` needs a bearer
+token, but never carry one. Both come from
+[`@cubicecho/mcp-discovery`](https://github.com/cubicecho/mcp-discovery).
+
+**Advertise on the local network** (Settings → Network discovery, or
+`PUT /api/settings/discovery` with `{"lan_advertise": true}`; off by default)
+also announces the server over mDNS as an `_mcp._tcp` service, so it can be
+found without knowing its address. The setting is stored in the store
+(`meta.discovery_config`) and takes effect at once; the server says goodbye on
+shutdown. A server bound to a loopback address (`HOST=127.0.0.1`) never
+announces itself, since no other machine could reach it, and logs why.
+
+mDNS needs multicast, which Docker's default bridge network drops: in a
+container, use `network_mode: host` (commented in `docker-compose.yml`) for
+the announcement to reach the LAN.
+
 ## Seeing the store
 
 The admin UI at `/` (same port as `/mcp`) has a page per structure the engine
@@ -323,7 +350,7 @@ text.
 | Compare | The same query with two settings side by side (top-k, session filters); pin side A, change B, and read the diff of the evidence sets | `/api/recall` |
 | Eval | recall@k / MRR / nDCG per commit, one line per corpus × embedder | `/api/viz/eval` |
 | Health | Recall latency percentiles and throughput per minute for the last hour, cold-open time, errors, then the raw status payload | `/api/viz/health` |
-| Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; and clearing the vectors or the whole memory | `/api/settings/embedder`, `/api/settings/clear` |
+| Settings | The store's embedder: current name, kind and dimension, the re-embed progress, a form to test and switch to the ONNX model, the hash fallback or an OpenAI-compatible endpoint, re-embedding with the current one; clearing the vectors or the whole memory; the curator's token and limits; and the LAN announcement | `/api/settings/embedder`, `/api/settings/clear`, `/api/settings/curator`, `/api/settings/discovery` |
 | Curation | Curator runs with the actions each took and why; undo one action or a whole run; the aliases and blocklist in force; the standing brief of each scope | `/api/curation/runs`, `/api/curation/actions`, `/api/curation/aliases`, `/api/brief` |
 
 Every snapshot endpoint is capped (`limit`) so a 50k-turn store never lands

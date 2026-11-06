@@ -14,6 +14,7 @@
 pub mod curation;
 pub mod dates;
 pub mod dense;
+pub mod discovery;
 pub mod entities;
 pub mod error;
 pub mod home;
@@ -740,6 +741,19 @@ impl ZeroMem {
         self.store.curator_config()
     }
 
+    // --- discovery --------------------------------------------------------
+
+    /// Whether the HTTP server announces itself on the LAN, as stored.
+    pub fn discovery_config(&self) -> Result<discovery::DiscoveryConfig> {
+        self.store.discovery_config()
+    }
+
+    /// Store the discovery settings; returns what was stored.
+    pub fn set_discovery_config(&mut self, config: &discovery::DiscoveryConfig) -> Result<discovery::DiscoveryConfig> {
+        self.store.set_discovery_config(config)?;
+        self.store.discovery_config()
+    }
+
     /// Apply a batch of curation actions; see [`curation`].
     pub fn curate_apply(
         &mut self,
@@ -922,6 +936,18 @@ mod tests {
 
     fn open(dir: &tempfile::TempDir) -> ZeroMem {
         ZeroMem::open(dir.path(), OpenOptions { embedder: EmbedderChoice::Hash, ..OpenOptions::default() }).unwrap()
+    }
+
+    #[test]
+    fn discovery_settings_are_off_until_set_and_outlive_a_clear_and_a_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut zm = open(&dir);
+        assert!(!zm.discovery_config().unwrap().lan_advertise);
+        let on = discovery::DiscoveryConfig { lan_advertise: true };
+        assert_eq!(zm.set_discovery_config(&on).unwrap(), on);
+        zm.clear_memory().unwrap();
+        drop(zm);
+        assert_eq!(open(&dir).discovery_config().unwrap(), on);
     }
 
     #[test]

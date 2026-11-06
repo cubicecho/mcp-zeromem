@@ -18,6 +18,8 @@ import {
   curationAliasesSchema,
   curationRunsSchema,
   curatorConfigSchema,
+  type DiscoveryConfig,
+  discoveryConfigSchema,
   type EmbedderChoice,
   type EmbedderProbe,
   type EmbedderSettings,
@@ -270,6 +272,27 @@ export class ZeroMemEngine {
   /** Validate and store the curator settings; resolves to what was stored. */
   setCuratorConfig(config: CuratorConfig): Promise<CuratorConfig> {
     return check(curatorConfigSchema, this.native.setCuratorConfig({ ...config, token: config.token ?? undefined }));
+  }
+
+  // --- discovery --------------------------------------------------------------
+
+  /**
+   * Reads whether the HTTP server should announce itself on the LAN.
+   *
+   * @returns The stored settings, or the defaults when none are stored.
+   */
+  discoveryConfig(): Promise<DiscoveryConfig> {
+    return check(discoveryConfigSchema, this.native.discoveryConfig());
+  }
+
+  /**
+   * Stores the discovery settings.
+   *
+   * @param config - The whole settings object.
+   * @returns What was stored.
+   */
+  setDiscoveryConfig(config: DiscoveryConfig): Promise<DiscoveryConfig> {
+    return check(discoveryConfigSchema, this.native.setDiscoveryConfig(config));
   }
 
   /** The standing brief of a scope (`''` for the unscoped store), or null when it has none. */

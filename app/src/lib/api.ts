@@ -10,6 +10,8 @@ import type {
   CuratorSettings,
   CuratorSettingsUpdate,
   CuratorTokenResponse,
+  DiscoverySettings,
+  DiscoverySettingsUpdate,
   EmbedderChangeRequest,
   EmbedderProbe,
   EmbedderSettings,
@@ -232,6 +234,25 @@ export function updateCuratorSettings(body: CuratorSettingsUpdate): Promise<Cura
 /** A fresh curator token; the response is the only time it is shown. */
 export function generateCuratorToken(): Promise<CuratorTokenResponse> {
   return request('/api/settings/curator/token', { method: 'POST' });
+}
+
+/**
+ * Reads whether the server announces itself on the LAN.
+ *
+ * @returns The stored setting and whether this server can act on it.
+ */
+export function getDiscoverySettings(): Promise<DiscoverySettings> {
+  return request('/api/settings/discovery');
+}
+
+/**
+ * Turns the LAN announcement on or off; the server follows at once.
+ *
+ * @param body - The whole settings object.
+ * @returns The settings after the write.
+ */
+export function updateDiscoverySettings(body: DiscoverySettingsUpdate): Promise<DiscoverySettings> {
+  return request('/api/settings/discovery', { method: 'PUT', body });
 }
 
 // --- curation ---

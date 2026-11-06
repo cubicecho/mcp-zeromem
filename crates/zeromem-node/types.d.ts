@@ -372,6 +372,13 @@ export interface CuratorConfig {
   brief_max_chars: number;
 }
 
+// --- discovery --------------------------------------------------------------
+
+export interface DiscoveryConfig {
+  /** Announce the HTTP server over mDNS as `_mcp._tcp`. */
+  lan_advertise: boolean;
+}
+
 export type CurationOp =
   | { op: 'hide'; turn_ids: number[] }
   | { op: 'unhide'; turn_ids: number[] }

@@ -4,6 +4,8 @@ import {
   type CuratorTokenResponse,
   clearRequestSchema,
   curatorSettingsUpdateSchema,
+  type DiscoverySettings,
+  discoverySettingsUpdateSchema,
   type EmbedderProbe,
   type EmbedderSettings,
   type EmbedderSwitch,
@@ -12,6 +14,7 @@ import {
 import { Router } from 'express';
 import type { Config } from '../../config.ts';
 import { CuratorSettingsStore } from '../../curator.ts';
+import { DiscoverySettingsStore } from '../../discovery/settings.ts';
 import type { EmbedWorker } from '../../engine/embed-worker.ts';
 import type { ZeroMemEngine } from '../../engine/index.ts';
 import { errorChainMessage, HttpError } from '../../errors.ts';
@@ -23,6 +26,8 @@ export interface SettingsDeps {
   worker?: EmbedWorker;
   /** The curator settings; built from the engine when absent. */
   curatorSettings?: CuratorSettingsStore;
+  /** The LAN discovery settings; built from the engine, listening everywhere, when absent. */
+  discoverySettings?: DiscoverySettingsStore;
 }
 
 /**
@@ -30,11 +35,12 @@ export interface SettingsDeps {
  * works, changing it and re-embedding with it; and clearing what the store
  * holds. Every change is persisted in the store, so the stdio server and the
  * host's `zm` hooks follow it on their next read. The curator's limits, token
- * and exposure live here too.
+ * and exposure live here too, and whether the server announces itself on the LAN.
  */
 export function createSettingsRouter(deps: SettingsDeps): Router {
   const router = Router();
   const curator = deps.curatorSettings ?? new CuratorSettingsStore(deps.engine, deps.config.curatorToken);
+  const discovery = deps.discoverySettings ?? new DiscoverySettingsStore(deps.engine, { listenHost: null });
   const refuseEnvToken = () => {
     if (curator.envOverridesToken) {
       throw new HttpError(409, 'MCP_ZEROMEM_CURATOR_TOKEN is set; it overrides the stored curator token');
@@ -147,6 +153,27 @@ export function createSettingsRouter(deps: SettingsDeps): Router {
       } catch (err) {
         throw new HttpError(400, 'The curator settings were refused', errorChainMessage(err), { cause: err });
       }
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/discovery', async (_req, res, next) => {
+    try {
+      const body: DiscoverySettings = await discovery.view();
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // The announcement follows at once: the store tells the advertiser it was given.
+  router.put('/discovery', async (req, res, next) => {
+    try {
+      refuseReadOnly();
+      const update = discoverySettingsUpdateSchema.parse(req.body);
+      const body: DiscoverySettings = await discovery.update(update);
       res.json(body);
     } catch (err) {
       next(err);

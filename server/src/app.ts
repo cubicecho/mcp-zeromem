@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { discoveryMiddleware } from '@cubicecho/mcp-discovery';
 import express from 'express';
 import { errorMiddleware } from './api/error-middleware.ts';
 import { createBriefRouter } from './api/routes/brief.ts';
@@ -13,6 +14,8 @@ import { createVizRouter } from './api/routes/viz/index.ts';
 import { createAuthMiddleware, createMcpAuthMiddleware } from './auth.ts';
 import type { Config } from './config.ts';
 import { CuratorSettingsStore } from './curator.ts';
+import { discoveryEndpoints } from './discovery/endpoints.ts';
+import { DiscoverySettingsStore } from './discovery/settings.ts';
 import type { EmbedWorker } from './engine/embed-worker.ts';
 import type { ZeroMemEngine } from './engine/index.ts';
 import { createMcpRouter } from './gateway/routes.ts';
@@ -28,9 +31,16 @@ export interface AppDeps {
   evalHistoryPath?: string;
   /** Override for tests; built from the engine and MCP_ZEROMEM_CURATOR_TOKEN by default. */
   curatorSettings?: CuratorSettingsStore;
+  /** The HTTP server passes its own, which knows the listen address and tells the advertiser; built from the engine by default. */
+  discoverySettings?: DiscoverySettingsStore;
 }
 
-/** Build the Express app (separate from listen() so tests can drive it with supertest). */
+/**
+ * Builds the Express app: the public discovery documents, /api and /mcp behind bearer auth, then the web UI.
+ *
+ * @param deps - The engine, the config, and the optional worker, settings stores and paths.
+ * @returns The app, not yet listening, so tests can drive it with supertest.
+ */
 export function buildApp(deps: AppDeps): express.Express {
   const { engine, config } = deps;
   const app = express();
@@ -44,6 +54,10 @@ export function buildApp(deps: AppDeps): express.Express {
   const curatorSettings = deps.curatorSettings ?? new CuratorSettingsStore(engine, config.curatorToken);
   // /mcp also accepts the curator token, which grants the curator scope; /api never does.
   const mcpAuth = createMcpAuthMiddleware(authConfig, () => curatorSettings.token());
+  const discoverySettings = deps.discoverySettings ?? new DiscoverySettingsStore(engine, { listenHost: null });
+
+  // Public by design, so ahead of every auth guard: the AI Catalog and the Server Card of /mcp.
+  app.use(discoveryMiddleware(() => discoveryEndpoints({ isAuthRequired: config.authToken !== null })));
 
   app.use('/api/status', createStatusRouter({ engine, config }));
   app.use('/api/sessions', auth, createSessionsRouter({ engine, config }));
@@ -52,7 +66,11 @@ export function buildApp(deps: AppDeps): express.Express {
   app.use('/api/viz', auth, createVizRouter({ engine, evalHistoryPath: deps.evalHistoryPath }));
   app.use('/api/brief', auth, createBriefRouter({ engine, config }));
   app.use('/api/curation', auth, createCurationRouter({ engine, config }));
-  app.use('/api/settings', auth, createSettingsRouter({ engine, config, worker: deps.worker, curatorSettings }));
+  app.use(
+    '/api/settings',
+    auth,
+    createSettingsRouter({ engine, config, worker: deps.worker, curatorSettings, discoverySettings }),
+  );
   app.use('/mcp', mcpAuth, createMcpRouter({ engine, config, curatorSettings }));
 
   // Production: serve the built web UI with an SPA fallback for non-API GETs.

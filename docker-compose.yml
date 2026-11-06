@@ -5,6 +5,10 @@ services:
     ports:
       # 3000 and 3100 are taken by the other MCP servers on this host.
       - '3200:3000'
+    # To advertise on the LAN over mDNS (Settings → Network discovery), multicast
+    # has to reach the host's network, which the default bridge network drops.
+    # Replace `ports` with the line below, and set PORT=3200 in `environment`:
+    # network_mode: host
     volumes:
       # The SQLite store and the embedding model (downloaded on first boot).
       # Bind-mounted so a host-side `zm hook` can write into the same store

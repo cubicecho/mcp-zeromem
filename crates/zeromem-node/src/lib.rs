@@ -18,6 +18,7 @@ use napi_derive::napi;
 use zeromem_core::curation::finders::{CandidateKind, FinderOptions};
 use zeromem_core::curation::{CurationAction, CuratorConfig, TurnSelector, UndoTarget};
 use zeromem_core::dense::{EmbedderChoice, EmbedderSpec, RemoteSpec};
+use zeromem_core::discovery::DiscoveryConfig;
 use zeromem_core::viz;
 use zeromem_core::{Detail, OpenOptions, QueryOptions, TurnInput, ZeroMem};
 
@@ -270,6 +271,21 @@ pub struct CuratorConfigInput {
     /// Longest standing brief the curator may write, in characters.
     #[napi(js_name = "brief_max_chars")]
     pub brief_max_chars: u32,
+}
+
+/// The discovery settings to store. Every field is required: the settings
+/// page sends the whole object.
+#[napi(object)]
+pub struct DiscoveryConfigInput {
+    /// Announce the HTTP server over mDNS as `_mcp._tcp`.
+    #[napi(js_name = "lan_advertise")]
+    pub lan_advertise: bool,
+}
+
+impl From<DiscoveryConfigInput> for DiscoveryConfig {
+    fn from(c: DiscoveryConfigInput) -> Self {
+        DiscoveryConfig { lan_advertise: c.lan_advertise }
+    }
 }
 
 impl From<CuratorConfigInput> for CuratorConfig {
@@ -561,6 +577,22 @@ impl Engine {
     pub async fn set_curator_config(&self, config: CuratorConfigInput) -> Result<serde_json::Value> {
         let config = CuratorConfig::from(config);
         with_engine(&self.inner, move |zm| zm.set_curator_config(&config).map(|c| serde_json::to_value(c).unwrap()))
+            .await
+    }
+
+    // --- discovery ----------------------------------------------------------------
+
+    /// Whether the HTTP server announces itself on the LAN, as stored.
+    #[napi(ts_return_type = "Promise<DiscoveryConfig>")]
+    pub async fn discovery_config(&self) -> Result<serde_json::Value> {
+        with_engine(&self.inner, |zm| zm.discovery_config().map(|c| serde_json::to_value(c).unwrap())).await
+    }
+
+    /// Store the discovery settings; resolves to what was stored.
+    #[napi(ts_return_type = "Promise<DiscoveryConfig>")]
+    pub async fn set_discovery_config(&self, config: DiscoveryConfigInput) -> Result<serde_json::Value> {
+        let config = DiscoveryConfig::from(config);
+        with_engine(&self.inner, move |zm| zm.set_discovery_config(&config).map(|c| serde_json::to_value(c).unwrap()))
             .await
     }
 
