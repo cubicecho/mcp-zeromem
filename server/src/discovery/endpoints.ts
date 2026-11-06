@@ -1,5 +1,11 @@
 import { hostname } from 'node:os';
-import { type AdvertisedEndpoint, airIdentifier, createServerCard, type KeyValueInput } from '@cubicecho/mcp-discovery';
+import {
+  type AdvertisedEndpoint,
+  airIdentifier,
+  createServerCard,
+  hostSlug,
+  type KeyValueInput,
+} from '@cubicecho/mcp-discovery';
 import { SERVER_VERSION } from '../version.ts';
 
 /** The reverse-DNS namespace every card's name starts with; the host's slug is appended to it. */
@@ -20,9 +26,6 @@ const ENDPOINT_NAME = 'memory';
 /** The card's description; a Server Card allows 100 characters. */
 const DESCRIPTION = 'Conversational memory for agents: recall what was said, with no model in the loop.';
 
-/** The slug of a hostname that has no letter or digit left once cleaned. */
-const FALLBACK_HOST_SLUG = 'host';
-
 /** The header a client must send when bearer auth is on; its value is never in the card. */
 const AUTH_HEADER: KeyValueInput = {
   name: 'Authorization',
@@ -41,17 +44,6 @@ export interface DiscoveryEndpointOptions {
    * @defaultValue `os.hostname()`
    */
   host?: string;
-}
-
-/**
- * Cuts a hostname down to what a card name and a `urn:air` id allow: lowercase letters, digits and hyphens.
- *
- * @param name - The machine's hostname.
- * @returns The first label, cleaned, e.g. `nas` for `NAS` and `my-box` for `my_box.lan`.
- */
-export function hostSlug(name: string): string {
-  const [first = ''] = name.toLowerCase().split('.');
-  return first.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || FALLBACK_HOST_SLUG;
 }
 
 /**
