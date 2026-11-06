@@ -62,7 +62,7 @@ import {
   type UndoReport,
   undoReportSchema,
 } from '@mcp-zeromem/shared';
-import type { ZodType, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import { Metrics } from '../metrics.ts';
 
 /**
@@ -350,7 +350,7 @@ export class ZeroMemEngine {
   }
 }
 
-async function check<T>(schema: ZodType<T, ZodTypeDef, unknown>, result: Promise<unknown>): Promise<T> {
+async function check<T>(schema: ZodType<T, unknown>, result: Promise<unknown>): Promise<T> {
   const value = await result;
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
