@@ -2,8 +2,9 @@ import { TableIcon, TrendingUpIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { HeaderContentFooter } from '@/components/header-content-footer';
+import { StickyTable } from '@/components/sticky-table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export interface TableColumn<Row> {
   key: string;
@@ -67,11 +68,12 @@ export function ChartCard<Row>({
           ) : view === 'chart' ? (
             children
           ) : (
-            <StickyHeaderContentFooter
+            <HeaderContentFooter
+              scroll
               className="h-auto max-h-80"
               contentClassName="overflow-x-auto rounded-md border"
-              content={
-                <Table sticky>
+              contentSlot={
+                <StickyTable>
                   <TableHeader>
                     <TableRow>
                       {columns.map((column) => (
@@ -95,7 +97,7 @@ export function ChartCard<Row>({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </StickyTable>
               }
             />
           )}

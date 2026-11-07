@@ -6,11 +6,12 @@ import { toast } from 'sonner';
 import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -97,11 +98,12 @@ function Runs({ readOnly }: { readOnly: boolean }) {
   const current = runs.data.runs.find((run) => run.run_id === selected) ?? null;
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <StickyHeaderContentFooter
+      <HeaderContentFooter
+        scroll
         className="h-auto max-h-[70vh] self-start"
         contentClassName="overflow-x-auto rounded-md border"
-        content={
-          <Table sticky>
+        contentSlot={
+          <StickyTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Run</TableHead>
@@ -137,7 +139,7 @@ function Runs({ readOnly }: { readOnly: boolean }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </StickyTable>
         }
       />
       {current ? (

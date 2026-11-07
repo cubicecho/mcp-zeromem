@@ -3,15 +3,16 @@ import { createFileRoute } from '@tanstack/react-router';
 import { GitCompareIcon, PinIcon, PinOffIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { FormField } from '@/components/form-field';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatPercent } from '@/lib/format';
 import { useRecall, useServerStatus } from '@/lib/queries';
 import { excerpt, seriesColor } from '@/lib/viz';
@@ -176,10 +177,11 @@ export function ComparePage() {
 
       {resultA && resultB && !liveA.isFetching && !liveB.isFetching && (
         <div className="flex flex-col gap-4">
-          <StickyHeaderContentFooter
+          <HeaderContentFooter
+            scroll
             className="h-auto max-h-[70vh] gap-4"
             contentClassName="overflow-x-auto rounded-md border"
-            header={
+            headerSlot={
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="secondary">{formatPercent(overlap)} overlap</Badge>
                 <span className="text-muted-foreground">
@@ -188,8 +190,8 @@ export function ComparePage() {
                 </span>
               </div>
             }
-            content={
-              <Table sticky>
+            contentSlot={
+              <StickyTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Turn</TableHead>
@@ -240,7 +242,7 @@ export function ComparePage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </StickyTable>
             }
           />
           <details>

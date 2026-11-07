@@ -1,14 +1,15 @@
 import type { EvalHistory } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartCard } from '@/components/viz/chart-card';
 import { Legend } from '@/components/viz/legend';
 import { LineChart } from '@/components/viz/line-chart';
@@ -157,18 +158,19 @@ export function EvalDashboard() {
         ))}
       </div>
 
-      <StickyHeaderContentFooter
+      <HeaderContentFooter
+        scroll
         className="h-auto max-h-[70vh] gap-2"
         contentClassName="overflow-x-auto rounded-md border"
-        header={
+        headerSlot={
           <Section
             title="Latest recording"
             description={latestAt ? formatDateTime(Date.parse(latestAt)) : undefined}
             action={latest[0]?.label ? <Badge variant="outline">{latest[0].label}</Badge> : undefined}
           />
         }
-        content={
-          <Table sticky>
+        contentSlot={
+          <StickyTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Profile</TableHead>
@@ -220,9 +222,9 @@ export function EvalDashboard() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </StickyTable>
         }
-        footer={
+        footerSlot={
           <p className="text-xs text-muted-foreground">
             Missed is the number of labeled queries with no relevant turn in the top {k}. Rows come from{' '}
             <code className="rounded bg-muted px-1">scripts/record-eval.sh</code>, which runs the harness and appends

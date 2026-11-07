@@ -4,13 +4,14 @@ import { ScanSearchIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ActionButton } from '@/components/action-button';
 import { ConfirmButton } from '@/components/confirm-button';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
 import { ScopeSelect } from '@/components/memory/scope-select';
 import { PageHeader } from '@/components/page-header';
 import { QueryError, QueryState } from '@/components/query-state';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import { useForgetSession, useServerStatus, useSessions, useSessionTurns } from '@/lib/queries';
 import { toastApiError } from '@/lib/toast';
@@ -61,11 +62,12 @@ export function SessionsPage() {
 
       {sessions.data && sessions.data.sessions.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <StickyHeaderContentFooter
+          <HeaderContentFooter
+            scroll
             className="h-auto max-h-[70vh] self-start"
             contentClassName="overflow-x-auto rounded-md border"
-            content={
-              <Table sticky>
+            contentSlot={
+              <StickyTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Session</TableHead>
@@ -129,7 +131,7 @@ export function SessionsPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </StickyTable>
             }
           />
           <SessionInspector sessionId={selected} />
