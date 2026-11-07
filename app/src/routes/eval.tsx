@@ -166,7 +166,7 @@ export function EvalDashboard() {
           <Section
             title="Latest recording"
             description={latestAt ? formatDateTime(Date.parse(latestAt)) : undefined}
-            action={latest[0]?.label ? <Badge variant="outline">{latest[0].label}</Badge> : undefined}
+            actionSlot={latest[0]?.label ? <Badge variant="outline">{latest[0].label}</Badge> : undefined}
           />
         }
         contentSlot={

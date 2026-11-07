@@ -68,16 +68,13 @@ export function RecallPage() {
             aria-label="Query"
             autoFocus
           />
-          <Button type="submit" disabled={result.isFetching}>
-            <SearchIcon />
-            Recall
-          </Button>
+          <Button type="submit" disabled={result.isFetching} iconSlot={<SearchIcon />} content="Recall" />
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <FormField
             className="w-24"
             label="Top k"
-            control={
+            controlSlot={
               <Input
                 type="number"
                 min={1}
@@ -90,7 +87,7 @@ export function RecallPage() {
           <FormField
             className="w-64"
             label="Exclude session"
-            control={
+            controlSlot={
               <Input
                 value={excludeSession}
                 onChange={(event) => setExcludeSession(event.target.value)}
@@ -102,7 +99,7 @@ export function RecallPage() {
             <FormField
               className="w-64"
               label="Scope"
-              control={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
+              controlSlot={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
             />
           )}
         </div>

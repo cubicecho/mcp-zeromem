@@ -79,7 +79,7 @@ export function TimelineExplorer({
         className="px-0 pt-0"
         title="Timeline"
         description="Each session as a lane. The light bands are the windows the engine cut it into; the darker segments are the episodes inside them. Drag to brush a range, click a lane to pick a session."
-        content={
+        contentSlot={
           <div className="flex flex-wrap items-center gap-3">
             <Combobox
               className="w-36"
@@ -98,9 +98,9 @@ export function TimelineExplorer({
                   setBrush(null);
                 }
               }}
-            >
-              <ZoomInIcon /> Zoom to brush
-            </Button>
+              iconSlot={<ZoomInIcon />}
+              content="Zoom to brush"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -109,9 +109,9 @@ export function TimelineExplorer({
                 onChange({ since: undefined, until: undefined, session: undefined });
                 setBrush(null);
               }}
-            >
-              <ZoomOutIcon /> Reset
-            </Button>
+              iconSlot={<ZoomOutIcon />}
+              content="Reset"
+            />
             {(options.since !== undefined || options.until !== undefined) && (
               <span className="text-xs text-muted-foreground">
                 {options.since !== undefined ? formatDateTime(options.since) : '…'} →{' '}

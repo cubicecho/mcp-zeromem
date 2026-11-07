@@ -201,16 +201,15 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
           <ConfirmButton
             variant="outline"
             className="shrink-0"
-            label="Undo run"
+            aria-label="Undo run"
             disabled={undo.isPending || live === 0}
             title={`Undo ${formatCount(live)} actions?`}
             description={`Every action of ${run.run_id} that is still in force is reversed, newest first. Hidden turns come back into recall, aliases and blocks are lifted and the run's notes are removed.`}
             confirmLabel="Undo run"
             onConfirm={undoRun}
-          >
-            <Undo2Icon aria-hidden />
-            Undo run
-          </ConfirmButton>
+            iconSlot={<Undo2Icon aria-hidden />}
+            content="Undo run"
+          />
         )}
       </div>
 
@@ -345,7 +344,7 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
           ? `Written ${formatDateTime(current.ts)} · ${formatCount(current.text.length)} characters · turn #${current.id}`
           : 'Loaded at session start, without a recall.'
       }
-      action={
+      actionSlot={
         named.length > 0 && (
           <Combobox
             aria-label="Scope"
@@ -361,7 +360,7 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
         )
       }
       loading={brief.isPending}
-      content={
+      contentSlot={
         brief.error ? (
           <LoadError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
         ) : current ? (
@@ -420,7 +419,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
       <Section
         title="Aliases"
         description="Each alias is folded into its canonical name in the entity index, as if the text had used it."
-        content={
+        contentSlot={
           entities.data.aliases.length === 0 ? (
             <p className="text-sm text-muted-foreground">None.</p>
           ) : (
@@ -460,7 +459,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
       <Section
         title="Blocklist"
         description="Names the extractor picked up that are not entities."
-        content={
+        contentSlot={
           entities.data.blocklist.length === 0 ? (
             <p className="text-sm text-muted-foreground">None.</p>
           ) : (

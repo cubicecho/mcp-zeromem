@@ -29,7 +29,7 @@ export function HealthPage() {
       {data && (
         <Section
           title="Status payload"
-          content={
+          contentSlot={
             <pre className="overflow-x-auto rounded-md border bg-muted p-4 font-mono text-xs">
               {JSON.stringify(data, null, 2)}
             </pre>

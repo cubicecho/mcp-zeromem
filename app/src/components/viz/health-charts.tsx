@@ -22,7 +22,7 @@ function Stat({ label, value, hint, spark }: { label: string; value: string; hin
       title={label}
       headerClassName="text-sm text-muted-foreground"
       contentClassName="flex items-end justify-between gap-2"
-      content={
+      contentSlot={
         <>
           <div>
             <p className="text-2xl font-semibold tabular-nums">{value}</p>

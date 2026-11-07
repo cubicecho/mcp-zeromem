@@ -111,7 +111,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           <FormField
             className="flex-1"
             label="Drop a query onto the map"
-            control={
+            controlSlot={
               <Input
                 value={queryText}
                 onChange={(event) => setQueryText(event.target.value)}
@@ -119,9 +119,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
               />
             }
           />
-          <Button type="submit" variant="secondary">
-            <SearchIcon /> Place
-          </Button>
+          <Button type="submit" variant="secondary" iconSlot={<SearchIcon />} content="Place" />
           {options.query && (
             <Button
               variant="ghost"
@@ -138,7 +136,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
         <FormField
           className="w-56"
           label="Session"
-          control={(props) => (
+          controlSlot={(props) => (
             <Combobox
               {...props}
               options={[
@@ -153,7 +151,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
         <FormField
           className="w-24"
           label="Points"
-          control={(props) => (
+          controlSlot={(props) => (
             <Combobox
               {...props}
               options={POINT_OPTIONS}
@@ -204,7 +202,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
               <Section
                 title="Nearest to the query"
                 description={`“${projection.data.query.text}”`}
-                content={
+                contentSlot={
                   <ol className="flex flex-col gap-2">
                     {projection.data.query.neighbours.map((id) => {
                       const p = points.find((point) => point.turn_id === id);
@@ -229,7 +227,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
             )}
             <Section
               title="Picked turn"
-              content={
+              contentSlot={
                 picked ? (
                   <div className="text-sm">
                     <p className="text-xs text-muted-foreground">

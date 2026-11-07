@@ -36,18 +36,18 @@ export function TokenGate({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen items-center justify-center p-4">
       <CardLayout
         className="w-full max-w-sm"
-        icon={<KeyRoundIcon />}
+        iconSlot={<KeyRoundIcon />}
         title="Authentication required"
         description={
           <>
             Enter the server token (from <code>MCP_ZEROMEM_TOKEN</code>).
           </>
         }
-        content={
+        contentSlot={
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <FormField
               label="Token"
-              control={
+              controlSlot={
                 <PasswordInput
                   showLabel="Show token"
                   hideLabel="Hide token"
@@ -59,9 +59,7 @@ export function TokenGate({ children }: { children: ReactNode }) {
                 />
               }
             />
-            <Button type="submit" disabled={!value.trim()}>
-              Unlock
-            </Button>
+            <Button type="submit" disabled={!value.trim()} content="Unlock" />
           </form>
         }
       />

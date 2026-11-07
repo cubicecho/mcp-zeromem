@@ -17,7 +17,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
     <CardLayout
       title={label}
       headerClassName="text-sm text-muted-foreground"
-      content={
+      contentSlot={
         <>
           <p className="text-3xl font-semibold tabular-nums">{value}</p>
           {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}

@@ -140,9 +140,12 @@ export function ComparePage() {
             aria-label="Query"
             autoFocus
           />
-          <Button type="submit" disabled={liveA.isFetching || liveB.isFetching}>
-            <GitCompareIcon /> Run both
-          </Button>
+          <Button
+            type="submit"
+            disabled={liveA.isFetching || liveB.isFetching}
+            iconSlot={<GitCompareIcon />}
+            content="Run both"
+          />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <SidePanel
@@ -159,10 +162,9 @@ export function ComparePage() {
                   variant={pinned ? 'secondary' : 'outline'}
                   onClick={() => setPinned(pinned ? null : resultA)}
                   aria-pressed={pinned !== null}
-                >
-                  {pinned ? <PinOffIcon /> : <PinIcon />}
-                  {pinned ? 'Unpin' : 'Pin this result'}
-                </Button>
+                  iconSlot={pinned ? <PinOffIcon /> : <PinIcon />}
+                  content={pinned ? 'Unpin' : 'Pin this result'}
+                />
               ) : null
             }
             held={resultA}
@@ -292,7 +294,7 @@ function SidePanel({
           <FormField
             className="w-20"
             label="Top k"
-            control={
+            controlSlot={
               <Input
                 type="number"
                 min={1}
@@ -307,7 +309,7 @@ function SidePanel({
           <FormField
             className="w-44"
             label="Only session"
-            control={
+            controlSlot={
               <Input
                 value={settings.session}
                 onChange={(event) => onChange({ ...settings, session: event.target.value })}
@@ -318,7 +320,7 @@ function SidePanel({
           <FormField
             className="w-44"
             label="Exclude session"
-            control={
+            controlSlot={
               <Input
                 value={settings.exclude_session}
                 onChange={(event) => onChange({ ...settings, exclude_session: event.target.value })}

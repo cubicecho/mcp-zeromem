@@ -46,7 +46,7 @@ export function ChartCard<Row>({
     <CardLayout
       title={title}
       description={description}
-      action={
+      actionSlot={
         <div className="flex items-center gap-1">
           {controls}
           <Button
@@ -60,7 +60,7 @@ export function ChartCard<Row>({
         </div>
       }
       contentClassName={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}
-      content={
+      contentSlot={
         <div aria-busy={loading}>
           {rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{empty ?? 'Nothing to chart yet.'}</p>

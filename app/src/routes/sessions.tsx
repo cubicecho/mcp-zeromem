@@ -46,7 +46,7 @@ export function SessionsPage() {
         className="px-0 pt-0"
         title="Sessions"
         description="Every conversation in the store, most recent first."
-        action={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
+        actionSlot={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
       />
 
       <LoadState
@@ -114,15 +114,14 @@ export function SessionsPage() {
                           <ConfirmButton
                             variant="ghost"
                             size="icon-sm"
-                            label={`Forget session ${session.session_id}`}
+                            aria-label={`Forget session ${session.session_id}`}
                             disabled={forget.isPending}
                             title={`Forget session ${session.session_id}?`}
                             description={`This permanently deletes ${formatCount(session.turns)} turns and rebuilds the indexes without them. There is no undo.`}
                             confirmLabel="Forget"
                             onConfirm={() => confirmForget(session)}
-                          >
-                            <Trash2Icon />
-                          </ConfirmButton>
+                            iconSlot={<Trash2Icon />}
+                          />
                         )}
                       </TableCell>
                     </TableRow>

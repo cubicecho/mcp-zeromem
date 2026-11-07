@@ -96,13 +96,13 @@ export function GraphExplorer({
         className="px-0 pt-0"
         title="Entity graph"
         description="Entities the store recognised, joined where they were mentioned together. Size is how connected an entity is; width is how often two were mentioned together."
-        content={
+        contentSlot={
           <form onSubmit={submitFocus} className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-56 flex-1 items-end gap-2">
               <FormField
                 className="flex-1"
                 label="Focus entity"
-                control={
+                controlSlot={
                   <Input
                     value={focusText}
                     onChange={(event) => setFocusText(event.target.value)}
@@ -110,9 +110,7 @@ export function GraphExplorer({
                   />
                 }
               />
-              <Button type="submit" variant="secondary">
-                <CrosshairIcon /> Focus
-              </Button>
+              <Button type="submit" variant="secondary" iconSlot={<CrosshairIcon />} content="Focus" />
               {options.focus && (
                 <Button
                   variant="ghost"
@@ -130,7 +128,7 @@ export function GraphExplorer({
               <FormField
                 className="w-20"
                 label="Hops"
-                control={(props) => (
+                controlSlot={(props) => (
                   <Combobox
                     {...props}
                     options={HOP_OPTIONS}
@@ -143,7 +141,7 @@ export function GraphExplorer({
             <FormField
               className="w-32"
               label="Kind"
-              control={(props) => (
+              controlSlot={(props) => (
                 <Combobox
                   {...props}
                   options={KIND_OPTIONS}
@@ -155,7 +153,7 @@ export function GraphExplorer({
             <FormField
               className="w-24"
               label="Nodes"
-              control={(props) => (
+              controlSlot={(props) => (
                 <Combobox
                   {...props}
                   options={NODE_OPTIONS}
@@ -167,7 +165,7 @@ export function GraphExplorer({
             <FormField
               className="w-20"
               label="Min. co-mentions"
-              control={(props) => (
+              controlSlot={(props) => (
                 <Combobox
                   {...props}
                   options={WEIGHT_OPTIONS}
@@ -267,9 +265,14 @@ function NodePanel({
         <p className="text-xs text-muted-foreground">
           {formatCount(node.turns)} turns · {formatCount(node.degree)} connections in the whole graph
         </p>
-        <Button size="sm" variant="secondary" className="mt-2" onClick={() => onFocus(node.entity)}>
-          <CrosshairIcon /> Focus here
-        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-2"
+          onClick={() => onFocus(node.entity)}
+          iconSlot={<CrosshairIcon />}
+          content="Focus here"
+        />
       </div>
       <div>
         <h3 className="mb-1 text-sm font-medium">Mentioned with</h3>
