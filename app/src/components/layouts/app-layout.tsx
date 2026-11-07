@@ -17,7 +17,7 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { ActionButton } from '@/components/action-button';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { clearToken, requireAuth } from '@/lib/auth';
 import { formatCount } from '@/lib/format';
@@ -47,14 +47,13 @@ function ThemeToggle() {
   };
 
   return (
-    <ActionButton
+    <Button
       variant="ghost"
       size="icon-sm"
-      label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      iconSlot={dark ? <SunIcon /> : <MoonIcon />}
       onClick={toggle}
-    >
-      {dark ? <SunIcon /> : <MoonIcon />}
-    </ActionButton>
+    />
   );
 }
 
@@ -72,9 +71,14 @@ function LockButton() {
   };
 
   return (
-    <ActionButton variant="ghost" size="icon-sm" label="Lock" hint="Forget the stored token" onClick={lock}>
-      <LockIcon />
-    </ActionButton>
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Lock"
+      hint="Forget the stored token"
+      iconSlot={<LockIcon />}
+      onClick={lock}
+    />
   );
 }
 

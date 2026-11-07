@@ -2,7 +2,6 @@ import type { EntityKind } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ActionButton } from '@/components/action-button';
 import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
@@ -125,11 +124,13 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
                           {entity.mentions}
                         </Badge>
                       </button>
-                      <ActionButton variant="ghost" size="icon-sm" asChild label={`Show ${entity.key} in the graph`}>
-                        <Link to="/graph" search={{ focus: entity.key }}>
-                          <WaypointsIcon />
-                        </Link>
-                      </ActionButton>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Show ${entity.key} in the graph`}
+                        iconSlot={<WaypointsIcon />}
+                        linkSlot={<Link to="/graph" search={{ focus: entity.key }} />}
+                      />
                     </li>
                   ))}
                 </ul>

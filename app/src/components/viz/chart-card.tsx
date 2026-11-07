@@ -1,9 +1,9 @@
 import { TableIcon, TrendingUpIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
 import { HeaderContentFooter } from '@/components/header-content-footer';
 import { StickyTable } from '@/components/sticky-table';
+import { Button } from '@/components/ui/button';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export interface TableColumn<Row> {
@@ -49,15 +49,14 @@ export function ChartCard<Row>({
       action={
         <div className="flex items-center gap-1">
           {controls}
-          <ActionButton
+          <Button
             variant="ghost"
             size="icon-sm"
-            label={view === 'chart' ? 'Show as table' : 'Show as chart'}
+            aria-label={view === 'chart' ? 'Show as table' : 'Show as chart'}
             aria-pressed={view === 'table'}
+            iconSlot={view === 'chart' ? <TableIcon /> : <TrendingUpIcon />}
             onClick={() => setView(view === 'chart' ? 'table' : 'chart')}
-          >
-            {view === 'chart' ? <TableIcon /> : <TrendingUpIcon />}
-          </ActionButton>
+          />
         </div>
       }
       contentClassName={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}

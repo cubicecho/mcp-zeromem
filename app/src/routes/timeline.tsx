@@ -3,7 +3,6 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
 import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
@@ -197,11 +196,13 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h2 className="flex items-center gap-2 font-mono text-sm font-semibold">
           {session.session_id}
-          <ActionButton variant="ghost" size="icon-sm" asChild label="Open in the session inspector">
-            <Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }}>
-              <ScanSearchIcon />
-            </Link>
-          </ActionButton>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Open in the session inspector"
+            iconSlot={<ScanSearchIcon />}
+            linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
+          />
         </h2>
         <p className="text-xs text-muted-foreground">
           {brush

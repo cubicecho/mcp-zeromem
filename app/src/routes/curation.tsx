@@ -3,7 +3,6 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
@@ -13,6 +12,7 @@ import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -243,16 +243,15 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
                     ) : (
                       !readOnly &&
                       row.op !== 'run_end' && (
-                        <ActionButton
+                        <Button
                           variant="ghost"
                           size="sm"
-                          label={`Undo action ${row.id}`}
+                          aria-label={`Undo action ${row.id}`}
+                          iconSlot={<Undo2Icon aria-hidden />}
+                          content="Undo"
                           disabled={undo.isPending}
                           onClick={() => undoAction(row)}
-                        >
-                          <Undo2Icon aria-hidden />
-                          Undo
-                        </ActionButton>
+                        />
                       )
                     )}
                   </TableCell>
@@ -405,16 +404,15 @@ function Entities({ readOnly }: { readOnly: boolean }) {
   };
   const removeButton = (actionId: number | null, label: string) =>
     !readOnly && (
-      <ActionButton
+      <Button
         variant="ghost"
         size="sm"
-        label={`Remove ${label}`}
+        aria-label={`Remove ${label}`}
+        iconSlot={<Undo2Icon aria-hidden />}
+        content="Remove"
         disabled={undo.isPending || actionId === null}
         onClick={() => remove(actionId, label)}
-      >
-        <Undo2Icon aria-hidden />
-        Remove
-      </ActionButton>
+      />
     );
 
   return (

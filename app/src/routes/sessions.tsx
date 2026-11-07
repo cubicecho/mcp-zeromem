@@ -2,7 +2,6 @@ import type { SessionSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ScanSearchIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
-import { ActionButton } from '@/components/action-button';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
 import { LoadError, LoadState } from '@/components/load-state';
@@ -10,6 +9,7 @@ import { ScopeSelect } from '@/components/memory/scope-select';
 import { PageHeader } from '@/components/page-header';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
@@ -103,16 +103,13 @@ export function SessionsPage() {
                       {/* Clicks on these buttons, and in the confirm dialog React bubbles back through this
                           cell from its portal, must not select the row. */}
                       <TableCell className="whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
-                        <ActionButton
+                        <Button
                           variant="ghost"
                           size="icon-sm"
-                          asChild
-                          label={`Inspect session ${session.session_id}`}
-                        >
-                          <Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }}>
-                            <ScanSearchIcon />
-                          </Link>
-                        </ActionButton>
+                          aria-label={`Inspect session ${session.session_id}`}
+                          iconSlot={<ScanSearchIcon />}
+                          linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
+                        />
                         {!readOnly && (
                           <ConfirmButton
                             variant="ghost"

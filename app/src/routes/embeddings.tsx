@@ -3,7 +3,6 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
@@ -124,17 +123,16 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
             <SearchIcon /> Place
           </Button>
           {options.query && (
-            <ActionButton
+            <Button
               variant="ghost"
               size="icon"
-              label="Clear query"
+              aria-label="Clear query"
+              iconSlot={<XIcon />}
               onClick={() => {
                 setQueryText('');
                 onChange({ query: undefined });
               }}
-            >
-              <XIcon />
-            </ActionButton>
+            />
           )}
         </div>
         <FormField

@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { ActionButton } from '@/components/action-button';
 import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
 import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
@@ -777,16 +776,15 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
           </AlertDialogHeader>
           <div className="flex gap-2">
             <Input readOnly value={shown ?? ''} className="font-mono" aria-label="Curator token" />
-            <ActionButton
+            <Button
               variant="outline"
               size="icon"
-              label="Copy the token"
+              aria-label="Copy the token"
+              iconSlot={<CopyIcon />}
               onClick={() => {
                 void navigator.clipboard?.writeText(shown ?? '').then(() => toast.success('Copied.'));
               }}
-            >
-              <CopyIcon />
-            </ActionButton>
+            />
           </div>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShown(null)}>Done</AlertDialogAction>

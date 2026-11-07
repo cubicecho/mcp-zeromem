@@ -3,7 +3,6 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { CrosshairIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
@@ -115,17 +114,16 @@ export function GraphExplorer({
                 <CrosshairIcon /> Focus
               </Button>
               {options.focus && (
-                <ActionButton
+                <Button
                   variant="ghost"
                   size="icon"
-                  label="Clear focus"
+                  aria-label="Clear focus"
+                  iconSlot={<XIcon />}
                   onClick={() => {
                     setFocusText('');
                     onChange({ focus: undefined, hops: undefined });
                   }}
-                >
-                  <XIcon />
-                </ActionButton>
+                />
               )}
             </div>
             {options.focus && (
