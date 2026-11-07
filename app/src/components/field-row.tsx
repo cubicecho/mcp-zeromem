@@ -1,19 +1,21 @@
 import type { ReactNode } from 'react';
 import { Children, Fragment, isValidElement } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, type SlotNode } from '@/lib/utils';
 
 /**
- * The floor a cell holds, which is the whole component: it is what decides when the row wraps
- * rather than squeezing. Two 45% cells fit and a third cannot, so it drops to the next line at
- * its full width instead of three fields sharing one line at a third each — which is where a
- * `<Select>`'s value and an `<Input>`'s placeholder start being clipped.
+ * A cell's size, which is the whole component: it is what decides when the row wraps rather than
+ * squeezing. Two things decide it. The percentage basis caps how many share a line — three 40%
+ * cells cannot fit, so a third drops to the next line at full width rather than three fields
+ * sharing one at a third each, which is where a `<Select>`'s value and an `<Input>`'s placeholder
+ * start being clipped. The fixed floor wraps the row by real width: below about 400px two fields
+ * stack, instead of the two 170px cells a percentage floor kept on a phone.
  *
- * Percentages rather than a `grid-cols-*`, because a grid keeps its columns at every width: the
- * same row that reads well on a settings page is two 140px fields inside a dialog.
+ * Not a `grid-cols-*`, because a grid keeps its columns at every width: the same row that reads
+ * well on a settings page is two 140px fields inside a dialog.
  */
-const CELL_FLOOR = {
-  2: 'min-w-[45%]',
-  3: 'min-w-[30%]',
+const CELL_SIZE = {
+  2: 'grow basis-2/5 min-w-48',
+  3: 'grow basis-1/4 min-w-40',
 } as const;
 
 type FieldRowProps = {
@@ -21,15 +23,15 @@ type FieldRowProps = {
    * The fields. Each one is given a cell of its own, so they share the row evenly however many
    * there are, and a `{cond && <FormField/>}` that renders nothing leaves no empty cell behind.
    */
-  content?: ReactNode;
+  contentSlot?: SlotNode | undefined;
   /**
    * How many fit on a line before the row wraps. `2` is nearly always right — it is the shape a
    * form reaches for when two values belong together, a priority beside a duration, a start date
    * beside an end date.
    */
-  perRow?: keyof typeof CELL_FLOOR;
-  className?: string;
-  cellClassName?: string;
+  perRow?: keyof typeof CELL_SIZE | undefined;
+  className?: string | undefined;
+  cellClassName?: string | undefined;
 };
 
 /**
@@ -48,8 +50,8 @@ type FieldRowProps = {
 /**
  * The fields, one entry each, keyed.
  *
- * `Children.toArray` counts a fragment as one child, and a fragment is exactly how `content`
- * arrives — `content={<><FormField …/><FormField …/></>}` is the natural way to write a slot
+ * `Children.toArray` counts a fragment as one child, and a fragment is exactly how `contentSlot`
+ * arrives — `contentSlot={<><FormField …/><FormField …/></>}` is the natural way to write a slot
  * that holds several things. Unwrapped, the whole fragment landed in a single cell and the row
  * had one column. So a fragment at the top is opened, once; anything else is a field.
  *
@@ -69,11 +71,12 @@ function fieldsOf(content: ReactNode): Array<{ key: string; node: ReactNode }> {
   }));
 }
 
-export function FieldRow({ content, perRow = 2, className, cellClassName }: FieldRowProps) {
+/** A row of form fields that wraps a field to the next line rather than squeezing it. */
+export function FieldRow({ contentSlot, perRow = 2, className, cellClassName }: FieldRowProps) {
   return (
     <div data-slot="field-row" className={cn('flex flex-wrap gap-4', className)}>
-      {fieldsOf(content).map(({ key, node }) => (
-        <div key={key} data-slot="field-row-cell" className={cn('flex-1', CELL_FLOOR[perRow], cellClassName)}>
+      {fieldsOf(contentSlot).map(({ key, node }) => (
+        <div key={key} data-slot="field-row-cell" className={cn(CELL_SIZE[perRow], cellClassName)}>
           {node}
         </div>
       ))}

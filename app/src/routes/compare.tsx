@@ -3,15 +3,16 @@ import { createFileRoute } from '@tanstack/react-router';
 import { GitCompareIcon, PinIcon, PinOffIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { FormField } from '@/components/form-field';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatPercent } from '@/lib/format';
 import { useRecall, useServerStatus } from '@/lib/queries';
 import { excerpt, seriesColor } from '@/lib/viz';
@@ -139,9 +140,12 @@ export function ComparePage() {
             aria-label="Query"
             autoFocus
           />
-          <Button type="submit" disabled={liveA.isFetching || liveB.isFetching}>
-            <GitCompareIcon /> Run both
-          </Button>
+          <Button
+            type="submit"
+            disabled={liveA.isFetching || liveB.isFetching}
+            iconSlot={<GitCompareIcon />}
+            content="Run both"
+          />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <SidePanel
@@ -158,10 +162,9 @@ export function ComparePage() {
                   variant={pinned ? 'secondary' : 'outline'}
                   onClick={() => setPinned(pinned ? null : resultA)}
                   aria-pressed={pinned !== null}
-                >
-                  {pinned ? <PinOffIcon /> : <PinIcon />}
-                  {pinned ? 'Unpin' : 'Pin this result'}
-                </Button>
+                  iconSlot={pinned ? <PinOffIcon /> : <PinIcon />}
+                  content={pinned ? 'Unpin' : 'Pin this result'}
+                />
               ) : null
             }
             held={resultA}
@@ -171,15 +174,16 @@ export function ComparePage() {
       </form>
 
       {(liveA.isFetching || liveB.isFetching) && <Skeleton className="h-32 w-full" />}
-      {liveA.error && <QueryError what="side A" error={liveA.error} onRetry={() => liveA.refetch()} />}
-      {liveB.error && <QueryError what="side B" error={liveB.error} onRetry={() => liveB.refetch()} />}
+      {liveA.error && <LoadError what="side A" error={liveA.error} onRetry={() => liveA.refetch()} />}
+      {liveB.error && <LoadError what="side B" error={liveB.error} onRetry={() => liveB.refetch()} />}
 
       {resultA && resultB && !liveA.isFetching && !liveB.isFetching && (
         <div className="flex flex-col gap-4">
-          <StickyHeaderContentFooter
+          <HeaderContentFooter
+            scroll
             className="h-auto max-h-[70vh] gap-4"
             contentClassName="overflow-x-auto rounded-md border"
-            header={
+            headerSlot={
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="secondary">{formatPercent(overlap)} overlap</Badge>
                 <span className="text-muted-foreground">
@@ -188,8 +192,8 @@ export function ComparePage() {
                 </span>
               </div>
             }
-            content={
-              <Table sticky>
+            contentSlot={
+              <StickyTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Turn</TableHead>
@@ -240,7 +244,7 @@ export function ComparePage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </StickyTable>
             }
           />
           <details>
@@ -290,7 +294,7 @@ function SidePanel({
           <FormField
             className="w-20"
             label="Top k"
-            control={
+            controlSlot={
               <Input
                 type="number"
                 min={1}
@@ -305,7 +309,7 @@ function SidePanel({
           <FormField
             className="w-44"
             label="Only session"
-            control={
+            controlSlot={
               <Input
                 value={settings.session}
                 onChange={(event) => onChange({ ...settings, session: event.target.value })}
@@ -316,7 +320,7 @@ function SidePanel({
           <FormField
             className="w-44"
             label="Exclude session"
-            control={
+            controlSlot={
               <Input
                 value={settings.exclude_session}
                 onChange={(event) => onChange({ ...settings, exclude_session: event.target.value })}

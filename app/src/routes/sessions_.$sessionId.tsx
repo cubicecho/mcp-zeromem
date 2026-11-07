@@ -2,9 +2,8 @@ import type { EntityKind } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ActionButton } from '@/components/action-button';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -59,12 +58,15 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
     <div className="flex flex-col gap-6">
       <PageHeader
         className="px-0 pt-0"
-        breadcrumbs={
-          <Button variant="ghost" size="sm" asChild className="-ml-3">
-            <Link to="/sessions">
-              <ArrowLeftIcon /> Sessions
-            </Link>
-          </Button>
+        backSlot={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-3"
+            iconSlot={<ArrowLeftIcon />}
+            content="Sessions"
+            linkSlot={<Link to="/sessions" />}
+          />
         }
         title={sessionId}
         titleClassName="font-mono"
@@ -76,7 +78,7 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
       />
 
       {turns.isPending && <Skeleton className="h-40 w-full" />}
-      {turns.error && <QueryError what="the session" error={turns.error} onRetry={() => turns.refetch()} />}
+      {turns.error && <LoadError what="the session" error={turns.error} onRetry={() => turns.refetch()} />}
 
       {turns.data && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -98,7 +100,7 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
           <Section
             className="self-start"
             title="Entities in this session"
-            content={
+            contentSlot={
               entities.length === 0 ? (
                 <p className="text-sm text-muted-foreground">None recognised.</p>
               ) : (
@@ -125,11 +127,13 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
                           {entity.mentions}
                         </Badge>
                       </button>
-                      <ActionButton variant="ghost" size="icon-sm" asChild label={`Show ${entity.key} in the graph`}>
-                        <Link to="/graph" search={{ focus: entity.key }}>
-                          <WaypointsIcon />
-                        </Link>
-                      </ActionButton>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Show ${entity.key} in the graph`}
+                        iconSlot={<WaypointsIcon />}
+                        linkSlot={<Link to="/graph" search={{ focus: entity.key }} />}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -3,11 +3,11 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { FormField } from '@/components/form-field';
+import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { ScopeSelect } from '@/components/memory/scope-select';
 import { TraceView } from '@/components/memory/trace-view';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,16 +68,13 @@ export function RecallPage() {
             aria-label="Query"
             autoFocus
           />
-          <Button type="submit" disabled={result.isFetching}>
-            <SearchIcon />
-            Recall
-          </Button>
+          <Button type="submit" disabled={result.isFetching} iconSlot={<SearchIcon />} content="Recall" />
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <FormField
             className="w-24"
             label="Top k"
-            control={
+            controlSlot={
               <Input
                 type="number"
                 min={1}
@@ -90,7 +87,7 @@ export function RecallPage() {
           <FormField
             className="w-64"
             label="Exclude session"
-            control={
+            controlSlot={
               <Input
                 value={excludeSession}
                 onChange={(event) => setExcludeSession(event.target.value)}
@@ -102,7 +99,7 @@ export function RecallPage() {
             <FormField
               className="w-64"
               label="Scope"
-              control={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
+              controlSlot={(wired) => <ScopeSelect {...wired} scopes={scopes} value={scope} onValueChange={setScope} />}
             />
           )}
         </div>
@@ -118,8 +115,8 @@ export function RecallPage() {
       )}
 
       {(result.isFetching || trace.isFetching) && <Skeleton className="h-32 w-full" />}
-      {result.error && <QueryError what="the recall" error={result.error} onRetry={() => result.refetch()} />}
-      {trace.error && <QueryError what="the trace" error={trace.error} onRetry={() => trace.refetch()} />}
+      {result.error && <LoadError what="the recall" error={result.error} onRetry={() => result.refetch()} />}
+      {trace.error && <LoadError what="the trace" error={trace.error} onRetry={() => trace.refetch()} />}
 
       {mode === 'trace' && trace.data && !trace.isFetching && <TraceView trace={trace.data} />}
 

@@ -3,15 +3,16 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
+import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
-import { OptionSelect } from '@/components/option-select';
+import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -80,7 +81,7 @@ function Runs({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (runs.error) {
-    return <QueryError what="the curation runs" error={runs.error} onRetry={() => runs.refetch()} />;
+    return <LoadError what="the curation runs" error={runs.error} onRetry={() => runs.refetch()} />;
   }
   if (runs.data.runs.length === 0) {
     return (
@@ -97,11 +98,12 @@ function Runs({ readOnly }: { readOnly: boolean }) {
   const current = runs.data.runs.find((run) => run.run_id === selected) ?? null;
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <StickyHeaderContentFooter
+      <HeaderContentFooter
+        scroll
         className="h-auto max-h-[70vh] self-start"
         contentClassName="overflow-x-auto rounded-md border"
-        content={
-          <Table sticky>
+        contentSlot={
+          <StickyTable>
             <TableHeader>
               <TableRow>
                 <TableHead>Run</TableHead>
@@ -137,7 +139,7 @@ function Runs({ readOnly }: { readOnly: boolean }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </StickyTable>
         }
       />
       {current ? (
@@ -199,21 +201,20 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
           <ConfirmButton
             variant="outline"
             className="shrink-0"
-            label="Undo run"
+            aria-label="Undo run"
             disabled={undo.isPending || live === 0}
             title={`Undo ${formatCount(live)} actions?`}
             description={`Every action of ${run.run_id} that is still in force is reversed, newest first. Hidden turns come back into recall, aliases and blocks are lifted and the run's notes are removed.`}
             confirmLabel="Undo run"
             onConfirm={undoRun}
-          >
-            <Undo2Icon aria-hidden />
-            Undo run
-          </ConfirmButton>
+            iconSlot={<Undo2Icon aria-hidden />}
+            content="Undo run"
+          />
         )}
       </div>
 
       {actions.isPending && <Skeleton className="h-32 w-full" />}
-      {actions.error && <QueryError what="the run's actions" error={actions.error} onRetry={() => actions.refetch()} />}
+      {actions.error && <LoadError what="the run's actions" error={actions.error} onRetry={() => actions.refetch()} />}
       {actions.data && (
         <div className="overflow-x-auto rounded-md border">
           <Table>
@@ -241,16 +242,15 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
                     ) : (
                       !readOnly &&
                       row.op !== 'run_end' && (
-                        <ActionButton
+                        <Button
                           variant="ghost"
                           size="sm"
-                          label={`Undo action ${row.id}`}
+                          aria-label={`Undo action ${row.id}`}
+                          iconSlot={<Undo2Icon aria-hidden />}
+                          content="Undo"
                           disabled={undo.isPending}
                           onClick={() => undoAction(row)}
-                        >
-                          <Undo2Icon aria-hidden />
-                          Undo
-                        </ActionButton>
+                        />
                       )
                     )}
                   </TableCell>
@@ -344,9 +344,9 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
           ? `Written ${formatDateTime(current.ts)} · ${formatCount(current.text.length)} characters · turn #${current.id}`
           : 'Loaded at session start, without a recall.'
       }
-      action={
+      actionSlot={
         named.length > 0 && (
-          <OptionSelect
+          <Combobox
             aria-label="Scope"
             className="w-64"
             options={[
@@ -360,9 +360,9 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
         )
       }
       loading={brief.isPending}
-      content={
+      contentSlot={
         brief.error ? (
-          <QueryError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
+          <LoadError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
         ) : current ? (
           <p className="whitespace-pre-wrap text-sm">{current.text}</p>
         ) : (
@@ -389,7 +389,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (entities.error) {
-    return <QueryError what="the aliases" error={entities.error} onRetry={() => entities.refetch()} />;
+    return <LoadError what="the aliases" error={entities.error} onRetry={() => entities.refetch()} />;
   }
 
   const remove = (actionId: number | null, label: string) => {
@@ -403,16 +403,15 @@ function Entities({ readOnly }: { readOnly: boolean }) {
   };
   const removeButton = (actionId: number | null, label: string) =>
     !readOnly && (
-      <ActionButton
+      <Button
         variant="ghost"
         size="sm"
-        label={`Remove ${label}`}
+        aria-label={`Remove ${label}`}
+        iconSlot={<Undo2Icon aria-hidden />}
+        content="Remove"
         disabled={undo.isPending || actionId === null}
         onClick={() => remove(actionId, label)}
-      >
-        <Undo2Icon aria-hidden />
-        Remove
-      </ActionButton>
+      />
     );
 
   return (
@@ -420,7 +419,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
       <Section
         title="Aliases"
         description="Each alias is folded into its canonical name in the entity index, as if the text had used it."
-        content={
+        contentSlot={
           entities.data.aliases.length === 0 ? (
             <p className="text-sm text-muted-foreground">None.</p>
           ) : (
@@ -460,7 +459,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
       <Section
         title="Blocklist"
         description="Names the extractor picked up that are not entities."
-        content={
+        contentSlot={
           entities.data.blocklist.length === 0 ? (
             <p className="text-sm text-muted-foreground">None.</p>
           ) : (

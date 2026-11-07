@@ -3,12 +3,11 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { CrosshairIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
+import { Combobox } from '@/components/combobox';
 import { FormField } from '@/components/form-field';
+import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,13 +96,13 @@ export function GraphExplorer({
         className="px-0 pt-0"
         title="Entity graph"
         description="Entities the store recognised, joined where they were mentioned together. Size is how connected an entity is; width is how often two were mentioned together."
-        content={
+        contentSlot={
           <form onSubmit={submitFocus} className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-56 flex-1 items-end gap-2">
               <FormField
                 className="flex-1"
                 label="Focus entity"
-                control={
+                controlSlot={
                   <Input
                     value={focusText}
                     onChange={(event) => setFocusText(event.target.value)}
@@ -111,29 +110,26 @@ export function GraphExplorer({
                   />
                 }
               />
-              <Button type="submit" variant="secondary">
-                <CrosshairIcon /> Focus
-              </Button>
+              <Button type="submit" variant="secondary" iconSlot={<CrosshairIcon />} content="Focus" />
               {options.focus && (
-                <ActionButton
+                <Button
                   variant="ghost"
                   size="icon"
-                  label="Clear focus"
+                  aria-label="Clear focus"
+                  iconSlot={<XIcon />}
                   onClick={() => {
                     setFocusText('');
                     onChange({ focus: undefined, hops: undefined });
                   }}
-                >
-                  <XIcon />
-                </ActionButton>
+                />
               )}
             </div>
             {options.focus && (
               <FormField
                 className="w-20"
                 label="Hops"
-                control={(props) => (
-                  <OptionSelect
+                controlSlot={(props) => (
+                  <Combobox
                     {...props}
                     options={HOP_OPTIONS}
                     value={String(options.hops ?? 1)}
@@ -145,8 +141,8 @@ export function GraphExplorer({
             <FormField
               className="w-32"
               label="Kind"
-              control={(props) => (
-                <OptionSelect
+              controlSlot={(props) => (
+                <Combobox
                   {...props}
                   options={KIND_OPTIONS}
                   value={options.kind ?? 'all'}
@@ -157,8 +153,8 @@ export function GraphExplorer({
             <FormField
               className="w-24"
               label="Nodes"
-              control={(props) => (
-                <OptionSelect
+              controlSlot={(props) => (
+                <Combobox
                   {...props}
                   options={NODE_OPTIONS}
                   value={String(options.limit ?? 200)}
@@ -169,8 +165,8 @@ export function GraphExplorer({
             <FormField
               className="w-20"
               label="Min. co-mentions"
-              control={(props) => (
-                <OptionSelect
+              controlSlot={(props) => (
+                <Combobox
                   {...props}
                   options={WEIGHT_OPTIONS}
                   value={String(options.min_weight ?? 1)}
@@ -183,7 +179,7 @@ export function GraphExplorer({
       />
 
       {snapshot.isPending && <Skeleton className="h-[520px] w-full" />}
-      {snapshot.error && <QueryError what="the graph" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
+      {snapshot.error && <LoadError what="the graph" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -269,9 +265,14 @@ function NodePanel({
         <p className="text-xs text-muted-foreground">
           {formatCount(node.turns)} turns · {formatCount(node.degree)} connections in the whole graph
         </p>
-        <Button size="sm" variant="secondary" className="mt-2" onClick={() => onFocus(node.entity)}>
-          <CrosshairIcon /> Focus here
-        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-2"
+          onClick={() => onFocus(node.entity)}
+          iconSlot={<CrosshairIcon />}
+          content="Focus here"
+        />
       </div>
       <div>
         <h3 className="mb-1 text-sm font-medium">Mentioned with</h3>
@@ -294,7 +295,7 @@ function NodePanel({
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns recall finds for it</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+        {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <EvidenceList evidence={turns.data.evidence} />}
         {turns.data?.evidence[0] && (
           <p className="mt-2 text-xs">

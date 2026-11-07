@@ -3,11 +3,10 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
+import { Combobox } from '@/components/combobox';
 import { FormField } from '@/components/form-field';
-import { OptionSelect } from '@/components/option-select';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,7 +111,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           <FormField
             className="flex-1"
             label="Drop a query onto the map"
-            control={
+            controlSlot={
               <Input
                 value={queryText}
                 onChange={(event) => setQueryText(event.target.value)}
@@ -120,28 +119,25 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
               />
             }
           />
-          <Button type="submit" variant="secondary">
-            <SearchIcon /> Place
-          </Button>
+          <Button type="submit" variant="secondary" iconSlot={<SearchIcon />} content="Place" />
           {options.query && (
-            <ActionButton
+            <Button
               variant="ghost"
               size="icon"
-              label="Clear query"
+              aria-label="Clear query"
+              iconSlot={<XIcon />}
               onClick={() => {
                 setQueryText('');
                 onChange({ query: undefined });
               }}
-            >
-              <XIcon />
-            </ActionButton>
+            />
           )}
         </div>
         <FormField
           className="w-56"
           label="Session"
-          control={(props) => (
-            <OptionSelect
+          controlSlot={(props) => (
+            <Combobox
               {...props}
               options={[
                 { value: 'all', label: 'All sessions' },
@@ -155,8 +151,8 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
         <FormField
           className="w-24"
           label="Points"
-          control={(props) => (
-            <OptionSelect
+          controlSlot={(props) => (
+            <Combobox
               {...props}
               options={POINT_OPTIONS}
               value={String(options.limit ?? 2000)}
@@ -168,7 +164,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
 
       {projection.isPending && <Skeleton className="h-[480px] w-full" />}
       {projection.error && (
-        <QueryError what="the projection" error={projection.error} onRetry={() => projection.refetch()} />
+        <LoadError what="the projection" error={projection.error} onRetry={() => projection.refetch()} />
       )}
 
       {projection.data && (
@@ -206,7 +202,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
               <Section
                 title="Nearest to the query"
                 description={`“${projection.data.query.text}”`}
-                content={
+                contentSlot={
                   <ol className="flex flex-col gap-2">
                     {projection.data.query.neighbours.map((id) => {
                       const p = points.find((point) => point.turn_id === id);
@@ -231,7 +227,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
             )}
             <Section
               title="Picked turn"
-              content={
+              contentSlot={
                 picked ? (
                   <div className="text-sm">
                     <p className="text-xs text-muted-foreground">

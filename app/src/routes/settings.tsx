@@ -21,15 +21,14 @@ import {
 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { ActionButton } from '@/components/action-button';
 import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
 import { CardLayout } from '@/components/card-layout';
+import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
 import { FormField } from '@/components/form-field';
-import { OptionSelect } from '@/components/option-select';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
 import { PasswordInput } from '@/components/password-input';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import {
   AlertDialog,
@@ -95,14 +94,14 @@ export function SettingsPage() {
 
       {settings.isPending && <Skeleton className="h-64 w-full" />}
       {settings.error && (
-        <QueryError what="the embedder settings" error={settings.error} onRetry={() => settings.refetch()} />
+        <LoadError what="the embedder settings" error={settings.error} onRetry={() => settings.refetch()} />
       )}
       {settings.data && (
         <CardLayout
           title="Embedder"
           description="The model behind the dense view, and how to reach it."
           contentClassName="flex flex-col gap-6"
-          content={
+          contentSlot={
             <>
               <CurrentEmbedder settings={settings.data} status={status.data} />
               {!readOnly && settings.data.embedder !== null && (
@@ -158,16 +157,15 @@ function ReembedAction({ settings, status }: { settings: EmbedderSettings; statu
       <ConfirmButton
         variant="outline"
         className="shrink-0"
-        label="Re-embed all turns"
+        aria-label="Re-embed all turns"
         disabled={reembed.isPending || turns === 0}
         title={`Re-embed every turn with ${name}?`}
         description={`This drops ${formatCount(vectors)} vectors and re-embeds ${formatCount(turns)} turns in the background. Recall uses the lexical and entity views for turns not yet re-embedded.`}
         confirmLabel="Re-embed"
         onConfirm={confirm}
-      >
-        <RefreshCwIcon aria-hidden />
-        {reembed.isPending ? 'Re-embedding…' : 'Re-embed all turns'}
-      </ConfirmButton>
+        iconSlot={<RefreshCwIcon aria-hidden />}
+        content={reembed.isPending ? 'Re-embedding…' : 'Re-embed all turns'}
+      />
     </div>
   );
 }
@@ -216,7 +214,7 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
       title="Stored data"
       description={`${formatCount(turns)} turns in ${formatCount(sessions)} sessions, ${formatCount(entities)} entities and ${formatCount(embeddings)} vectors.`}
       contentClassName="flex flex-col gap-4"
-      content={
+      contentSlot={
         readOnly ? (
           <p className="text-sm text-muted-foreground">
             This server is read-only (ZEROMEM_READ_ONLY), so nothing can be cleared from here.
@@ -231,16 +229,15 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
               <ConfirmButton
                 variant="outline"
                 className="shrink-0"
-                label="Clear vectors"
+                aria-label="Clear vectors"
                 disabled={clear.isPending || embeddings === 0}
                 title={`Clear ${formatCount(embeddings)} vectors?`}
                 description={`The ${formatCount(turns)} turns stay and are re-embedded in the background. Recall uses the lexical and entity views until they are.`}
                 confirmLabel="Clear vectors"
                 onConfirm={clearVectors}
-              >
-                <EraserIcon aria-hidden />
-                Clear vectors
-              </ConfirmButton>
+                iconSlot={<EraserIcon aria-hidden />}
+                content="Clear vectors"
+              />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
@@ -253,10 +250,9 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
                 className="shrink-0"
                 disabled={clear.isPending || turns === 0}
                 onClick={() => setConfirmingMemory(true)}
-              >
-                <Trash2Icon aria-hidden />
-                Clear all memory
-              </Button>
+                iconSlot={<Trash2Icon aria-hidden />}
+                content="Clear all memory"
+              />
             </div>
             {/* Not a ConfirmButton: the confirm stays locked until the word is typed. */}
             <AlertDialog open={confirmingMemory} onOpenChange={(open) => !open && close()}>
@@ -274,7 +270,7 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
                       Type <span className="font-mono">{CLEAR_WORD}</span> to confirm
                     </>
                   }
-                  control={
+                  controlSlot={
                     <Input
                       autoComplete="off"
                       spellCheck={false}
@@ -446,7 +442,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
   const turns = status?.engine.turns ?? 0;
   const spec = toSpec(form);
   const sameModel = settings.spec !== null && sameEmbedder(settings.spec, spec);
-  // OptionSelect has no disabled option, so a build without ONNX leaves it out unless the store already uses it.
+  // Combobox has no disabled option, so a build without ONNX leaves it out unless the store already uses it.
   const kindOptions = (['onnx', 'hash', 'openai'] as const)
     .filter((kind) => kind !== 'onnx' || settings.onnx_available || form.kind === 'onnx')
     .map((kind) => ({
@@ -467,8 +463,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
               ? 'Deterministic word hashing. Word overlap, not meaning; for tests and CI.'
               : 'Any server speaking POST /v1/embeddings: Ollama, llama.cpp, vLLM, an NPU box, or the hosted API.'
         }
-        control={(props) => (
-          <OptionSelect
+        controlSlot={(props) => (
+          <Combobox
             {...props}
             options={kindOptions}
             value={form.kind}
@@ -481,7 +477,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
         <div className="grid gap-4 md:grid-cols-2">
           <FormField
             label="Base URL"
-            control={
+            controlSlot={
               <Input
                 autoComplete="off"
                 spellCheck={false}
@@ -493,7 +489,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           />
           <FormField
             label="Model"
-            control={
+            controlSlot={
               <Input
                 autoComplete="off"
                 spellCheck={false}
@@ -510,7 +506,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
                 ? 'The key from ZEROMEM_EMBEDDING_API_KEY is in use and overrides whatever is saved here.'
                 : 'Saved in the store as entered. Leave blank to keep the stored key.'
             }
-            control={
+            controlSlot={
               <PasswordInput
                 showLabel="Show API key"
                 hideLabel="Hide API key"
@@ -534,7 +530,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           />
           <FormField
             label="Timeout (ms)"
-            control={
+            controlSlot={
               <Input
                 type="number"
                 min={1}
@@ -545,7 +541,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           />
           <FormField
             label="Query prefix"
-            control={
+            controlSlot={
               <Input
                 autoComplete="off"
                 spellCheck={false}
@@ -557,7 +553,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           />
           <FormField
             label="Document prefix"
-            control={
+            controlSlot={
               <Input
                 autoComplete="off"
                 spellCheck={false}
@@ -571,13 +567,15 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="outline" disabled={incomplete || test.isPending}>
-          <PlugZapIcon aria-hidden />
-          {test.isPending ? 'Testing…' : 'Test connection'}
-        </Button>
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={incomplete || test.isPending}
+          iconSlot={<PlugZapIcon aria-hidden />}
+          content={test.isPending ? 'Testing…' : 'Test connection'}
+        />
         <ConfirmButton
-          label="Apply"
-          tooltip={false}
+          aria-label="Apply"
           disabled={incomplete || apply.isPending}
           title={sameModel ? 'Save embedder settings?' : `Switch the embedder to ${describe(spec)}?`}
           description={
@@ -587,9 +585,8 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           }
           confirmLabel={sameModel ? 'Save' : 'Switch'}
           onConfirm={confirmApply}
-        >
-          {apply.isPending ? 'Applying…' : 'Apply'}
-        </ConfirmButton>
+          content={apply.isPending ? 'Applying…' : 'Apply'}
+        />
         {probe && (
           <p role="status" className="flex items-center gap-1 text-sm">
             <CheckIcon className="size-4 text-[var(--viz-good)]" aria-hidden />
@@ -639,11 +636,11 @@ function Curator({ readOnly }: { readOnly: boolean }) {
         </>
       }
       contentClassName="flex flex-col gap-6"
-      content={
+      contentSlot={
         <>
           {settings.isPending && <Skeleton className="h-40 w-full" />}
           {settings.error && (
-            <QueryError what="the curator settings" error={settings.error} onRetry={() => settings.refetch()} />
+            <LoadError what="the curator settings" error={settings.error} onRetry={() => settings.refetch()} />
           )}
           {settings.data && (
             <>
@@ -713,7 +710,7 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
     <div className="flex flex-col gap-3">
       <Section
         title="Token"
-        action={
+        actionSlot={
           settings.token_set ? (
             <Badge variant="outline">{fromEnv ? 'set by MCP_ZEROMEM_CURATOR_TOKEN' : 'set'}</Badge>
           ) : (
@@ -729,21 +726,23 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
       {!readOnly && !fromEnv && (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={busy} onClick={onGenerate}>
-              <KeyRoundIcon aria-hidden />
-              {settings.token_set ? 'Generate a new token' : 'Generate a token'}
-            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onGenerate}
+              iconSlot={<KeyRoundIcon aria-hidden />}
+              content={settings.token_set ? 'Generate a new token' : 'Generate a token'}
+            />
             {settings.token_set && (
-              <Button type="button" variant="ghost" disabled={busy} onClick={onClear}>
-                Clear token
-              </Button>
+              <Button type="button" variant="ghost" disabled={busy} onClick={onClear} content="Clear token" />
             )}
           </div>
           <form className="flex flex-col gap-1 sm:flex-row sm:items-end sm:gap-2" onSubmit={onSave}>
             <FormField
               className="flex-1"
               label="Or use your own"
-              control={
+              controlSlot={
                 <PasswordInput
                   showLabel="Show token"
                   hideLabel="Hide token"
@@ -759,9 +758,8 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
               type="submit"
               variant="outline"
               disabled={busy || custom.trim().length < CURATOR_LIMITS.tokenMinLength}
-            >
-              Save token
-            </Button>
+              content="Save token"
+            />
           </form>
         </>
       )}
@@ -777,16 +775,15 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
           </AlertDialogHeader>
           <div className="flex gap-2">
             <Input readOnly value={shown ?? ''} className="font-mono" aria-label="Curator token" />
-            <ActionButton
+            <Button
               variant="outline"
               size="icon"
-              label="Copy the token"
+              aria-label="Copy the token"
+              iconSlot={<CopyIcon />}
               onClick={() => {
                 void navigator.clipboard?.writeText(shown ?? '').then(() => toast.success('Copied.'));
               }}
-            >
-              <CopyIcon />
-            </ActionButton>
+            />
           </div>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShown(null)}>Done</AlertDialogAction>
@@ -947,11 +944,11 @@ function NetworkDiscovery({ readOnly }: { readOnly: boolean }) {
           without its address.
         </>
       }
-      content={
+      contentSlot={
         <>
           {settings.isPending && <Skeleton className="h-16 w-full" />}
           {settings.error && (
-            <QueryError what="the discovery settings" error={settings.error} onRetry={() => settings.refetch()} />
+            <LoadError what="the discovery settings" error={settings.error} onRetry={() => settings.refetch()} />
           )}
           {settings.data && (
             <DiscoveryForm key={String(settings.data.lan_advertise)} settings={settings.data} readOnly={readOnly} />

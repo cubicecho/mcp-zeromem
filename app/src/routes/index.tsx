@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { CardLayout } from '@/components/card-layout';
+import { LoadError } from '@/components/load-state';
 import { EmbedderBanner } from '@/components/memory/embedder-banner';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GrowthCharts } from '@/components/viz/growth-charts';
 import { formatCount, formatUptime } from '@/lib/format';
@@ -17,7 +17,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
     <CardLayout
       title={label}
       headerClassName="text-sm text-muted-foreground"
-      content={
+      contentSlot={
         <>
           <p className="text-3xl font-semibold tabular-nums">{value}</p>
           {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
@@ -44,7 +44,7 @@ export function OverviewPage() {
         </div>
       )}
 
-      {error && <QueryError what="the server status" error={error} onRetry={() => status.refetch()} />}
+      {error && <LoadError what="the server status" error={error} onRetry={() => status.refetch()} />}
 
       {data && <EmbedderBanner stats={data.engine} />}
 

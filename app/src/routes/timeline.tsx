@@ -3,10 +3,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
-import { ActionButton } from '@/components/action-button';
-import { OptionSelect } from '@/components/option-select';
+import { Combobox } from '@/components/combobox';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
@@ -80,9 +79,9 @@ export function TimelineExplorer({
         className="px-0 pt-0"
         title="Timeline"
         description="Each session as a lane. The light bands are the windows the engine cut it into; the darker segments are the episodes inside them. Drag to brush a range, click a lane to pick a session."
-        content={
+        contentSlot={
           <div className="flex flex-wrap items-center gap-3">
-            <OptionSelect
+            <Combobox
               className="w-36"
               aria-label="Sessions shown"
               options={SESSION_LIMIT_OPTIONS}
@@ -99,9 +98,9 @@ export function TimelineExplorer({
                   setBrush(null);
                 }
               }}
-            >
-              <ZoomInIcon /> Zoom to brush
-            </Button>
+              iconSlot={<ZoomInIcon />}
+              content="Zoom to brush"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -110,9 +109,9 @@ export function TimelineExplorer({
                 onChange({ since: undefined, until: undefined, session: undefined });
                 setBrush(null);
               }}
-            >
-              <ZoomOutIcon /> Reset
-            </Button>
+              iconSlot={<ZoomOutIcon />}
+              content="Reset"
+            />
             {(options.since !== undefined || options.until !== undefined) && (
               <span className="text-xs text-muted-foreground">
                 {options.since !== undefined ? formatDateTime(options.since) : '…'} →{' '}
@@ -124,7 +123,7 @@ export function TimelineExplorer({
       />
 
       {snapshot.isPending && <Skeleton className="h-64 w-full" />}
-      {snapshot.error && <QueryError what="the timeline" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
+      {snapshot.error && <LoadError what="the timeline" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && extent && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -197,11 +196,13 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h2 className="flex items-center gap-2 font-mono text-sm font-semibold">
           {session.session_id}
-          <ActionButton variant="ghost" size="icon-sm" asChild label="Open in the session inspector">
-            <Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }}>
-              <ScanSearchIcon />
-            </Link>
-          </ActionButton>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Open in the session inspector"
+            iconSlot={<ScanSearchIcon />}
+            linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
+          />
         </h2>
         <p className="text-xs text-muted-foreground">
           {brush
@@ -234,7 +235,7 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+        {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <TurnList turns={inRange} />}
       </div>
     </aside>

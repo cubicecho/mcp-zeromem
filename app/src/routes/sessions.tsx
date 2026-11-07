@@ -2,15 +2,16 @@ import type { SessionSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ScanSearchIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
-import { ActionButton } from '@/components/action-button';
 import { ConfirmButton } from '@/components/confirm-button';
-import { StickyHeaderContentFooter } from '@/components/header-content-footer';
+import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError, LoadState } from '@/components/load-state';
 import { ScopeSelect } from '@/components/memory/scope-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError, QueryState } from '@/components/query-state';
+import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
 import { useForgetSession, useServerStatus, useSessions, useSessionTurns } from '@/lib/queries';
 import { toastApiError } from '@/lib/toast';
@@ -45,14 +46,14 @@ export function SessionsPage() {
         className="px-0 pt-0"
         title="Sessions"
         description="Every conversation in the store, most recent first."
-        action={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
+        actionSlot={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
       />
 
-      <QueryState
+      <LoadState
         query={sessions}
         what="sessions"
         count={sessions.data?.sessions.length ?? 0}
-        empty={
+        emptySlot={
           <p className="text-sm text-muted-foreground">
             No sessions yet. Remember something over MCP or run `zm ingest`.
           </p>
@@ -61,11 +62,12 @@ export function SessionsPage() {
 
       {sessions.data && sessions.data.sessions.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <StickyHeaderContentFooter
+          <HeaderContentFooter
+            scroll
             className="h-auto max-h-[70vh] self-start"
             contentClassName="overflow-x-auto rounded-md border"
-            content={
-              <Table sticky>
+            contentSlot={
+              <StickyTable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Session</TableHead>
@@ -101,35 +103,31 @@ export function SessionsPage() {
                       {/* Clicks on these buttons, and in the confirm dialog React bubbles back through this
                           cell from its portal, must not select the row. */}
                       <TableCell className="whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
-                        <ActionButton
+                        <Button
                           variant="ghost"
                           size="icon-sm"
-                          asChild
-                          label={`Inspect session ${session.session_id}`}
-                        >
-                          <Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }}>
-                            <ScanSearchIcon />
-                          </Link>
-                        </ActionButton>
+                          aria-label={`Inspect session ${session.session_id}`}
+                          iconSlot={<ScanSearchIcon />}
+                          linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
+                        />
                         {!readOnly && (
                           <ConfirmButton
                             variant="ghost"
                             size="icon-sm"
-                            label={`Forget session ${session.session_id}`}
+                            aria-label={`Forget session ${session.session_id}`}
                             disabled={forget.isPending}
                             title={`Forget session ${session.session_id}?`}
                             description={`This permanently deletes ${formatCount(session.turns)} turns and rebuilds the indexes without them. There is no undo.`}
                             confirmLabel="Forget"
                             onConfirm={() => confirmForget(session)}
-                          >
-                            <Trash2Icon />
-                          </ConfirmButton>
+                            iconSlot={<Trash2Icon />}
+                          />
                         )}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </StickyTable>
             }
           />
           <SessionInspector sessionId={selected} />
@@ -152,7 +150,7 @@ function SessionInspector({ sessionId }: { sessionId: string | null }) {
     <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-md border p-4">
       <h2 className="font-mono text-sm">{sessionId}</h2>
       {turns.isPending && <Skeleton className="h-24 w-full" />}
-      {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+      {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
       {turns.data?.turns.map((turn) => (
         <div key={turn.uuid} className="text-sm">
           <p className="text-xs text-muted-foreground">

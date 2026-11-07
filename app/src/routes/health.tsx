@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { LoadError } from '@/components/load-state';
 import { EmbedderBanner } from '@/components/memory/embedder-banner';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Skeleton } from '@/components/ui/skeleton';
 import { HealthCharts } from '@/components/viz/health-charts';
@@ -24,12 +24,12 @@ export function HealthPage() {
       />
       <HealthCharts />
       {isPending && <Skeleton className="h-64 w-full" />}
-      {error && <QueryError what="the server status" error={error} onRetry={() => status.refetch()} />}
+      {error && <LoadError what="the server status" error={error} onRetry={() => status.refetch()} />}
       {data && <EmbedderBanner stats={data.engine} />}
       {data && (
         <Section
           title="Status payload"
-          content={
+          contentSlot={
             <pre className="overflow-x-auto rounded-md border bg-muted p-4 font-mono text-xs">
               {JSON.stringify(data, null, 2)}
             </pre>

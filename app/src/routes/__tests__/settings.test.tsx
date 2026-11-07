@@ -108,7 +108,9 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/ZEROMEM_EMBEDDING_API_KEY is in use/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Test connection' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('connection refused');
+    // The curator and discovery cards' unmocked loads fail as alerts of their own, so the inline
+    // failure is found by its words.
+    expect(await screen.findByText('connection refused')).toHaveAttribute('role', 'alert');
   });
 
   it('hides the form under read-only', async () => {

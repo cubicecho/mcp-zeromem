@@ -1,6 +1,6 @@
 import type { Health } from '@mcp-zeromem/shared';
 import { CardLayout } from '@/components/card-layout';
-import { QueryError } from '@/components/query-state';
+import { LoadError } from '@/components/load-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ColumnChart } from '@/components/viz/column-chart';
@@ -22,7 +22,7 @@ function Stat({ label, value, hint, spark }: { label: string; value: string; hin
       title={label}
       headerClassName="text-sm text-muted-foreground"
       contentClassName="flex items-end justify-between gap-2"
-      content={
+      contentSlot={
         <>
           <div>
             <p className="text-2xl font-semibold tabular-nums">{value}</p>
@@ -46,7 +46,7 @@ export function HealthCharts() {
     return <Skeleton className="h-64 w-full" />;
   }
   if (health.error) {
-    return <QueryError what="the health series" error={health.error} onRetry={() => health.refetch()} />;
+    return <LoadError what="the health series" error={health.error} onRetry={() => health.refetch()} />;
   }
   const data: Health = health.data;
   const series = data.series;
