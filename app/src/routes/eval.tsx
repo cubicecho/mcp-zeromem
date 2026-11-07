@@ -1,9 +1,9 @@
 import type { EvalHistory } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
+import { Combobox } from '@/components/combobox';
 import { HeaderContentFooter } from '@/components/header-content-footer';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
@@ -109,7 +109,7 @@ export function EvalDashboard() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <OptionSelect
+        <Combobox
           aria-label="Corpus profile"
           className="h-8 w-44 text-xs"
           options={profileOptions}

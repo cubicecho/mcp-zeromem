@@ -3,9 +3,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
+import { Combobox } from '@/components/combobox';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
@@ -139,7 +139,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           className="w-56"
           label="Session"
           control={(props) => (
-            <OptionSelect
+            <Combobox
               {...props}
               options={[
                 { value: 'all', label: 'All sessions' },
@@ -154,7 +154,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           className="w-24"
           label="Points"
           control={(props) => (
-            <OptionSelect
+            <Combobox
               {...props}
               options={POINT_OPTIONS}
               value={String(options.limit ?? 2000)}

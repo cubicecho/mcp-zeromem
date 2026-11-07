@@ -1,13 +1,16 @@
 import type { ScopeSummary } from '@mcp-zeromem/shared';
 import type { ComponentProps } from 'react';
-import { OptionSelect } from '@/components/option-select';
+import { Combobox } from '@/components/combobox';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** Radix refuses an empty item value, so "every scope" travels as this and leaves as `''`. */
 const EVERY = '__every_scope__';
 
-type ScopeSelectProps = Omit<ComponentProps<typeof OptionSelect>, 'options' | 'value' | 'onValueChange'> & {
+/** The one-value arm of `Combobox`: a scope filter never holds several. */
+type SingleComboboxProps = Extract<ComponentProps<typeof Combobox>, { multiple?: false | undefined }>;
+
+type ScopeSelectProps = Omit<SingleComboboxProps, 'options' | 'value' | 'onValueChange' | 'multiple'> & {
   /** From `Stats.scopes`: absent while nothing in the store is scoped. */
   scopes: readonly ScopeSummary[] | undefined;
   /** The chosen scope; `''` is every scope. */
@@ -31,7 +34,7 @@ export function ScopeSelect({ scopes, value, onValueChange, className, ...props 
     ...named.map((item) => ({ label: `${item.scope} · ${formatCount(item.turns)} turns`, value: item.scope })),
   ];
   return (
-    <OptionSelect
+    <Combobox
       aria-label="Scope"
       {...props}
       className={cn('w-64', className)}

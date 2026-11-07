@@ -23,10 +23,10 @@ import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
 import { CardLayout } from '@/components/card-layout';
+import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { PasswordInput } from '@/components/password-input';
 import { Section } from '@/components/section';
@@ -445,7 +445,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
   const turns = status?.engine.turns ?? 0;
   const spec = toSpec(form);
   const sameModel = settings.spec !== null && sameEmbedder(settings.spec, spec);
-  // OptionSelect has no disabled option, so a build without ONNX leaves it out unless the store already uses it.
+  // Combobox has no disabled option, so a build without ONNX leaves it out unless the store already uses it.
   const kindOptions = (['onnx', 'hash', 'openai'] as const)
     .filter((kind) => kind !== 'onnx' || settings.onnx_available || form.kind === 'onnx')
     .map((kind) => ({
@@ -467,7 +467,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
               : 'Any server speaking POST /v1/embeddings: Ollama, llama.cpp, vLLM, an NPU box, or the hosted API.'
         }
         control={(props) => (
-          <OptionSelect
+          <Combobox
             {...props}
             options={kindOptions}
             value={form.kind}

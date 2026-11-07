@@ -3,8 +3,8 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
+import { Combobox } from '@/components/combobox';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -81,7 +81,7 @@ export function TimelineExplorer({
         description="Each session as a lane. The light bands are the windows the engine cut it into; the darker segments are the episodes inside them. Drag to brush a range, click a lane to pick a session."
         content={
           <div className="flex flex-wrap items-center gap-3">
-            <OptionSelect
+            <Combobox
               className="w-36"
               aria-label="Sessions shown"
               options={SESSION_LIMIT_OPTIONS}

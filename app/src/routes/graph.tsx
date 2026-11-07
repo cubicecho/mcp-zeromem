@@ -3,10 +3,10 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { CrosshairIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
+import { Combobox } from '@/components/combobox';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -131,7 +131,7 @@ export function GraphExplorer({
                 className="w-20"
                 label="Hops"
                 control={(props) => (
-                  <OptionSelect
+                  <Combobox
                     {...props}
                     options={HOP_OPTIONS}
                     value={String(options.hops ?? 1)}
@@ -144,7 +144,7 @@ export function GraphExplorer({
               className="w-32"
               label="Kind"
               control={(props) => (
-                <OptionSelect
+                <Combobox
                   {...props}
                   options={KIND_OPTIONS}
                   value={options.kind ?? 'all'}
@@ -156,7 +156,7 @@ export function GraphExplorer({
               className="w-24"
               label="Nodes"
               control={(props) => (
-                <OptionSelect
+                <Combobox
                   {...props}
                   options={NODE_OPTIONS}
                   value={String(options.limit ?? 200)}
@@ -168,7 +168,7 @@ export function GraphExplorer({
               className="w-20"
               label="Min. co-mentions"
               control={(props) => (
-                <OptionSelect
+                <Combobox
                   {...props}
                   options={WEIGHT_OPTIONS}
                   value={String(options.min_weight ?? 1)}

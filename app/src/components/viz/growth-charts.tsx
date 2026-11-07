@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { Combobox } from '@/components/combobox';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ColumnChart } from '@/components/viz/column-chart';
@@ -46,7 +46,7 @@ export function GrowthCharts() {
 
   const rows = growth.data?.days ?? [];
   const control = (
-    <OptionSelect
+    <Combobox
       aria-label="Growth range"
       className="h-8 w-36 text-xs"
       options={RANGE_OPTIONS}

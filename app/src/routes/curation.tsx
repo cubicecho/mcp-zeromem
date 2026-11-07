@@ -4,10 +4,10 @@ import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CardLayout } from '@/components/card-layout';
+import { Combobox } from '@/components/combobox';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
 import { LoadError } from '@/components/load-state';
-import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
@@ -347,7 +347,7 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
       }
       action={
         named.length > 0 && (
-          <OptionSelect
+          <Combobox
             aria-label="Scope"
             className="w-64"
             options={[
