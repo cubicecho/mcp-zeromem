@@ -4,9 +4,9 @@ import { GitCompareIcon, PinIcon, PinOffIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { FormField } from '@/components/form-field';
 import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -172,8 +172,8 @@ export function ComparePage() {
       </form>
 
       {(liveA.isFetching || liveB.isFetching) && <Skeleton className="h-32 w-full" />}
-      {liveA.error && <QueryError what="side A" error={liveA.error} onRetry={() => liveA.refetch()} />}
-      {liveB.error && <QueryError what="side B" error={liveB.error} onRetry={() => liveB.refetch()} />}
+      {liveA.error && <LoadError what="side A" error={liveA.error} onRetry={() => liveA.refetch()} />}
+      {liveB.error && <LoadError what="side B" error={liveB.error} onRetry={() => liveB.refetch()} />}
 
       {resultA && resultB && !liveA.isFetching && !liveB.isFetching && (
         <div className="flex flex-col gap-4">

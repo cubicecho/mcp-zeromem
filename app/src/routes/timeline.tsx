@@ -4,9 +4,9 @@ import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { ActionButton } from '@/components/action-button';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
@@ -124,7 +124,7 @@ export function TimelineExplorer({
       />
 
       {snapshot.isPending && <Skeleton className="h-64 w-full" />}
-      {snapshot.error && <QueryError what="the timeline" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
+      {snapshot.error && <LoadError what="the timeline" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && extent && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -234,7 +234,7 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+        {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <TurnList turns={inRange} />}
       </div>
     </aside>

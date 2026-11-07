@@ -26,10 +26,10 @@ import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
 import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
 import { FormField } from '@/components/form-field';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
 import { PasswordInput } from '@/components/password-input';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import {
   AlertDialog,
@@ -95,7 +95,7 @@ export function SettingsPage() {
 
       {settings.isPending && <Skeleton className="h-64 w-full" />}
       {settings.error && (
-        <QueryError what="the embedder settings" error={settings.error} onRetry={() => settings.refetch()} />
+        <LoadError what="the embedder settings" error={settings.error} onRetry={() => settings.refetch()} />
       )}
       {settings.data && (
         <CardLayout
@@ -643,7 +643,7 @@ function Curator({ readOnly }: { readOnly: boolean }) {
         <>
           {settings.isPending && <Skeleton className="h-40 w-full" />}
           {settings.error && (
-            <QueryError what="the curator settings" error={settings.error} onRetry={() => settings.refetch()} />
+            <LoadError what="the curator settings" error={settings.error} onRetry={() => settings.refetch()} />
           )}
           {settings.data && (
             <>
@@ -951,7 +951,7 @@ function NetworkDiscovery({ readOnly }: { readOnly: boolean }) {
         <>
           {settings.isPending && <Skeleton className="h-16 w-full" />}
           {settings.error && (
-            <QueryError what="the discovery settings" error={settings.error} onRetry={() => settings.refetch()} />
+            <LoadError what="the discovery settings" error={settings.error} onRetry={() => settings.refetch()} />
           )}
           {settings.data && (
             <DiscoveryForm key={String(settings.data.lan_advertise)} settings={settings.data} readOnly={readOnly} />

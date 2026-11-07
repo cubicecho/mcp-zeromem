@@ -3,8 +3,8 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '@/components/action-button';
+import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -76,7 +76,7 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
       />
 
       {turns.isPending && <Skeleton className="h-40 w-full" />}
-      {turns.error && <QueryError what="the session" error={turns.error} onRetry={() => turns.refetch()} />}
+      {turns.error && <LoadError what="the session" error={turns.error} onRetry={() => turns.refetch()} />}
 
       {turns.data && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">

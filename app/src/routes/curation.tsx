@@ -7,9 +7,9 @@ import { ActionButton } from '@/components/action-button';
 import { CardLayout } from '@/components/card-layout';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
@@ -81,7 +81,7 @@ function Runs({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (runs.error) {
-    return <QueryError what="the curation runs" error={runs.error} onRetry={() => runs.refetch()} />;
+    return <LoadError what="the curation runs" error={runs.error} onRetry={() => runs.refetch()} />;
   }
   if (runs.data.runs.length === 0) {
     return (
@@ -215,7 +215,7 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
       </div>
 
       {actions.isPending && <Skeleton className="h-32 w-full" />}
-      {actions.error && <QueryError what="the run's actions" error={actions.error} onRetry={() => actions.refetch()} />}
+      {actions.error && <LoadError what="the run's actions" error={actions.error} onRetry={() => actions.refetch()} />}
       {actions.data && (
         <div className="overflow-x-auto rounded-md border">
           <Table>
@@ -364,7 +364,7 @@ function Brief({ scopes }: { scopes: readonly ScopeSummary[] | undefined }) {
       loading={brief.isPending}
       content={
         brief.error ? (
-          <QueryError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
+          <LoadError what="the brief" error={brief.error} onRetry={() => brief.refetch()} />
         ) : current ? (
           <p className="whitespace-pre-wrap text-sm">{current.text}</p>
         ) : (
@@ -391,7 +391,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
     return <Skeleton className="h-40 w-full" />;
   }
   if (entities.error) {
-    return <QueryError what="the aliases" error={entities.error} onRetry={() => entities.refetch()} />;
+    return <LoadError what="the aliases" error={entities.error} onRetry={() => entities.refetch()} />;
   }
 
   const remove = (actionId: number | null, label: string) => {

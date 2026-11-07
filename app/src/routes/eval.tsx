@@ -2,9 +2,9 @@ import type { EvalHistory } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
@@ -85,7 +85,7 @@ export function EvalDashboard() {
     return <Skeleton className="h-80 w-full" />;
   }
   if (history.error) {
-    return <QueryError what="the eval history" error={history.error} onRetry={() => history.refetch()} />;
+    return <LoadError what="the eval history" error={history.error} onRetry={() => history.refetch()} />;
   }
   if (runs.length === 0) {
     return (

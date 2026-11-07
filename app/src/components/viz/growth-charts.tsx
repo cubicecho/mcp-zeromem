@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
-import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { ColumnChart } from '@/components/viz/column-chart';
@@ -85,7 +85,7 @@ export function GrowthCharts() {
     );
   }
   if (growth.error) {
-    return <QueryError what="the growth series" error={growth.error} onRetry={() => growth.refetch()} />;
+    return <LoadError what="the growth series" error={growth.error} onRetry={() => growth.refetch()} />;
   }
   const x = rows.map((d) => d.day);
   return (

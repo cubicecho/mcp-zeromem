@@ -5,10 +5,10 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { LoadError } from '@/components/load-state';
 import { EvidenceList } from '@/components/memory/evidence-list';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -183,7 +183,7 @@ export function GraphExplorer({
       />
 
       {snapshot.isPending && <Skeleton className="h-[520px] w-full" />}
-      {snapshot.error && <QueryError what="the graph" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
+      {snapshot.error && <LoadError what="the graph" error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
       {snapshot.data && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
@@ -294,7 +294,7 @@ function NodePanel({
       <div>
         <h3 className="mb-1 text-sm font-medium">Turns recall finds for it</h3>
         {turns.isPending && <Skeleton className="h-20 w-full" />}
-        {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+        {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
         {turns.data && <EvidenceList evidence={turns.data.evidence} />}
         {turns.data?.evidence[0] && (
           <p className="mt-2 text-xs">

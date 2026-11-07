@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { ActionButton } from '@/components/action-button';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
+import { LoadError, LoadState } from '@/components/load-state';
 import { ScopeSelect } from '@/components/memory/scope-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError, QueryState } from '@/components/query-state';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -49,11 +49,11 @@ export function SessionsPage() {
         action={<ScopeSelect scopes={status.data?.engine.scopes} value={scope} onValueChange={setScope} />}
       />
 
-      <QueryState
+      <LoadState
         query={sessions}
         what="sessions"
         count={sessions.data?.sessions.length ?? 0}
-        empty={
+        emptySlot={
           <p className="text-sm text-muted-foreground">
             No sessions yet. Remember something over MCP or run `zm ingest`.
           </p>
@@ -154,7 +154,7 @@ function SessionInspector({ sessionId }: { sessionId: string | null }) {
     <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-md border p-4">
       <h2 className="font-mono text-sm">{sessionId}</h2>
       {turns.isPending && <Skeleton className="h-24 w-full" />}
-      {turns.error && <QueryError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
+      {turns.error && <LoadError what="the turns" error={turns.error} onRetry={() => turns.refetch()} />}
       {turns.data?.turns.map((turn) => (
         <div key={turn.uuid} className="text-sm">
           <p className="text-xs text-muted-foreground">

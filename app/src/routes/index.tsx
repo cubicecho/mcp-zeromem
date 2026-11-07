@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { CardLayout } from '@/components/card-layout';
+import { LoadError } from '@/components/load-state';
 import { EmbedderBanner } from '@/components/memory/embedder-banner';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GrowthCharts } from '@/components/viz/growth-charts';
 import { formatCount, formatUptime } from '@/lib/format';
@@ -44,7 +44,7 @@ export function OverviewPage() {
         </div>
       )}
 
-      {error && <QueryError what="the server status" error={error} onRetry={() => status.refetch()} />}
+      {error && <LoadError what="the server status" error={error} onRetry={() => status.refetch()} />}
 
       {data && <EmbedderBanner stats={data.engine} />}
 

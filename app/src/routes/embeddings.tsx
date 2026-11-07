@@ -5,9 +5,9 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { LoadError } from '@/components/load-state';
 import { OptionSelect } from '@/components/option-select';
 import { PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-state';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -168,7 +168,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
 
       {projection.isPending && <Skeleton className="h-[480px] w-full" />}
       {projection.error && (
-        <QueryError what="the projection" error={projection.error} onRetry={() => projection.refetch()} />
+        <LoadError what="the projection" error={projection.error} onRetry={() => projection.refetch()} />
       )}
 
       {projection.data && (
