@@ -1,88 +1,129 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import * as React from 'react';
+import { HeadingRow } from '@/components/card-layout';
+import { SectionHeading } from '@/components/section-heading';
+import { DescribedTitle, type DescriptionPlacement, foldsDescription } from '@/components/ui/description-hint';
+import { cn, type SlotNode } from '@/lib/utils';
 
 type SectionProps = {
   /** The body: the fields, the rows, whatever the heading is over. */
-  content?: ReactNode;
+  contentSlot?: SlotNode | undefined;
   /** The overline. A short noun phrase — "Pomodoro", "Danger zone", "Notifications". */
-  title?: ReactNode;
+  title?: ReactNode | undefined;
   /** One line under the title, in sentence case, on what the group is for. */
-  description?: ReactNode;
+  description?: ReactNode | undefined;
+  /**
+   * Where the description is drawn. `inline` (the default) puts it under the title; `popover`
+   * puts it behind a small button beside the title, named "About <title>", and on the web the
+   * section is still described by it. A section with no title has nothing to put the button
+   * beside, so its description stays inline.
+   */
+  descriptionPlacement?: DescriptionPlacement | undefined;
+  /** The `popover` button's glyph. A question mark by default. */
+  descriptionIconSlot?: SlotNode | undefined;
   /** The heading row's far end: an add button, a count, a switch that disables the group. */
-  action?: ReactNode;
+  actionSlot?: SlotNode | undefined;
   /** A hairline under the heading. Off by default; on, the group reads as one block. */
-  divider?: boolean;
-  className?: string;
-  titleClassName?: string;
-  contentClassName?: string;
+  divider?: boolean | undefined;
+  /**
+   * The title's heading rank. `2` by default, because a page's `PageHeader` owns the one `h1` and
+   * these are the sections under it. A section nested in a section is `3`; a section in a dialog
+   * whose title is the `h2` is `3` as well. Pick it by where the section sits, never by how big
+   * the text should look — the text is the same size at every level.
+   */
+  level?: 1 | 2 | 3 | 4 | 5 | 6 | undefined;
+  className?: string | undefined;
+  titleClassName?: string | undefined;
+  contentClassName?: string | undefined;
 };
 
 /**
- * A heading over a group of fields or rows.
+ * A heading over a group of fields or rows, with the body in `contentSlot`. It draws no surface: a
+ * titled group on a card is a `CardLayout`.
  *
- * The smallest thing in this registry, and it is here because it is the one three projects wrote
- * separately and got *almost* the same: `text-xs font-semibold uppercase` and a muted foreground
- * in all three, then `tracking-wider` in one and `tracking-wide` in another, and a `border-b pb-1`
- * in the third. Nobody copied anybody — they each typed the same five tokens from memory, which
- * is why the sixth is different. That is the failure mode a shared token has no answer for, since
- * the value being retyped *is* a class list.
- *
- * It draws no surface. Philotes wraps its sections in a `Card` and the other two do not, so the
- * card stays a decision at the call site — this is a label and a gap, and `CardLayout` is the one
- * that owns a border and a padding box. It is also not `PageHeader`: that is the single `h1` at
- * the top of a route, and there are many of these per screen.
- *
- * No state, no data, no `children` — the body is `content`, like every other shell here.
+ * The title is a heading of rank `level`, and on the web the root is a `<section>` named by it,
+ * which makes it a `region` landmark. An untitled section has no name and is not a landmark. The
+ * heading row is `CardLayout`'s and wraps: the action sits beside the text, level with the title's
+ * top, while both fit, and drops under it when they do not.
  */
 export function Section({
-  content,
+  contentSlot,
   title,
   description,
-  action,
+  descriptionPlacement = 'inline',
+  descriptionIconSlot,
+  actionSlot,
   divider = false,
+  level = 2,
   className,
   titleClassName,
   contentClassName,
 }: SectionProps) {
-  const hasHeading = Boolean(title || description || action);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
+  const folded = foldsDescription(title, description, descriptionPlacement);
+  const titleNode = title ? (
+    <SectionHeading
+      data-slot="section-title"
+      id={titleId}
+      variant="overline"
+      level={level}
+      className={cn(
+        // An overline in full ink: grey, it was outranked by the larger grey description under it.
+        // Weight, caps and ink lead; the size stays small.
+        'truncate text-foreground',
+        folded && 'min-w-0 shrink',
+        titleClassName,
+      )}
+    >
+      {title}
+    </SectionHeading>
+  ) : null;
+  const hasText = Boolean(title || description);
+  const hasHeading = Boolean(hasText || actionSlot);
 
   return (
-    <section data-slot="section" className={cn('min-w-0 space-y-3', className)}>
+    <section
+      data-slot="section"
+      {...(title ? { 'aria-labelledby': titleId } : {})}
+      {...(folded ? { 'aria-describedby': descriptionId } : {})}
+      className={cn('cube-rn-view', 'min-w-0 gap-3', className)}
+    >
       {hasHeading ? (
-        <div data-slot="section-heading" className={cn('flex min-w-0 items-center gap-2', divider && 'border-b pb-1')}>
-          <div className="min-w-0 flex-1">
-            {title ? (
-              // `h2` rather than a styled `div`: these are the sections of a page, and a screen
-              // reader's heading list is how a form of thirty fields is navigated at all. The
-              // level is fixed on purpose — `PageHeader` owns the `h1`, so this is always the
-              // one below it, and a `level` prop would be an invitation to get that wrong.
-              <h2
-                data-slot="section-title"
-                className={cn(
-                  'truncate font-semibold text-muted-foreground text-xs uppercase tracking-wider',
-                  titleClassName,
-                )}
-              >
-                {title}
-              </h2>
-            ) : null}
-            {description ? (
-              <p data-slot="section-description" className="mt-1 text-muted-foreground text-sm">
-                {description}
-              </p>
-            ) : null}
-          </div>
-          {action ? (
-            <div data-slot="section-action" className="shrink-0">
-              {action}
-            </div>
-          ) : null}
-        </div>
+        // `CardLayout`'s heading row, so a section's heading and a card's line up the same way.
+        <HeadingRow
+          data-slot="section-heading"
+          actionTestID="section-action"
+          className={divider ? 'border-b border-foreground/10 pb-1' : undefined}
+          textSlot={
+            hasText ? (
+              <DescribedTitle
+                titleSlot={titleNode}
+                label={title}
+                description={description}
+                descriptionSlot={
+                  description ? (
+                    <p data-slot="section-description" className="cube-rn-text text-foreground/60 text-sm">
+                      {description}
+                    </p>
+                  ) : null
+                }
+                descriptionId={descriptionId}
+                folded={folded}
+                fallbackName="About this section"
+                iconSlot={descriptionIconSlot}
+                triggerTestID="section-description-trigger"
+                rowTestID="section-title-row"
+              />
+            ) : null
+          }
+          actionSlot={actionSlot}
+        />
       ) : null}
 
-      {content ? (
-        <div data-slot="section-content" className={cn('min-w-0 space-y-4', contentClassName)}>
-          {content}
+      {contentSlot ? (
+        <div data-slot="section-content" className={cn('cube-rn-view', 'min-w-0 gap-4', contentClassName)}>
+          {contentSlot}
         </div>
       ) : null}
     </section>

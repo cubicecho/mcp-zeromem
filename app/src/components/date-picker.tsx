@@ -1,10 +1,12 @@
 import { format as formatDateFns } from 'date-fns';
-import { CalendarIcon, X } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
-import { useId, useState } from 'react';
-import type { DateRange } from 'react-day-picker';
+import type { AriaAttributes, ComponentProps, ReactNode } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+// `DateRange` comes from the registry's own calendar contract, not react-day-picker: the native
+// `Calendar` implements the same shape and cannot import from a web library.
+import type { DateRange } from '@/components/ui/calendar-base';
+import { Calendar as CalendarIcon, X } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -44,7 +46,7 @@ function timeValue(date: Date): string {
 
 /**
  * The trigger every picker here draws: a full-width outline button that reads left, with the
- * placeholder in the muted colour and the value in the normal one.
+ * value and the icon at either end.
  *
  * Three call sites had this as a copied `w-[250px] justify-between bg-input-background pl-2 pr-3
  * text-left font-normal`, and a fourth had it in React Native. The fixed `250px` is dropped —
@@ -53,49 +55,98 @@ function timeValue(date: Date): string {
 const TRIGGER = 'w-full justify-between px-3 text-left font-normal';
 
 /**
- * The subset of button props a field shell needs to reach through the picker onto the trigger.
+ * The value's one line. `truncate` is the ellipsis on the web; on device it is `numberOfLines`,
+ * which is what `line-clamp-1` becomes and what `truncate` does not.
+ */
+const ONE_LINE = 'truncate';
+
+/**
+ * What a field shell needs to reach through the picker onto the trigger.
  *
  * `FormField` hands back an `id` and three aria attributes, and they have to land on the element
  * the label points at — otherwise the picker is a control with a label beside it and no relation
- * between the two, which is what all three of the pickers this replaces are.
+ * between the two, which is what all three of the pickers this replaces were. React Native takes
+ * `id`, `aria-label` and `aria-labelledby`; the other three are web only, on the trigger.
  */
 type PickerAria = Pick<
-  ComponentProps<'button'>,
-  'id' | 'aria-label' | 'aria-labelledby' | 'aria-describedby' | 'aria-invalid' | 'aria-required'
->;
+  AriaAttributes,
+  'aria-label' | 'aria-labelledby' | 'aria-describedby' | 'aria-invalid' | 'aria-required'
+> & { id?: string | undefined };
 
-type PickerTriggerProps = ComponentProps<'button'> & { empty: boolean; children: ReactNode };
+type PickerTriggerProps = PickerAria & {
+  empty: boolean;
+  disabled?: boolean | undefined;
+  className?: string | undefined;
+  /** An id for the value's own text, for an `aria-labelledby` that names the trigger by it. */
+  valueId?: string | undefined;
+  children: ReactNode;
+};
 
 /**
- * The popover's name, rendered inside it.
- *
- * Radix draws the content as `role="dialog"`, and a dialog with no accessible name is a failure
- * every axe run reports. The name goes *in* the dialog rather than being borrowed from the
- * trigger with `aria-labelledby`, because a reference out of the dialog resolves to nothing the
- * moment the thing it points at is hidden or re-keyed — and then it fails quietly.
+ * The field-looking button a picker opens from: the value (or the placeholder) in normal weight on
+ * one line, the calendar icon trailing. Exported for `DateTimeInput`, so the two date triggers are
+ * one control and not two that drift.
  */
-function PopoverName({ id, children }: { id: string; children: ReactNode }) {
+export function PickerTrigger({
+  empty,
+  valueId,
+  disabled,
+  className,
+  children,
+  id,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
+  'aria-required': ariaRequired,
+}: PickerTriggerProps) {
+  // `aria-required` is not allowed on a button (axe's `aria-allowed-attr`), and the trigger is
+  // one. So "required" reaches it the way a hint does: a hidden word the trigger is described by.
+  // The label's asterisk is decoration and stays out of the accessibility tree.
+  const requiredId = useId();
+  const required = ariaRequired === true || ariaRequired === 'true';
+  const describedBy = [ariaDescribedBy, required ? requiredId : undefined].filter(Boolean).join(' ');
   return (
-    <span id={id} className="sr-only">
-      {children}
-    </span>
-  );
-}
-
-function PickerTrigger({ empty, className, children, ...props }: PickerTriggerProps) {
-  return (
-    <PopoverTrigger asChild>
-      <Button
-        data-slot="date-picker-trigger"
-        type="button"
-        variant="outline"
-        className={cn(TRIGGER, empty && 'text-muted-foreground', className)}
-        {...props}
-      >
-        <span className="truncate">{children}</span>
-        <CalendarIcon className="size-4 shrink-0 opacity-50" aria-hidden />
-      </Button>
-    </PopoverTrigger>
+    <>
+      <PopoverTrigger asChild>
+        <Button
+          data-slot="date-picker-trigger"
+          variant="outline"
+          disabled={disabled}
+          id={id}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          // What react-native has no prop for, in the spelling the web reads — the same arrangement
+          // as `DateTimeInput`'s trigger. A bound field's hint and error reach the trigger this way.
+          {...{
+            ...(describedBy === '' ? {} : { 'aria-describedby': describedBy }),
+            ...(ariaInvalid === undefined ? {} : { 'aria-invalid': ariaInvalid }),
+          }}
+          className={cn(TRIGGER, className)}
+          content={
+            // The colour is on the words, not the button: native has no colour inheritance, so the
+            // placeholder's muted class has to be on the `Text` itself.
+            <span
+              id={valueId}
+              className={cn(
+                'cube-rn-text',
+                'min-w-0 flex-1 text-left text-sm font-normal',
+                ONE_LINE,
+                empty ? 'text-foreground/60' : 'text-foreground',
+              )}
+            >
+              {children}
+            </span>
+          }
+          trailingSlot={<CalendarIcon className="h-4 w-4 shrink-0 text-foreground/60" aria-hidden />}
+        />
+      </PopoverTrigger>
+      {required ? (
+        <span id={requiredId} className="cube-rn-text sr-only text-foreground">
+          Required
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -108,12 +159,18 @@ function PickerTrigger({ empty, className, children, ...props }: PickerTriggerPr
  * then had to render an empty `<div className="h-4 w-4" />` in its place to stop the label
  * shifting, which is the tell that the control was fighting its own markup.
  */
-function ClearRow({ onClear }: { onClear: () => void }) {
+export function ClearRow({ onClear }: { onClear: () => void }) {
+  // Inset as the calendar above it is (12px), not 4px from the pane's edge. Exported for
+  // DateTimeInput, so the two pickers share one Clear row.
   return (
-    <div className="flex justify-end border-t p-1">
-      <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={onClear}>
-        <X className="size-4" aria-hidden /> Clear
-      </Button>
+    <div className="cube-rn-view flex-row justify-end border-t border-foreground/10 px-3 py-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onClear}
+        iconSlot={<X className="h-4 w-4" aria-hidden />}
+        content="Clear"
+      />
     </div>
   );
 }
@@ -121,22 +178,21 @@ function ClearRow({ onClear }: { onClear: () => void }) {
 type CalendarProps = ComponentProps<typeof Calendar>;
 
 type DatePickerProps = PickerAria & {
-  value?: Date | null;
+  value?: Date | null | undefined;
   onValueChange: (value: Date | null) => void;
   /** Adds a time box under the calendar and keeps the clock through a day change. */
-  showTime?: boolean;
-  placeholder?: string;
+  showTime?: boolean | undefined;
+  placeholder?: string | undefined;
   /** How the chosen date reads on the trigger. Defaults to `PPP`, or `PPP p` with a time. */
-  format?: string;
-  /** Which days cannot be chosen — react-day-picker's matcher, so `{ before: new Date() }` works. */
-  disabledDates?: CalendarProps['disabled'];
-  clearable?: boolean;
-  disabled?: boolean;
-  id?: string;
-  className?: string;
-  contentClassName?: string;
+  format?: string | undefined;
+  /** Which days cannot be chosen — a `DateMatcher`, so `{ before: new Date() }` works. */
+  disabledDates?: CalendarProps['disabled'] | undefined;
+  clearable?: boolean | undefined;
+  disabled?: boolean | undefined;
+  className?: string | undefined;
+  contentClassName?: string | undefined;
   /** Anything else the calendar takes: `startMonth`, `numberOfMonths`, `weekStartsOn`. */
-  calendarProps?: Omit<CalendarProps, 'mode' | 'selected' | 'onSelect' | 'disabled'>;
+  calendarProps?: Omit<CalendarProps, 'mode' | 'selected' | 'onSelect' | 'disabled'> | undefined;
 };
 
 /**
@@ -147,7 +203,7 @@ type DatePickerProps = PickerAria & {
  * replaces were three files for that reason and drifted apart anyway: one of them still passes
  * `initialFocus`, removed in react-day-picker v9, and each carries a `<Label>` with no `htmlFor`,
  * so none of the three is actually labelled. Here the label is `FormField`'s job and the trigger
- * is a `<button>`, which is a labelable element — see {@link DateField}.
+ * is a button, which is a labelable element — see `DateField`.
  */
 export function DatePicker({
   value,
@@ -164,7 +220,6 @@ export function DatePicker({
   ...aria
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
-  const titleId = useId();
   const pattern = format ?? (showTime ? 'PPP p' : 'PPP');
 
   return (
@@ -172,8 +227,7 @@ export function DatePicker({
       <PickerTrigger {...aria} empty={!value} disabled={disabled} className={className}>
         {value ? formatDateFns(value, pattern) : placeholder}
       </PickerTrigger>
-      <PopoverContent align="start" aria-labelledby={titleId} className={cn('w-auto p-0', contentClassName)}>
-        <PopoverName id={titleId}>{placeholder}</PopoverName>
+      <PopoverContent align="start" aria-label={placeholder} className={cn('w-auto gap-0 p-0', contentClassName)}>
         <Calendar
           // Opening on today with a value set in March means the value is not on screen — the
           // calendar takes its first month from `defaultMonth`, never from `selected`.
@@ -189,20 +243,22 @@ export function DatePicker({
             }
             // The clock survives the day changing — the whole reason this is not `new Date(day)`.
             onValueChange(value ? combineDateAndTime(day, value) : day);
-            if (!showTime) setOpen(false);
+            if (showTime === false) {
+              setOpen(false);
+            }
           }}
         />
         {showTime ? (
-          <div className="flex items-center gap-2 border-t p-3">
+          <div className="cube-rn-view flex-row items-center gap-2 border-t border-foreground/10 p-3">
             <Input
               type="time"
               // A time with no date is not a value this control can hold, so it waits.
               disabled={!value}
               aria-label="Time"
               value={value ? timeValue(value) : ''}
-              onChange={(event) => {
-                if (value && event.target.value) {
-                  onValueChange(setTime(value, event.target.value));
+              onChangeText={(text) => {
+                if (value && text) {
+                  onValueChange(setTime(value, text));
                 }
               }}
               className="w-full"
@@ -223,12 +279,21 @@ export function DatePicker({
 }
 
 type DateRangePickerProps = Omit<DatePickerProps, 'value' | 'onValueChange' | 'showTime' | 'calendarProps'> & {
-  value?: DateRange | null;
+  value?: DateRange | null | undefined;
   onValueChange: (value: DateRange | null) => void;
   /** Months side by side. Two, because a range usually crosses one. */
-  numberOfMonths?: number;
-  calendarProps?: Omit<CalendarProps, 'mode' | 'selected' | 'onSelect' | 'disabled'>;
+  numberOfMonths?: number | undefined;
+  calendarProps?: Omit<CalendarProps, 'mode' | 'selected' | 'onSelect' | 'disabled'> | undefined;
 };
+
+/** The range as the trigger shows it: one date while only the start is chosen, nothing before that. */
+function rangeText(range: DateRange | null | undefined, pattern: string) {
+  if (!range?.from) {
+    return undefined;
+  }
+  const from = formatDateFns(range.from, pattern);
+  return range.to ? `${from} – ${formatDateFns(range.to, pattern)}` : from;
+}
 
 /**
  * A start and an end, behind a popover.
@@ -239,7 +304,7 @@ type DateRangePickerProps = Omit<DatePickerProps, 'value' | 'onValueChange' | 's
  *
  * It also closes. The version this replaces holds no open state at all, so choosing the end of
  * the range leaves the calendar sitting over the rest of the form until something else is
- * clicked; here the second date is the end of the interaction, which is what it means.
+ * pressed; here the second date is the end of the interaction, which is what it means.
  */
 export function DateRangePicker({
   value,
@@ -256,22 +321,28 @@ export function DateRangePicker({
   ...aria
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
-  const titleId = useId();
+  // Presses since the pane opened. The two calendars disagree on what one press makes:
+  // react-day-picker answers the first with a whole one-day range (`from` and `to` the same day),
+  // the native grid with a half one. Closing on "the range is complete" therefore shut the web
+  // pane on the first press, before an end could be chosen; closing on the second press of the
+  // visit is the same interaction on both.
+  const presses = useRef(0);
+  const openPane = (next: boolean) => {
+    if (next) {
+      presses.current = 0;
+    }
+    setOpen(next);
+  };
   const pattern = format ?? 'PP';
 
-  const label = value?.from
-    ? value.to
-      ? `${formatDateFns(value.from, pattern)} – ${formatDateFns(value.to, pattern)}`
-      : formatDateFns(value.from, pattern)
-    : placeholder;
+  const label = rangeText(value, pattern) ?? placeholder;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={openPane}>
       <PickerTrigger {...aria} empty={!value?.from} disabled={disabled} className={className}>
         {label}
       </PickerTrigger>
-      <PopoverContent align="start" aria-labelledby={titleId} className={cn('w-auto p-0', contentClassName)}>
-        <PopoverName id={titleId}>{placeholder}</PopoverName>
+      <PopoverContent align="start" aria-label={placeholder} className={cn('w-auto gap-0 p-0', contentClassName)}>
         <Calendar
           defaultMonth={value?.from}
           {...calendarProps}
@@ -280,8 +351,11 @@ export function DateRangePicker({
           selected={value ?? undefined}
           disabled={disabledDates}
           onSelect={(range) => {
+            presses.current += 1;
             onValueChange(range ?? null);
-            if (range?.from && range.to) setOpen(false);
+            if (presses.current >= 2 && range?.from && range.to) {
+              setOpen(false);
+            }
           }}
         />
         {clearable && value?.from ? (

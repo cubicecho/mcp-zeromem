@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+@import "../cubeui-tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
