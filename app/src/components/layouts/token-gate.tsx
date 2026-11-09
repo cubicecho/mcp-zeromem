@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { KeyRoundIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { CardLayout } from '@/components/card-layout';
 import { FormField } from '@/components/form-field';
 import { PasswordInput } from '@/components/password-input';
 import { Button } from '@/components/ui/button';
+import { KeyRound } from '@/components/ui/icons';
 import { setToken, useNeedsAuth } from '@/lib/auth';
 
 /**
@@ -36,7 +36,7 @@ export function TokenGate({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen items-center justify-center p-4">
       <CardLayout
         className="w-full max-w-sm"
-        iconSlot={<KeyRoundIcon />}
+        iconSlot={<KeyRound />}
         title="Authentication required"
         description={
           <>

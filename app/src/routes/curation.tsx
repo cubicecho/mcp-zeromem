@@ -1,6 +1,5 @@
 import type { ActionRow, RunSummary, ScopeSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Undo2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CardLayout } from '@/components/card-layout';
@@ -13,6 +12,7 @@ import { Section } from '@/components/section';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Undo2 } from '@/components/ui/icons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -207,7 +207,7 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
             description={`Every action of ${run.run_id} that is still in force is reversed, newest first. Hidden turns come back into recall, aliases and blocks are lifted and the run's notes are removed.`}
             confirmLabel="Undo run"
             onConfirm={undoRun}
-            iconSlot={<Undo2Icon aria-hidden />}
+            iconSlot={<Undo2 aria-hidden />}
             content="Undo run"
           />
         )}
@@ -246,7 +246,7 @@ function RunDetail({ run, readOnly }: { run: RunSummary; readOnly: boolean }) {
                           variant="ghost"
                           size="sm"
                           aria-label={`Undo action ${row.id}`}
-                          iconSlot={<Undo2Icon aria-hidden />}
+                          iconSlot={<Undo2 aria-hidden />}
                           content="Undo"
                           disabled={undo.isPending}
                           onClick={() => undoAction(row)}
@@ -407,7 +407,7 @@ function Entities({ readOnly }: { readOnly: boolean }) {
         variant="ghost"
         size="sm"
         aria-label={`Remove ${label}`}
-        iconSlot={<Undo2Icon aria-hidden />}
+        iconSlot={<Undo2 aria-hidden />}
         content="Remove"
         disabled={undo.isPending || actionId === null}
         onClick={() => remove(actionId, label)}

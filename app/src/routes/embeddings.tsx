@@ -1,6 +1,5 @@
 import type { Point2D } from '@mcp-zeromem/shared';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { Combobox } from '@/components/combobox';
@@ -9,6 +8,7 @@ import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { Button } from '@/components/ui/button';
+import { Search as SearchIcon, TriangleAlert, X } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
@@ -88,7 +88,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           role="alert"
           className="flex items-center gap-2 rounded-md border border-[var(--viz-warning)] bg-[var(--viz-warning)]/10 px-3 py-2 text-sm"
         >
-          <TriangleAlertIcon className="size-4 shrink-0" aria-hidden />
+          <TriangleAlert className="size-4 shrink-0" aria-hidden />
           The store was embedded with the hash fallback, so this map shows word overlap rather than meaning: expect
           little structure.
         </p>
@@ -98,7 +98,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
           role="status"
           className="flex items-center gap-2 rounded-md border border-[var(--viz-series-1)] bg-[var(--viz-series-1)]/10 px-3 py-2 text-sm"
         >
-          <TriangleAlertIcon className="size-4 shrink-0" aria-hidden />
+          <TriangleAlert className="size-4 shrink-0" aria-hidden />
           {formatCount(backlog)} turns are still being re-embedded; the map settles as their vectors arrive.{' '}
           <Link to="/settings" className="underline underline-offset-4">
             Progress
@@ -125,7 +125,7 @@ export function EmbeddingMap({ options, onChange }: { options: Search; onChange:
               variant="ghost"
               size="icon"
               aria-label="Clear query"
-              iconSlot={<XIcon />}
+              iconSlot={<X />}
               onClick={() => {
                 setQueryText('');
                 onChange({ query: undefined });

@@ -1,6 +1,6 @@
 import type { Abstained, RecallRequest } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import { CircleSlashIcon, SearchIcon } from 'lucide-react';
+import { CircleSlashIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { FormField } from '@/components/form-field';
 import { LoadError } from '@/components/load-state';
@@ -10,6 +10,7 @@ import { TraceView } from '@/components/memory/trace-view';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Search } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -68,7 +69,7 @@ export function RecallPage() {
             aria-label="Query"
             autoFocus
           />
-          <Button type="submit" disabled={result.isFetching} iconSlot={<SearchIcon />} content="Recall" />
+          <Button type="submit" disabled={result.isFetching} iconSlot={<Search />} content="Recall" />
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <FormField
