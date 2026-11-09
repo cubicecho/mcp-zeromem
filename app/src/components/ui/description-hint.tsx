@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { CircleQuestionMark } from '@/components/ui/icons';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { SlotNode } from '@/lib/utils';
+import { hasSlot, type SlotNode } from '@/lib/utils';
 
 /** Where a description is drawn: under what it describes, or behind a button beside its title. */
 type DescriptionPlacement = 'inline' | 'popover';
@@ -36,6 +36,9 @@ function DescriptionHint({ description, label, fallbackName, iconSlot, 'data-slo
           variant="ghost"
           size="icon-xs"
           aria-label={name}
+          // No name on hover (#425): a press opens the same thing, and a tooltip then a pane over
+          // one button is two answers to one question.
+          tooltip={false}
           // The row is as tall as its title, not as tall as a button: the margin gives back what
           // the button's box adds, so a title with a hint and one without sit on the same line.
           className="-my-1 shrink-0 rounded-full text-foreground/60"
@@ -95,6 +98,12 @@ type DescribedTitleProps = {
   descriptionSlot?: SlotNode | undefined;
   /** The id the shell's `aria-describedby` points at, while folded. */
   descriptionId?: string | undefined;
+  /**
+   * What is read in the description's place while it is folded, when the shell has its own
+   * element for that: a dialog's `DialogDescription`, which the dialog is described by. Absent, a
+   * {@link DescriptionHintText} with `descriptionId`.
+   */
+  foldedDescriptionSlot?: SlotNode | undefined;
   /** Whether the description is behind the button. {@link foldsDescription} decides it. */
   folded: boolean;
   /** The button's name when `label` is not a string: "About this card". */
@@ -119,13 +128,14 @@ function DescribedTitle({
   description,
   descriptionSlot,
   descriptionId,
+  foldedDescriptionSlot,
   folded,
   fallbackName,
   iconSlot,
   triggerTestID,
   rowTestID,
 }: DescribedTitleProps) {
-  const hasRow = Boolean(titleSlot) && Boolean(folded || leadingSlot);
+  const hasRow = hasSlot(titleSlot) && (folded || hasSlot(leadingSlot));
   return (
     <>
       {hasRow ? (
@@ -147,7 +157,9 @@ function DescribedTitle({
       ) : (
         titleSlot
       )}
-      {folded ? <DescriptionHintText id={descriptionId}>{description}</DescriptionHintText> : null}
+      {folded
+        ? (foldedDescriptionSlot ?? <DescriptionHintText id={descriptionId}>{description}</DescriptionHintText>)
+        : null}
       {folded ? null : descriptionSlot}
     </>
   );

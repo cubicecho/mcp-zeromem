@@ -1,20 +1,38 @@
 import type { VariantProps } from 'class-variance-authority';
-import { Separator as SeparatorPrimitive, Slot } from 'radix-ui';
+import { Slot } from 'radix-ui';
 import type * as React from 'react';
 import {
   ITEM_ACTIONS_CLASS,
+  ITEM_ACTIONS_ICON_GAP_SM_WEB,
+  ITEM_ACTIONS_SIZES,
+  ITEM_ACTIONS_SM_WEB,
   ITEM_CONTENT_CLASS,
+  ITEM_CONTENT_SIZES,
+  ITEM_CONTENT_SM_WEB,
   ITEM_DESCRIPTION_CLASS,
+  ITEM_DESCRIPTION_SIZES,
+  ITEM_DESCRIPTION_SM_WEB,
   ITEM_FOOTER_CLASS,
   ITEM_HEADER_CLASS,
   ITEM_SELECTED_CLASS,
   ITEM_SEPARATOR_CLASS,
   ITEM_TITLE_CLASS,
+  ITEM_TITLE_SM_WEB,
   ITEM_TITLE_TEXT,
+  ITEM_TITLE_TEXT_SIZES,
+  ITEM_TITLE_TEXT_SM_WEB,
   itemMediaVariants,
   itemVariants,
 } from '@/components/ui/item-base';
-import { cn } from '@/lib/utils';
+import { Separator, type SeparatorProps } from '@/components/ui/separator';
+import { actionGap, cn, ICON_ACTION_GAP } from '@/lib/utils';
+
+/**
+ * A part's name in a test. A native source drawn on the web — `ListItem` in an Expo web build,
+ * which resolves this file beside `item.tsx` — names a part with `testID`, as it does on device.
+ * The DOM's word for that is `data-slot`, so it is written there in place of the part's own.
+ */
+type Named = { 'data-slot'?: string | undefined };
 
 /**
  * Upstream ships this with `role="list"`, and it is dropped here on purpose: nothing in this
@@ -25,35 +43,31 @@ import { cn } from '@/lib/utils';
  * whatever is inside it. A caller that really is drawing a list can say so on its own wrapper,
  * which is also where it owns the items.
  */
-function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot="item-group" className={cn('group/item-group flex flex-col', className)} {...props} />;
-}
-
-/** A rule between two items. */
-function ItemSeparator({
-  className,
-  orientation = 'horizontal',
-  decorative = true,
-  ...props
-}: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
+function ItemGroup({ className, 'data-slot': testID, ...props }: React.ComponentProps<'div'> & Named) {
   return (
-    <SeparatorPrimitive.Root
-      data-slot="item-separator"
-      decorative={decorative}
-      orientation={orientation}
-      className={cn(
-        ITEM_SEPARATOR_CLASS,
-        'data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px',
-        className,
-      )}
-      {...props}
-    />
+    <div data-slot={testID ?? 'item-group'} className={cn('group/item-group flex flex-col', className)} {...props} />
   );
 }
 
-/** What only a DOM row has: the hover on a link row, and the focus ring. */
+/** A rule between two items. */
+function ItemSeparator({ className, 'data-slot': testID, ...props }: SeparatorProps & Named) {
+  return (
+    <Separator data-slot={testID ?? 'item-separator'} className={cn(ITEM_SEPARATOR_CLASS, className)} {...props} />
+  );
+}
+
+/** What only a DOM row has: a link row's hover, and the same fill for its keyboard focus. */
 const ITEM_WEB =
-  'group/item flex text-sm transition-colors duration-100 outline-none [a]:transition-colors [a]:hover:bg-hover [a]:focus-visible:bg-hover';
+  'group/item flex transition-colors duration-100 outline-none [a]:transition-colors [a]:hover:bg-hover [a]:focus-visible:bg-hover';
+
+/**
+ * shadcn's type for the whole row, at its own size only. At `sm` the parts set their own, as
+ * `ListItem`'s always did, so what a caller puts in a slot keeps the page's type around it.
+ */
+const ITEM_TEXT_WEB = 'data-[size=default]:text-sm';
+
+/** A header's or footer's words at `sm`, which the row no longer sizes: the device half's size. */
+const ITEM_LINE_TEXT_WEB = 'group-data-[size=sm]/item:text-sm';
 
 /** One row: media, content and actions side by side. */
 function Item({
@@ -62,9 +76,11 @@ function Item({
   size = 'default',
   asChild = false,
   selected = false,
+  'data-slot': testID,
   ...props
 }: React.ComponentProps<'div'> &
-  VariantProps<typeof itemVariants> & {
+  VariantProps<typeof itemVariants> &
+  Named & {
     asChild?: boolean;
     /**
      * The chosen row: the one open beside the list. Tinted in `active`, a step further under the
@@ -75,12 +91,13 @@ function Item({
   const Comp = asChild ? Slot.Root : 'div';
   return (
     <Comp
-      data-slot="item"
+      data-slot={testID ?? 'item'}
       data-variant={variant}
       data-size={size}
       data-selected={selected ? '' : undefined}
       className={cn(
         ITEM_WEB,
+        ITEM_TEXT_WEB,
         itemVariants({ variant, size }),
         selected && ITEM_SELECTED_CLASS,
         selected && '[a]:hover:bg-active/60 [a]:focus-visible:bg-active/60',
@@ -102,14 +119,18 @@ const ITEM_MEDIA_WEB = {
 function ItemMedia({
   className,
   variant = 'default',
+  'data-slot': testID,
   ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof itemMediaVariants>) {
+}: React.ComponentProps<'div'> & VariantProps<typeof itemMediaVariants> & Named) {
   return (
     <div
-      data-slot="item-media"
+      data-slot={testID ?? 'item-media'}
       data-variant={variant}
       className={cn(
-        'flex group-has-[[data-slot=item-description]]/item:translate-y-0.5 group-has-[[data-slot=item-description]]/item:self-start [&_svg]:pointer-events-none',
+        'flex [&_svg]:pointer-events-none',
+        // shadcn's nudge to the description's first line, at its own size only: at `sm` the media
+        // stays centred on the row, as `ListItem`'s `leadingSlot` is.
+        'group-data-[size=default]/item:group-has-[[data-slot=item-description]]/item:translate-y-0.5 group-data-[size=default]/item:group-has-[[data-slot=item-description]]/item:self-start',
         itemMediaVariants({ variant }),
         ITEM_MEDIA_WEB[variant ?? 'default'],
         className,
@@ -120,34 +141,57 @@ function ItemMedia({
 }
 
 /** The middle of an item, holding its title and description. */
-function ItemContent({ className, ...props }: React.ComponentProps<'div'>) {
+function ItemContent({ className, 'data-slot': testID, ...props }: React.ComponentProps<'div'> & Named) {
   return (
     <div
-      data-slot="item-content"
-      className={cn('flex flex-col [&+[data-slot=item-content]]:flex-none', ITEM_CONTENT_CLASS, className)}
+      data-slot={testID ?? 'item-content'}
+      className={cn(
+        'flex flex-col [&+[data-slot=item-content]]:flex-none',
+        ITEM_CONTENT_CLASS,
+        ITEM_CONTENT_SIZES.default,
+        ITEM_CONTENT_SM_WEB,
+        className,
+      )}
       {...props}
     />
   );
 }
 
 /** The item's title. */
-function ItemTitle({ className, ...props }: React.ComponentProps<'div'>) {
+function ItemTitle({ className, 'data-slot': testID, ...props }: React.ComponentProps<'div'> & Named) {
   return (
-    <div data-slot="item-title" className={cn('flex w-fit', ITEM_TITLE_CLASS, ITEM_TITLE_TEXT, className)} {...props} />
+    <div
+      data-slot={testID ?? 'item-title'}
+      className={cn(
+        'flex w-fit',
+        ITEM_TITLE_CLASS,
+        ITEM_TITLE_SM_WEB,
+        ITEM_TITLE_TEXT,
+        ITEM_TITLE_TEXT_SIZES.default,
+        ITEM_TITLE_TEXT_SM_WEB,
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
 /** The muted line under the item's title. */
-function ItemDescription({ className, ...props }: React.ComponentProps<'p'>) {
+function ItemDescription({ className, 'data-slot': testID, ...props }: React.ComponentProps<'p'> & Named) {
   return (
     <p
-      data-slot="item-description"
+      data-slot={testID ?? 'item-description'}
       className={cn(
         ITEM_DESCRIPTION_CLASS,
+        ITEM_DESCRIPTION_SIZES.default,
+        ITEM_DESCRIPTION_SM_WEB,
         // ITEM_SELECTED_DESCRIPTION_CLASS on the chosen row, which says so with `data-selected`:
         // read here rather than through context so the part stays a plain `<p>`.
         'in-data-selected:text-foreground',
-        'text-balance [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-info',
+        // A link is `info` at rest, as every link is, and shown by its underline as well. On the
+        // chosen row it is `foreground`: `info` on the tint is about 3.3:1, under AA.
+        'text-balance [&>a]:text-info [&>a]:underline [&>a]:underline-offset-4',
+        'in-data-selected:[&>a]:text-foreground',
         className,
       )}
       {...props}
@@ -156,18 +200,45 @@ function ItemDescription({ className, ...props }: React.ComponentProps<'p'>) {
 }
 
 /** The buttons at the far end of an item. */
-function ItemActions({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot="item-actions" className={cn('flex', ITEM_ACTIONS_CLASS, className)} {...props} />;
+function ItemActions({ className, 'data-slot': testID, children, ...props }: React.ComponentProps<'div'> & Named) {
+  return (
+    <div
+      data-slot={testID ?? 'item-actions'}
+      className={cn(
+        'flex',
+        ITEM_ACTIONS_CLASS,
+        ITEM_ACTIONS_SIZES.default,
+        ITEM_ACTIONS_SM_WEB,
+        actionGap(children) === ICON_ACTION_GAP && ITEM_ACTIONS_ICON_GAP_SM_WEB,
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** A full-width line above the item's row. */
-function ItemHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot="item-header" className={cn('flex basis-full', ITEM_HEADER_CLASS, className)} {...props} />;
+function ItemHeader({ className, 'data-slot': testID, ...props }: React.ComponentProps<'div'> & Named) {
+  return (
+    <div
+      data-slot={testID ?? 'item-header'}
+      className={cn('flex basis-full', ITEM_LINE_TEXT_WEB, ITEM_HEADER_CLASS, className)}
+      {...props}
+    />
+  );
 }
 
 /** A full-width line below the item's row. */
-function ItemFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div data-slot="item-footer" className={cn('flex basis-full', ITEM_FOOTER_CLASS, className)} {...props} />;
+function ItemFooter({ className, 'data-slot': testID, ...props }: React.ComponentProps<'div'> & Named) {
+  return (
+    <div
+      data-slot={testID ?? 'item-footer'}
+      className={cn('flex basis-full', ITEM_LINE_TEXT_WEB, ITEM_FOOTER_CLASS, className)}
+      {...props}
+    />
+  );
 }
 
 export {
