@@ -1,6 +1,7 @@
 import type { Stats } from '@mcp-zeromem/shared';
 import { Link } from '@tanstack/react-router';
-import { AlertTriangleIcon, RefreshCwIcon } from 'lucide-react';
+import { AlertTriangleIcon } from 'lucide-react';
+import { RefreshCw } from '@/components/ui/icons';
 import { formatCount } from '@/lib/format';
 
 /**
@@ -41,7 +42,7 @@ export function EmbedderBanner({ stats }: { stats: Stats }) {
           role="status"
           className="flex items-start gap-3 rounded-md border border-sky-500/50 bg-sky-500/10 px-4 py-3 text-sm"
         >
-          <RefreshCwIcon className="mt-0.5 size-4 shrink-0 animate-spin text-sky-600" aria-hidden />
+          <RefreshCw className="mt-0.5 size-4 shrink-0 animate-spin text-sky-600" aria-hidden />
           <div className="flex flex-col gap-1">
             <p className="font-medium">Re-embedding · {backlogLabel(stats)}</p>
             <p className="text-muted-foreground">

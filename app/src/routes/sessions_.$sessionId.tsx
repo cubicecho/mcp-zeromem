@@ -1,12 +1,13 @@
 import type { EntityKind } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowLeftIcon, WaypointsIcon } from 'lucide-react';
+import { WaypointsIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
 import { Section } from '@/components/section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ArrowLeft } from '@/components/ui/icons';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -63,7 +64,7 @@ export function SessionInspector({ sessionId }: { sessionId: string }) {
             variant="ghost"
             size="sm"
             className="-ml-3"
-            iconSlot={<ArrowLeftIcon />}
+            iconSlot={<ArrowLeft />}
             content="Sessions"
             linkSlot={<Link to="/sessions" />}
           />

@@ -1,6 +1,6 @@
 import { type EntityKind, entityKindSchema, type GraphOptions } from '@mcp-zeromem/shared';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { CrosshairIcon, XIcon } from 'lucide-react';
+import { CrosshairIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { Combobox } from '@/components/combobox';
@@ -10,6 +10,7 @@ import { EvidenceList } from '@/components/memory/evidence-list';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { X } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
@@ -116,7 +117,7 @@ export function GraphExplorer({
                   variant="ghost"
                   size="icon"
                   aria-label="Clear focus"
-                  iconSlot={<XIcon />}
+                  iconSlot={<X />}
                   onClick={() => {
                     setFocusText('');
                     onChange({ focus: undefined, hops: undefined });

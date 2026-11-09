@@ -1,23 +1,25 @@
 import { Link } from '@tanstack/react-router';
 import {
-  ActivityIcon,
   BrainIcon,
   ChartScatterIcon,
   ClipboardCheckIcon,
   GitCompareIcon,
   LayoutDashboardIcon,
-  ListIcon,
-  LockIcon,
-  MoonIcon,
-  SearchIcon,
-  SettingsIcon,
-  SparklesIcon,
-  SunIcon,
   WavesIcon,
   WaypointsIcon,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  Activity,
+  List,
+  Lock as LockIcon,
+  Moon,
+  Search,
+  Settings as SettingsIcon,
+  Sparkles,
+  Sun,
+} from '@/components/ui/icons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { clearToken, requireAuth } from '@/lib/auth';
 import { formatCount } from '@/lib/format';
@@ -26,15 +28,15 @@ import { isDark, setDark } from '@/lib/theme';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', icon: LayoutDashboardIcon },
-  { to: '/sessions', label: 'Sessions', icon: ListIcon },
-  { to: '/recall', label: 'Recall', icon: SearchIcon },
+  { to: '/sessions', label: 'Sessions', icon: List },
+  { to: '/recall', label: 'Recall', icon: Search },
   { to: '/graph', label: 'Graph', icon: WaypointsIcon },
   { to: '/timeline', label: 'Timeline', icon: WavesIcon },
   { to: '/embeddings', label: 'Embeddings', icon: ChartScatterIcon },
   { to: '/compare', label: 'Compare', icon: GitCompareIcon },
   { to: '/eval', label: 'Eval', icon: ClipboardCheckIcon },
-  { to: '/curation', label: 'Curation', icon: SparklesIcon },
-  { to: '/health', label: 'Health', icon: ActivityIcon },
+  { to: '/curation', label: 'Curation', icon: Sparkles },
+  { to: '/health', label: 'Health', icon: Activity },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ] as const;
 
@@ -51,7 +53,7 @@ function ThemeToggle() {
       variant="ghost"
       size="icon-sm"
       aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-      iconSlot={dark ? <SunIcon /> : <MoonIcon />}
+      iconSlot={dark ? <Sun /> : <Moon />}
       onClick={toggle}
     />
   );

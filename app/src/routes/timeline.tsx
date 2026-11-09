@@ -1,12 +1,13 @@
 import type { HierarchySession } from '@mcp-zeromem/shared';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { ScanSearchIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react';
+import { ZoomInIcon, ZoomOutIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { Combobox } from '@/components/combobox';
 import { LoadError } from '@/components/load-state';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { ScanSearch } from '@/components/ui/icons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChartCard } from '@/components/viz/chart-card';
 import { Legend } from '@/components/viz/legend';
@@ -200,7 +201,7 @@ function BrushPanel({ session, brush }: { session: HierarchySession | null; brus
             variant="ghost"
             size="icon-sm"
             aria-label="Open in the session inspector"
-            iconSlot={<ScanSearchIcon />}
+            iconSlot={<ScanSearch />}
             linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
           />
         </h2>

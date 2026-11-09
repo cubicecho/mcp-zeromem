@@ -9,16 +9,7 @@ import {
   type ServerStatus,
 } from '@mcp-zeromem/shared';
 import { createFileRoute } from '@tanstack/react-router';
-import {
-  CheckIcon,
-  CopyIcon,
-  EraserIcon,
-  KeyRoundIcon,
-  PlugZapIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-  TriangleAlertIcon,
-} from 'lucide-react';
+import { EraserIcon } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { NumberField, SwitchField, useAppForm } from '@/components/app-form';
@@ -42,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Check, Copy as CopyIcon, KeyRound, PlugZap, RefreshCw, Trash2, TriangleAlert } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiRequestError } from '@/lib/api';
@@ -163,7 +155,7 @@ function ReembedAction({ settings, status }: { settings: EmbedderSettings; statu
         description={`This drops ${formatCount(vectors)} vectors and re-embeds ${formatCount(turns)} turns in the background. Recall uses the lexical and entity views for turns not yet re-embedded.`}
         confirmLabel="Re-embed"
         onConfirm={confirm}
-        iconSlot={<RefreshCwIcon aria-hidden />}
+        iconSlot={<RefreshCw aria-hidden />}
         content={reembed.isPending ? 'Re-embedding…' : 'Re-embed all turns'}
       />
     </div>
@@ -250,7 +242,7 @@ function StoredData({ status, readOnly }: { status: ServerStatus; readOnly: bool
                 className="shrink-0"
                 disabled={clear.isPending || turns === 0}
                 onClick={() => setConfirmingMemory(true)}
-                iconSlot={<Trash2Icon aria-hidden />}
+                iconSlot={<Trash2 aria-hidden />}
                 content="Clear all memory"
               />
             </div>
@@ -324,14 +316,14 @@ function CurrentEmbedder({ settings, status }: { settings: EmbedderSettings; sta
       )}
       {settings.embedder_warning && (
         <p role="alert" className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
-          <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           {settings.embedder_warning}
         </p>
       )}
       {backlog > 0 && (
         <div className="flex flex-col gap-1" role="status">
           <p className="flex items-center gap-2 text-sm">
-            <RefreshCwIcon className="size-4 animate-spin" aria-hidden />
+            <RefreshCw className="size-4 animate-spin" aria-hidden />
             Re-embedding · {formatCount(done)} of {formatCount(turns)} turns
           </p>
           <div
@@ -571,7 +563,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
           type="submit"
           variant="outline"
           disabled={incomplete || test.isPending}
-          iconSlot={<PlugZapIcon aria-hidden />}
+          iconSlot={<PlugZap aria-hidden />}
           content={test.isPending ? 'Testing…' : 'Test connection'}
         />
         <ConfirmButton
@@ -589,7 +581,7 @@ function EmbedderForm({ settings, status }: { settings: EmbedderSettings; status
         />
         {probe && (
           <p role="status" className="flex items-center gap-1 text-sm">
-            <CheckIcon className="size-4 text-[var(--viz-good)]" aria-hidden />
+            <Check className="size-4 text-[var(--viz-good)]" aria-hidden />
             <span className="font-mono">{probe.embedder}</span> · {probe.embedder_dim} dims · {probe.latency_ms} ms
           </p>
         )}
@@ -731,7 +723,7 @@ function CuratorToken({ settings, readOnly }: { settings: CuratorSettings; readO
               variant="outline"
               disabled={busy}
               onClick={onGenerate}
-              iconSlot={<KeyRoundIcon aria-hidden />}
+              iconSlot={<KeyRound aria-hidden />}
               content={settings.token_set ? 'Generate a new token' : 'Generate a token'}
             />
             {settings.token_set && (
@@ -907,7 +899,7 @@ function CuratorLimits({ settings, readOnly }: { settings: CuratorSettings; read
           exposeToAll &&
           !settings.expose_to_all && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
+              <TriangleAlert aria-hidden className="size-4 shrink-0" />
               Every agent will see five more tools, and can hide or supersede turns.
             </p>
           )

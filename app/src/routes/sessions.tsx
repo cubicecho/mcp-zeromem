@@ -1,6 +1,5 @@
 import type { SessionSummary } from '@mcp-zeromem/shared';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ScanSearchIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ConfirmButton } from '@/components/confirm-button';
 import { HeaderContentFooter } from '@/components/header-content-footer';
@@ -10,6 +9,7 @@ import { PageHeader } from '@/components/page-header';
 import { StickyTable } from '@/components/sticky-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScanSearch, Trash2 } from '@/components/ui/icons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCount, formatDateTime, formatRelativeTime } from '@/lib/format';
@@ -107,7 +107,7 @@ export function SessionsPage() {
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Inspect session ${session.session_id}`}
-                          iconSlot={<ScanSearchIcon />}
+                          iconSlot={<ScanSearch />}
                           linkSlot={<Link to="/sessions/$sessionId" params={{ sessionId: session.session_id }} />}
                         />
                         {!readOnly && (
@@ -120,7 +120,7 @@ export function SessionsPage() {
                             description={`This permanently deletes ${formatCount(session.turns)} turns and rebuilds the indexes without them. There is no undo.`}
                             confirmLabel="Forget"
                             onConfirm={() => confirmForget(session)}
-                            iconSlot={<Trash2Icon />}
+                            iconSlot={<Trash2 />}
                           />
                         )}
                       </TableCell>
