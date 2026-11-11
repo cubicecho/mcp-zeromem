@@ -143,8 +143,13 @@ runs the curator model's sweep first, which is the only measure of a model curat
 (`mcp-zeromem-curate`) connects as an MCP client, over `/mcp` or to a gateway it builds in-process
 on the store under `DATA_DIR`, fetches a curator prompt and drives an OpenAI-compatible model
 through it (`server/src/curator-agent/`). It holds no curation rule: a change to what the curator
-should do goes in `docs/curator-*.md`, never in the runner. Its tests script the model and use a
-real store.
+should do goes in `docs/curator-*.md`, never in the runner. The request, the stream and the tool
+loop are `@cubicecho/agent-core`'s `runAgentLoop` (`openai` is its peer dependency); what is
+here is the tool listing, the relay to MCP with its clip marker, the one nudge to close an open
+run, and the report. The answer eval's model runs the same loop and its judge is `askJson` against
+an enum schema. A fix to the loop, retry or streaming belongs upstream, not in a local copy. Its
+tests script the model (`scriptedModel` streams SSE to a streamed request and answers a side task
+with JSON) and use a real store.
 
 **Recall may decline, and says so.** `retrieve/anchor.rs` takes the question's names (its
 entity keys, less dates, quantities and calendar words); `fuse` scales each candidate by

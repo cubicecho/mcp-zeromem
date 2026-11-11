@@ -95,6 +95,7 @@ describe('runCurator', () => {
     // The model was given the playbook, the time, the key, and a curator's tools only.
     const [first, second] = model.requests;
     expect(first?.authorization).toBe('Bearer sk-test');
+    expect(first?.stream).toBe(true);
     expect(first?.messages[0]?.content).toContain('2026-10-07T03:00:00.000Z');
     expect(first?.messages[1]?.content).toContain('# Curator playbook');
     expect(first?.messages[1]?.content).toContain('Work only on these kinds: duplicates.');
@@ -134,8 +135,8 @@ describe('runCurator', () => {
     expect(report).toMatchObject({ finished: true, closed: false, steps: 3, tool_errors: 3 });
     expect(report.summary).toBe('Nothing to do, and I am leaving the run open.');
     const tools = model.requests[1]?.messages.filter((m) => m.role === 'tool').map((m) => m.content) ?? [];
-    expect(tools[0]).toBe('There is no tool named zeromem_forget_session.');
-    expect(tools[1]).toMatch(/not a JSON object/);
+    expect(tools[0]).toBe('Error: There is no tool named zeromem_forget_session.');
+    expect(tools[1]).toMatch(/invalid tool arguments: \{not json/);
     expect(tools[2]).toMatch(/kind/);
     expect(model.requests[2]?.messages.at(-1)).toMatchObject({ role: 'user' });
     expect(model.requests[2]?.messages.at(-1)?.content).toContain('run_end');
@@ -184,7 +185,7 @@ describe('runCurator', () => {
     model = await scriptedModel([]);
     await expect(
       runCurator({ client: await connectedClient(), llm: model.llm, prompt: { name: 'zeromem_curate' } }),
-    ).rejects.toThrow(/answered 500: .*script ran out/);
+    ).rejects.toThrow(/model at http:\/\/127\.0\.0\.1:\d+\/v1 failed: .*script ran out/);
   });
 });
 
