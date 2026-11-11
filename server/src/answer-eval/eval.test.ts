@@ -53,9 +53,9 @@ describe('runAnswerEval', () => {
     model = await scriptedModel([
       { calls: [{ name: 'zeromem_recall', arguments: JSON.stringify({ query: 'edge cache owner Basalt' }) }] },
       { content: 'Ana Souza owns it.' },
-      { content: 'CORRECT' },
+      { content: '{"verdict": "CORRECT"}' },
       { content: "I don't know." },
-      { content: 'The answer declines.\nABSTAINED' },
+      { content: 'The answer declines.\n{"verdict": "ABSTAINED"}' },
     ]);
     const client = await reader();
     const results = await runAnswerEval({
@@ -76,6 +76,7 @@ describe('runAnswerEval', () => {
 
     // The model under test sees only the two memory reads, and is told when the conversations end.
     const first = model.requests[0];
+    expect(first?.stream).toBe(true);
     expect(first?.tools?.map((t) => t.function.name).sort()).toEqual(['zeromem_read_session', 'zeromem_recall']);
     expect(first?.messages[0]?.content).toContain('2026-03-01');
     // What it read back is the store's own answer.
@@ -126,7 +127,7 @@ describe('runAnswerEval', () => {
 
   it('records a question the model failed on as an error and carries on', async () => {
     // The script runs out after the first question: the second request is a 500.
-    model = await scriptedModel([{ content: 'Ana Souza owns it.' }, { content: 'CORRECT' }]);
+    model = await scriptedModel([{ content: 'Ana Souza owns it.' }, { content: '{"verdict": "CORRECT"}' }]);
     const client = await reader();
     const results = await runAnswerEval({
       client,
@@ -143,10 +144,20 @@ describe('runAnswerEval', () => {
 });
 
 describe('judging', () => {
-  it('reads the last verdict word, and reports a reply with none as unjudged', async () => {
-    model = await scriptedModel([{ content: 'Not CORRECT: it names Kenji. WRONG' }, { content: 'hard to say' }]);
+  it('holds the judge to the three verdicts, and reports a reply with none as unjudged', async () => {
+    model = await scriptedModel([
+      { content: '{"verdict": "WRONG"}' },
+      { content: 'hard to say' },
+      { content: '{"verdict": "PARTLY"}' },
+    ]);
     expect(await judgeAnswer(model.llm, OWNER.query, ['x'], 'Kenji')).toBe('wrong');
     expect(await judgeAnswer(model.llm, OWNER.query, ['x'], 'Kenji')).toBe('unjudged');
+    expect(await judgeAnswer(model.llm, OWNER.query, ['x'], 'Kenji')).toBe('unjudged');
+    // The verdict is a schema the server holds the reply to, not a word read out of prose.
+    const format = model.requests[0]?.response_format;
+    expect(format?.type).toBe('json_schema');
+    expect(JSON.stringify(format?.json_schema?.schema)).toContain('["CORRECT","WRONG","ABSTAINED"]');
+    expect(model.requests[0]?.stream).not.toBe(true);
   });
 
   it('holds an unanswerable question right only when the model declined', () => {

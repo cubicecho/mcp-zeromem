@@ -524,6 +524,15 @@ errors, tokens). The exit code is 1 when the model ran out of `ZEROMEM_CURATOR_M
 field, a string where a boolean belongs) comes back to it as the tool's error and it
 can correct itself; a long result is cut with a marker that says so.
 
+The model call and the tool loop are `@cubicecho/agent-core`'s `runAgentLoop`, the
+same one task-server and min-agent run. Replies are streamed, so
+`ZEROMEM_CURATOR_LLM_TIMEOUT_MS` is how long the model may go quiet rather than a
+deadline on the reply; a scratchpad left in the content (`<think>…</think>`) is taken
+out of the answer; and once a run fills three quarters of the context window the
+endpoint reports, the oldest tool results are replaced by a stub, the calls that
+produced them kept so the model can ask again. An endpoint that reports no window is
+never pruned.
+
 A small model is a worse curator than a large one, and nothing here checks its
 judgement. Start with `--dry-run`, then review the first real runs on the Curation page.
 
@@ -677,7 +686,12 @@ npm run eval:answers -- crates/zeromem-harness/fixtures/small --curate   # the c
 
 The report gives, per kind of question, how many were right, wrong, declined or
 cut off at the reply cap (`ZEROMEM_EVAL_LLM_MAX_TOKENS`, 4096) before the model
-answered, with the tool calls and prompt tokens an answer took. Both ends are
+answered, with the tool calls and prompt tokens an answer took. The model under
+test runs the curator's loop; the judge is one request with no tools whose reply
+is held by a JSON schema to `CORRECT`, `WRONG` or `ABSTAINED` (agent-core's
+`askJson`), and anything else is `unjudged`. That request is not streamed and asks
+the model not to think, so its dozen tokens arrive well inside the five minutes
+Node's `fetch` waits for response headers. Both ends are
 models and the grader here is the model under test, so the number moves with the
 model and is recorded, never gated. `--curate` is the only measure there is of a
 model curator, as opposed to the oracle one in `tests/eval.rs`.

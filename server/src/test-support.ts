@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Config } from './config.ts';
-import type { ChatMessage, LlmConfig, ToolSpec } from './curator-agent/llm.ts';
+import type { LlmConfig, ToolSpec } from './curator-agent/llm.ts';
 import { ZeroMemEngine } from './engine/index.ts';
 
 /**
@@ -112,8 +112,10 @@ function embed(text: string, dim: number): number[] {
 
 export interface ChatRequest {
   model: string;
-  messages: ChatMessage[];
+  messages: Array<{ role: string; content?: string | null; tool_call_id?: string }>;
   tools?: ToolSpec[];
+  stream?: boolean;
+  response_format?: { type: string; json_schema?: { name: string; schema: unknown } };
   authorization: string | null;
 }
 
@@ -127,7 +129,9 @@ export type Reply = {
 /**
  * A stand-in for an OpenAI-compatible `/chat/completions` endpoint that plays
  * a script: the nth request gets the nth reply. The store, the MCP server and
- * the tools behind it are real.
+ * the tools behind it are real. A request that asks to stream is answered as
+ * server-sent events, the way agent-core's loop reads every turn; one that
+ * does not (a side task, such as the judge) gets the whole reply as JSON.
  */
 export async function scriptedModel(
   script: Reply[],
@@ -149,21 +153,34 @@ export async function scriptedModel(
         res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'script ran out' }));
         return;
       }
-      const message = {
-        role: 'assistant',
-        content: reply.content ?? null,
-        tool_calls: reply.calls?.map((call, index) => ({
-          id: `call_${requests.length}_${index}`,
-          type: 'function',
-          function: call,
-        })),
-      };
-      res.writeHead(200, { 'Content-Type': 'application/json' }).end(
-        JSON.stringify({
-          choices: [{ message, finish_reason: reply.finish ?? 'stop' }],
-          usage: { prompt_tokens: 10, completion_tokens: 2 },
-        }),
-      );
+      const usage = { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 };
+      const calls = (reply.calls ?? []).map((call, index) => ({
+        id: `call_${requests.length}_${index}`,
+        type: 'function',
+        function: call,
+      }));
+      const finish = reply.finish ?? (calls.length > 0 ? 'tool_calls' : 'stop');
+      if (requests.at(-1)?.stream !== true) {
+        const message = {
+          role: 'assistant',
+          content: reply.content ?? null,
+          ...(calls.length > 0 ? { tool_calls: calls } : {}),
+        };
+        res
+          .writeHead(200, { 'Content-Type': 'application/json' })
+          .end(JSON.stringify({ choices: [{ index: 0, message, finish_reason: finish }], usage }));
+        return;
+      }
+      const chunk = (choices: unknown[], extra: Record<string, unknown> = {}) =>
+        `data: ${JSON.stringify({ id: 'scripted', object: 'chat.completion.chunk', created: 0, model: 'scripted', choices, ...extra })}\n\n`;
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(chunk([{ index: 0, delta: { role: 'assistant', content: reply.content ?? '' }, finish_reason: null }]));
+      calls.forEach((call, index) => {
+        res.write(chunk([{ index: 0, delta: { tool_calls: [{ index, ...call }] }, finish_reason: null }]));
+      });
+      res.write(chunk([{ index: 0, delta: {}, finish_reason: finish }]));
+      res.write(chunk([], { usage }));
+      res.end('data: [DONE]\n\n');
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

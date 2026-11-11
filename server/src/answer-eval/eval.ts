@@ -1,7 +1,8 @@
+import { AgentLoopError, askJson, FinishReason, runAgentLoop, ToolIterationLimit } from '@cubicecho/agent-core';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { z } from 'zod';
-import { clip, relay } from '../curator-agent/agent.ts';
-import { type ChatMessage, complete, type LlmConfig, type ToolSpec } from '../curator-agent/llm.ts';
+import { relay } from '../curator-agent/agent.ts';
+import { endpointOf, type LlmConfig, loopConfig, type ToolSpec, toolSpecs } from '../curator-agent/llm.ts';
 import { errorChainMessage } from '../errors.ts';
 
 /**
@@ -73,13 +74,7 @@ const MEMORY_TOOLS = new Set(['zeromem_recall', 'zeromem_read_session']);
 const DONT_KNOW = "I don't know.";
 
 export async function memoryTools(client: Client): Promise<ToolSpec[]> {
-  const listing = await client.listTools();
-  const tools: ToolSpec[] = listing.tools
-    .filter((tool) => MEMORY_TOOLS.has(tool.name))
-    .map((tool) => ({
-      type: 'function',
-      function: { name: tool.name, description: tool.description ?? '', parameters: tool.inputSchema },
-    }));
+  const tools = await toolSpecs(client, (name) => MEMORY_TOOLS.has(name));
   if (!tools.some((tool) => tool.function.name === 'zeromem_recall')) {
     throw new Error('the server did not list zeromem_recall');
   }
@@ -102,36 +97,40 @@ export async function answerQuestion(options: AnswerOptions): Promise<Answered> 
   const { client, llm, tools, question } = options;
   const maxSteps = options.maxSteps ?? 6;
   const maxToolChars = options.maxToolChars ?? 12_000;
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: [
-        'You answer questions about past conversations. You remember nothing of them yourself:',
-        'everything you know about them comes from the memory tools, so search before you answer.',
-        `The conversations end on ${options.now.toISOString().slice(0, 10)}.`,
-        'Answer in one sentence with the specific value asked for.',
-        `If the memory does not hold the answer, reply exactly: ${DONT_KNOW}`,
-      ].join(' '),
-    },
-    { role: 'user', content: question },
-  ];
+  const system = [
+    'You answer questions about past conversations. You remember nothing of them yourself:',
+    'everything you know about them comes from the memory tools, so search before you answer.',
+    `The conversations end on ${options.now.toISOString().slice(0, 10)}.`,
+    'Answer in one sentence with the specific value asked for.',
+    `If the memory does not hold the answer, reply exactly: ${DONT_KNOW}`,
+  ].join(' ');
   const out: Answered = { answer: '', cut_off: false, steps: 0, tool_calls: 0, prompt_tokens: 0, completion_tokens: 0 };
-  while (out.steps < maxSteps) {
-    const completion = await complete(llm, messages, tools);
-    out.steps += 1;
-    out.prompt_tokens += completion.promptTokens;
-    out.completion_tokens += completion.completionTokens;
-    messages.push(completion.message);
-    const calls = completion.message.tool_calls ?? [];
-    if (calls.length === 0) {
-      out.answer = completion.message.content ?? '';
-      out.cut_off = completion.truncated && out.answer === '';
-      break;
+  try {
+    const result = await runAgentLoop({
+      config: loopConfig(llm, maxSteps),
+      system,
+      messages: [{ role: 'user', content: question }],
+      tools: [...tools],
+      dispatch: (call) => relay(client, call, tools, maxToolChars),
+      onTurn: () => {
+        out.steps += 1;
+      },
+      onToolCall: () => {
+        out.tool_calls += 1;
+      },
+    });
+    out.prompt_tokens = result.usage.prompt;
+    out.completion_tokens = result.usage.completion;
+    out.answer = result.turn.content;
+    out.cut_off = result.turn.finishReason === FinishReason.Length && out.answer === '';
+  } catch (err) {
+    // A model that never stopped searching has no answer, which is graded wrong rather than lost.
+    if (!(err instanceof ToolIterationLimit)) {
+      throw new Error(`model at ${llm.url} failed: ${errorChainMessage(err)}`, { cause: err });
     }
-    for (const call of calls) {
-      out.tool_calls += 1;
-      const outcome = await relay(client, call, tools);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: clip(outcome.text, maxToolChars) });
+    if (err instanceof AgentLoopError) {
+      out.prompt_tokens = err.usage.prompt;
+      out.completion_tokens = err.usage.completion;
     }
   }
   return out;
@@ -140,16 +139,30 @@ export async function answerQuestion(options: AnswerOptions): Promise<Answered> 
 const JUDGE = [
   'You grade an answer to a question about past conversations.',
   'You are given the question, the reference statements that hold the right answer, and the answer to grade.',
-  'Reply with one word:',
+  'Give one verdict:',
   'CORRECT if the answer gives the value the reference statements give for what the question asks.',
   'Extra detail is fine; a different value, or several values without choosing the right one, is not.',
   'ABSTAINED if the answer says it does not know or that the memory does not hold it.',
   'WRONG otherwise.',
 ].join(' ');
 
+const VERDICTS = { CORRECT: 'correct', WRONG: 'wrong', ABSTAINED: 'abstained' } as const;
+
+/** The judge answers with one of the three words and nothing else, held to it by the server's grammar. */
+const VERDICT_SCHEMA = {
+  type: 'object',
+  properties: { verdict: { type: 'string', enum: Object.keys(VERDICTS) } },
+  required: ['verdict'],
+  additionalProperties: false,
+};
+
 /**
  * Grade one answer against the turns the labels name. An empty answer is
  * wrong without asking: the model never replied.
+ *
+ * A side task, so it is not streamed and the no-thinking hints go with it: the
+ * reply is a dozen tokens, well inside the five minutes Node's fetch waits for
+ * response headers, which a streamed turn does not have to fit in.
  */
 export async function judgeAnswer(
   llm: LlmConfig,
@@ -164,26 +177,16 @@ export async function judgeAnswer(
     references.length > 0
       ? references.map((text) => `- ${text}`).join('\n')
       : '(none: the conversations never state this, so the right answer is to say so)';
-  const completion = await complete(
-    llm,
-    [
-      { role: 'system', content: JUDGE },
-      { role: 'user', content: `Question: ${question}\n\nReference statements:\n${reference}\n\nAnswer: ${answer}` },
-    ],
-    [],
+  const reply = await askJson<{ verdict?: unknown }>(
+    endpointOf(llm),
+    llm.model,
+    JUDGE,
+    `Question: ${question}\n\nReference statements:\n${reference}\n\nAnswer: ${answer}`,
+    VERDICT_SCHEMA,
+    { name: 'verdict', temperature: 0, ...(llm.maxTokens === undefined ? {} : { maxTokens: llm.maxTokens }) },
   );
-  // The last verdict word: a model that explains itself first still ends on its ruling.
-  const words = (completion.message.content ?? '').toUpperCase().match(/\b(CORRECT|WRONG|ABSTAINED)\b/g);
-  switch (words?.at(-1)) {
-    case 'CORRECT':
-      return 'correct';
-    case 'WRONG':
-      return 'wrong';
-    case 'ABSTAINED':
-      return 'abstained';
-    default:
-      return 'unjudged';
-  }
+  const word = typeof reply?.verdict === 'string' ? reply.verdict.toUpperCase() : '';
+  return Object.hasOwn(VERDICTS, word) ? VERDICTS[word as keyof typeof VERDICTS] : 'unjudged';
 }
 
 /** A question with no labeled turn has no answer in the store: declining is the right reply. */
